@@ -59,7 +59,7 @@ modules/common/**    # 공통 에러·응답 (팀 합의 PR)
 ## 김최고 체크리스트 (표지민)
 
 - [ ] 대기열 `DONE` ≠ 주문 성공 — `ORDER.status`만 본다 (ERD W-2)
-- [ ] Access Ticket 검증은 **OrderService**에서도 한다 — 우회 방지는 형성빈과 합의
+- [ ] Access Ticket **발급**은 user · **검증**은 order(형성빈) — 우회 방지 스펙은 양쪽 합의
 - [ ] 알림: **발행**은 타 도메인, **전송**만 notification
 - [ ] Admin 조작 → `audit_logs` (who/when/before/after)
 - [ ] 소셜 `providerToken` DB **미저장**

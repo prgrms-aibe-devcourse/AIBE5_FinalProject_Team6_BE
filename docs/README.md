@@ -19,6 +19,8 @@
 | Operations · Incident | [operations/incident-response.md](./operations/incident-response.md) | — |
 | Operations · Metrics | [operations/observability-metrics.md](./operations/observability-metrics.md) | — |
 
+> **다이어그램 PNG** (`erd.png`, `order-state-machine.png`, `payment-order-flow.png`): 문서에서 링크하지만 **레포에 없으면** 해당 경로에 파일을 커밋한다. 없을 때는 각 `.md`의 표·Mermaid가 SSOT이다.
+
 > community 피드 API 명세는 순차 추가 예정.
 
 ## AI 코딩 (Claude Code · Cursor)
@@ -27,9 +29,10 @@
 | --- | --- |
 | [**AI 가이드 (시작)**](./ai/README.md) | SHARED + 담당 persona |
 | [공통 지침](./ai/SHARED.md) | 페르소나 김최고 · 필수 docs · 금지 사항 |
-| [루트 CLAUDE.md](../CLAUDE.md) | Claude Code 자동 로드 |
+| [루트 CLAUDE.md](../CLAUDE.md) · [AGENTS.md](../AGENTS.md) | Claude / Cursor 진입 (본문은 SHARED) |
 
-담당별: `docs/ai/personas/{pyojimin,junghwancheol,hyungseongbin,jangseongjae,jiyoungjae}.md`
+담당별: `docs/ai/personas/{pyojimin,junghwancheol,hyungseongbin,jangseongjae,jiyoungjae}.md`  
+Cursor: 루트 [`AGENTS.md`](../AGENTS.md) · Claude Code: [`CLAUDE.md`](../CLAUDE.md)
 
 ## 협업 (Contributing)
 

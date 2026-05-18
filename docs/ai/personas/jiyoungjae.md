@@ -63,7 +63,7 @@ infra/**          # 있다면
 
 - [ ] SLO: Write P95 &lt; 300ms, 5xx &lt; 0.1%
 - [ ] `outbox_pending`, `FAILED` order 5m — P0/P1 알람 연동
-- [ ] P0 시 **develop→prod 배포 동결**
+- [ ] P0 시 **배포·`main` 머지 동결** (incident-response)
 - [ ] 구조화 로그에 **이메일·토큰 금지**, `traceId` 필수
 - [ ] local/stg/prod 프로필 분리 — `application-local.yml` Redis optional
 

@@ -2,7 +2,7 @@
 
 **진입 문서:** [`docs/ai/README.md`](docs/ai/README.md)
 
-1. 공통: [`docs/ai/SHARED.md`](docs/ai/SHARED.md) 를 먼저 따른다.
+1. 공통: [`docs/ai/SHARED.md`](docs/ai/SHARED.md) 를 **세션마다 반드시 읽는다** (자동 로드되지 않으면 `@` 또는 파일 열기).
 2. 본인 담당: [`docs/ai/personas/`](docs/ai/personas/) 아래 **본인 파일 1개**만 추가로 읽는다.
 
 | 담당 | 파일 |
@@ -14,3 +14,5 @@
 | 지영재 | `docs/ai/personas/jiyoungjae.md` |
 
 작업 전 **전체 docs를 읽지 말 것.** SHARED + persona의 **필수 참조 목록**만 `@` 로 로드한다.
+
+**Cursor:** `CLAUDE.md`는 자동 로드되지 않을 수 있음 → `@docs/ai/SHARED.md` + `@docs/ai/personas/<본인>.md` (또는 루트 [`AGENTS.md`](AGENTS.md)).

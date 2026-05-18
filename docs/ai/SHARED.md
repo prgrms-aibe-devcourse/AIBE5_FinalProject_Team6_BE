@@ -15,14 +15,39 @@
 
 ---
 
+## 문서 계층 (무엇을 주입할지)
+
+| 계층 | 파일 | 역할 | 중복 |
+| --- | --- | --- | --- |
+| 0 | `CLAUDE.md` (루트) | Claude Code 진입·persona 경로만 | SHARED 본문 **미포함** |
+| 1 | **`SHARED.md` (본 파일)** | 김최고 페르소나 + 공통 금지 + SSOT 인덱스 | 모든 세션 공통 |
+| 2 | **`personas/<이름>.md` 1개** | 담당 모듈·추가 필수 docs·체크리스트 | 담당자만 |
+| 3 | SSOT 설계 docs | `docs/api/`, `docs/state/` 등 | 작업 시 **해당 섹션만** |
+
+**Cursor:** 계층 0이 없으므로 **1 + 2를 반드시 `@`**.  
+**Claude Code:** 계층 0 자동 + 필요 시 1·2·3.
+
+---
+
+## Git · 이슈 (공통)
+
+| 항목 | 규칙 |
+| --- | --- |
+| Default branch | **`develop`** |
+| 이슈 템플릿 | **Feature** → `feat/#번호` · **Bug** → `fix/#번호` |
+| PR base | **`develop`** (`main`은 릴리스·배포용) |
+| 상세 | [`docs/contributing/git-collaboration-convention.md`](../contributing/git-collaboration-convention.md) |
+
+---
+
 ## 작업 시작 절차 (토큰 절약)
 
-1. **읽기:** 아래 [필수 문서](#필수-문서-항상) + [본인 persona](./personas/)의 **추가 필수**만 `@` 로드.
-2. **쓰기:** `modules/<domain>/` 또는 `apps/api-server/` — persona에 명시된 경로만.
-3. **검증:** `./gradlew :modules:<...>:test` 또는 persona에 적힌 최소 명령.
-4. **문서:** API·상태·ERD를 건드렸으면 persona **동시 갱신** 목록 반영.
+1. **읽기:** [필수 문서](#필수-문서-항상) + [본인 persona](./personas/)의 **추가 필수**만 `@` 로드.
+2. **쓰기:** persona **수정 가능 경로**만 (`modules/<domain>/` 또는 `apps/api-server/` 등).
+3. **검증:** persona에 적힌 `./gradlew` 명령.
+4. **문서:** persona **동시 갱신** 목록에 해당 시 SSOT docs 수정.
 
-**하지 말 것:** `docs/` 전체 grep·일괄 읽기, ADR/시퀀스 PNG 바이너리 로드, Notion 링크 내용 환각.
+**하지 말 것:** `docs/` 전체 일괄 읽기, ADR/시퀀스 PNG, Notion 환각, 타 담당 모듈 무단 수정.
 
 ---
 
@@ -35,8 +60,9 @@
 | P0 | `docs/architecture/architecture.md` | 모듈 트리, 레이어, **오너십**, 의존성 금지 |
 | P0 | `docs/adr/ADR-001-multi-module-monolith.md` | 모놀리스, 기술 스택, Outbox(**Kafka Not Scope**) |
 | P0 | `docs/adr/ADR-002-per-layer-gradle-modules.md` | `*-domain/application/api/infrastructure` |
-| P0 | `docs/contributing/git-collaboration-convention.md` | 브랜치, 네이밍, PR, RestDocs |
+| P0 | `docs/contributing/git-collaboration-convention.md` | `develop` · Feature/Bug 이슈 · PR · 커밋 |
 | P0 | `docs/api/api-contract.md` | 응답 envelope, `error.code`, `retryable`, 커서 |
+| P0 | `docs/README.md` | 설계·운영 문서 **목차** (필요한 파일만 골라 열기) |
 
 ---
 

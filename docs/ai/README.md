@@ -4,11 +4,27 @@
 
 ## 사용법
 
-| 도구 | 설정 |
-| --- | --- |
-| **Claude Code** | 루트 [`CLAUDE.md`](../../CLAUDE.md) 자동 로드 → 본인 persona 추가 |
-| **Cursor** | 채팅에 `@docs/ai/SHARED.md` + `@docs/ai/personas/<본인>.md` |
-| **기타** | 세션 시작 프롬프트에 SHARED + persona 경로 붙여넣기 |
+| 도구 | 주입할 것 | 하지 말 것 |
+| --- | --- | --- |
+| **Claude Code** | [`CLAUDE.md`](../../CLAUDE.md) 자동 + **`@docs/ai/SHARED.md`** + persona | `docs/` 통째로 · SHARED 생략 |
+| **Cursor** | [`AGENTS.md`](../../AGENTS.md) 또는 `@docs/ai/SHARED.md` + persona | `CLAUDE.md`만 (라우터만 있음) |
+| **기타** | SHARED + persona 경로를 첫 메시지에 붙여넣기 | ADR 전부·PNG |
+
+### 첫 메시지 예시 (형성빈)
+
+```
+@docs/ai/SHARED.md
+@docs/ai/personas/hyungseongbin.md
+
+feat/12 — POST /orders accessTicket 검증 + reserve 단일 TX.
+docs/state/invariants-and-state-machines.md §2, mvp-api-spec POST /orders만 참고.
+```
+
+### 역할 분리
+
+- **SHARED** = 김최고 + 전원 공통 금지·SSOT 목록 (한 번만)
+- **persona** = 내 모듈 경계 + 내가 추가로 읽을 docs + 내 체크리스트
+- **설계 docs** = SHARED/persona가 가리킨 파일만 (작업별)
 
 ## 파일 구조
 
