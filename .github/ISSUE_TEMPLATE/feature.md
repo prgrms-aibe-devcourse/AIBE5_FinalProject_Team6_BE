@@ -1,12 +1,13 @@
 ---
 name: Feature
-description: 기능 개발
+about: 기능 개발
 title: "Feat/be: "
+labels: feature
 ---
 
 ## 📝 작업 내용
 
-- 
+-
 
 ## Definition of Done (DoD)
 
@@ -23,4 +24,4 @@ title: "Feat/be: "
 
 연관된 다른 이슈나 인프라 문서 링크
 
-- 
+-
