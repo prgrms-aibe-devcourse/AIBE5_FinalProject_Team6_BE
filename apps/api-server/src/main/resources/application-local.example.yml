@@ -1,0 +1,20 @@
+# =============================================================================
+# 로컬 Secret / 연결 정보 예시 (커밋용 — 실제 값 넣지 마세요)
+# =============================================================================
+# .env 파일은 사용하지 않습니다.
+# IDE Run Configuration → Environment variables 또는 OS 셸에 아래를 설정하세요.
+#
+# MySQL 로컬 사용 시 (H2 대신):
+#   SPRING_PROFILES_ACTIVE=local
+#   DB_URL=jdbc:mysql://localhost:3306/fandrops
+#   DB_USERNAME=fandrops
+#   DB_PASSWORD=change-me
+#
+# Redis 로컬 (docker compose up -d 후):
+#   REDIS_HOST=localhost
+#   REDIS_PORT=6379
+#
+# OAuth2 (필요 시 application-local.yml 에서 exclude 제거 후):
+#   OAUTH2_CLIENT_ID=your-client-id
+#   OAUTH2_CLIENT_SECRET=your-client-secret
+# =============================================================================

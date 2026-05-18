@@ -1,0 +1,20 @@
+{
+  "properties": [
+    {
+      "name": "fandrops.ops.trace.response-header-enabled",
+      "type": "java.lang.Boolean",
+      "description": "API 응답에 X-Trace-Id 헤더 포함 여부"
+    },
+    {
+      "name": "fandrops.ops.trace.header-name",
+      "type": "java.lang.String",
+      "description": "Trace/Correlation 헤더 이름",
+      "defaultValue": "X-Trace-Id"
+    },
+    {
+      "name": "fandrops.feature-flags.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Feature flag 사용 여부 (현재 미사용)"
+    }
+  ]
+}

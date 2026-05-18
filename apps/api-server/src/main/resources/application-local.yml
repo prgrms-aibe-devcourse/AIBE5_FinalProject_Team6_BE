@@ -1,0 +1,56 @@
+# 로컬 개발 전용. Secret은 이 파일에 넣지 말고 IDE Run Configuration / 셸 환경 변수 사용.
+# 예시: application-local.example.yml 참고 (.env 파일 사용 금지)
+
+spring:
+  application:
+    name: fandrops-api
+
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisReactiveAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
+      - org.springframework.boot.autoconfigure.security.oauth2.client.servlet.OAuth2ClientAutoConfiguration
+
+  datasource:
+    url: jdbc:h2:mem:fandrops;DB_CLOSE_DELAY=-1;MODE=MySQL
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    open-in-view: false
+    properties:
+      hibernate.jdbc.time_zone: UTC
+
+  jackson:
+    time-zone: UTC
+
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
+server:
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  health:
+    redis:
+      enabled: false
+
+fandrops:
+  ops:
+    trace:
+      response-header-enabled: true
+  feature-flags:
+    enabled: false
