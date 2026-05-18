@@ -1,10 +1,8 @@
 ---
 name: Bug
-about: 버그 수정
+description: 버그 수정
 title: "Fix/be: "
-labels: bug
 ---
-
 ## 🐛 버그 내용
 > 어떤 문제가 발생했는지 명확하게 작성해주세요.
 - 
