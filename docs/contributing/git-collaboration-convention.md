@@ -7,7 +7,11 @@
 | **이슈 템플릿** (GitHub 자동 적용) | [`.github/ISSUE_TEMPLATE/task.md`](../../.github/ISSUE_TEMPLATE/task.md) |
 | **PR 템플릿** (GitHub 자동 적용) | [`.github/pull_request_template.md`](../../.github/pull_request_template.md) |
 
-> GitHub에서 **New issue** / **New pull request** 를 누르면 위 템플릿이 본문에 자동으로 채워집니다. (`main` 브랜치에 `.github` 폴더가 push되어 있어야 합니다.)
+> GitHub에서 **Issues → New issue** 를 누르면 **「작업 이슈」** 템플릿을 선택합니다.  
+> PR은 **New pull request** 시 본문에 PR 템플릿이 자동 삽입됩니다.  
+> **조건:** `.github/` 폴더가 **default branch**(`develop`)에 push되어 있어야 합니다.  
+> 템플릿이 안 보이면: Settings → General → Default branch = `develop` 확인 후  
+> `https://github.com/<ORG>/<REPO>/issues/new/choose` 로 접속.
 
 ---
 

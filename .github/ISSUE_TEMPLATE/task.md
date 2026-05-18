@@ -2,8 +2,6 @@
 name: 작업 이슈
 description: FANDROPS 작업·기능·버그 이슈 템플릿
 title: "[TASK] "
-labels: []
-assignees: []
 ---
 
 ## 🎯 이슈 요약
