@@ -4,14 +4,16 @@
 
 | 항목 | 위치 |
 | --- | --- |
-| **이슈 템플릿** (GitHub 자동 적용) | [`.github/ISSUE_TEMPLATE/task.md`](../../.github/ISSUE_TEMPLATE/task.md) |
+| **이슈 템플릿 · Feature** | [`.github/ISSUE_TEMPLATE/feature.md`](../../.github/ISSUE_TEMPLATE/feature.md) |
+| **이슈 템플릿 · Bug** | [`.github/ISSUE_TEMPLATE/bug.md`](../../.github/ISSUE_TEMPLATE/bug.md) |
+| **이슈 설정** | [`.github/ISSUE_TEMPLATE/config.yml`](../../.github/ISSUE_TEMPLATE/config.yml) |
 | **PR 템플릿** (GitHub 자동 적용) | [`.github/pull_request_template.md`](../../.github/pull_request_template.md) |
 
-> GitHub에서 **Issues → New issue** 를 누르면 **「작업 이슈」** 템플릿을 선택합니다.  
+> GitHub에서 **Issues → New issue** → **Feature** 또는 **Bug** 템플릿을 선택합니다. (빈 이슈 비활성)  
 > PR은 **New pull request** 시 본문에 PR 템플릿이 자동 삽입됩니다.  
-> **조건:** `.github/` 폴더가 **default branch**(`develop`)에 push되어 있어야 합니다.  
-> 템플릿이 안 보이면: Settings → General → Default branch = `develop` 확인 후  
-> `https://github.com/<ORG>/<REPO>/issues/new/choose` 로 접속.
+> **조건:** `.github/` 가 **default branch**(`develop`)에 있어야 합니다. 라벨 `feature` · `bug` 가 저장소에 있어야 합니다.  
+> 템플릿이 안 보이면: Settings → General → Default branch = `develop` ·  
+> `https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/issues/new/choose`
 
 ---
 
@@ -58,21 +60,38 @@ git checkout -b feat/23
 ### 작성 방법
 
 1. GitHub 저장소 → **Issues** → **New issue**
-2. **「작업 이슈」** 템플릿 선택 (빈 이슈는 비활성화되어 있음)
-3. 요약 · Context · Tasks · DoD · 목표일 · Related 를 작성
+2. 작업 유형에 맞는 템플릿 선택 (빈 이슈는 비활성화되어 있음)
 
-### 템플릿 구성 (자동 채움 항목)
+| 템플릿 | 용도 | 기본 제목 접두사 | 권장 브랜치 | 자동 라벨 |
+| --- | --- | --- | --- | --- |
+| **Feature** | 기능·도메인 구현 | `Feat/be: ` | `feat/#이슈번호` | `feature` |
+| **Bug** | 버그·결함 수정 | `Fix/be: ` | `fix/#이슈번호` | `bug` |
+
+3. 템플릿 본문을 채운 뒤 이슈 생성 → 번호 확인 후 브랜치 생성
+
+### Feature 템플릿 구성
 
 | 섹션 | 내용 |
 | --- | --- |
-| 🎯 이슈 요약 | 한 줄 목적 |
-| Context | 왜 필요한가 (비즈니스·기술적 배경) |
-| Tasks | 할 일 체크리스트 |
-| Definition of Done | 완료 조건 |
-| 😇 개발 완료 목표일 | `yyyy-mm-dd` |
+| 📝 작업 내용 | 구현할 기능 요약 |
+| Definition of Done (DoD) | 완료 조건 (테스트·동시성 등) |
+| 📅 마감 기한 | `YYYY-MM-DD` |
 | Related | 연관 이슈·문서 링크 |
 
-템플릿 원본 수정: [`.github/ISSUE_TEMPLATE/task.md`](../../.github/ISSUE_TEMPLATE/task.md)
+원본: [`.github/ISSUE_TEMPLATE/feature.md`](../../.github/ISSUE_TEMPLATE/feature.md)
+
+### Bug 템플릿 구성
+
+| 섹션 | 내용 |
+| --- | --- |
+| 🐛 버그 내용 | 문제 설명 |
+| 🔄 재현 방법 | 단계별 재현 |
+| ✅ 기대 동작 | 정상 동작 기대값 |
+| 📷 스크린샷 / 로그 | 증거 자료 |
+| 📅 수정 목표 기한 | `YYYY-MM-DD` |
+| ✅ 체크리스트 | 재현·로그·유사 이슈 확인 |
+
+원본: [`.github/ISSUE_TEMPLATE/bug.md`](../../.github/ISSUE_TEMPLATE/bug.md)
 
 ---
 

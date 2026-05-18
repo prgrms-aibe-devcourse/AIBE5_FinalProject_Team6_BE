@@ -36,11 +36,11 @@
 | 문서 | 설명 |
 | --- | --- |
 | [**Git & 코드 협업 컨벤션**](./contributing/git-collaboration-convention.md) | 브랜치 전략, 네이밍, 커밋, PR, 코드 리뷰 |
-| [이슈 템플릿 (GitHub)](../.github/ISSUE_TEMPLATE/task.md) | New issue 시 자동 적용 |
+| [이슈 · Feature](../.github/ISSUE_TEMPLATE/feature.md) · [Bug](../.github/ISSUE_TEMPLATE/bug.md) | New issue 시 템플릿 선택 |
 | [PR 템플릿 (GitHub)](../.github/pull_request_template.md) | New pull request 시 자동 적용 |
 
 ### 빠른 링크
 
-- 이슈 만들기: 저장소 **Issues → New issue → 「작업 이슈」**
+- 이슈 만들기: **Issues → New issue → Feature** (기능) 또는 **Bug** (버그)
 - PR 만들기: `develop` 대상으로 PR 생성 시 템플릿 자동 삽입
-- 브랜치 예: `feat/23`, `fix/41`, `refactor/15`
+- 브랜치 예: `feat/23` (Feature 이슈), `fix/41` (Bug 이슈), `refactor/15`
