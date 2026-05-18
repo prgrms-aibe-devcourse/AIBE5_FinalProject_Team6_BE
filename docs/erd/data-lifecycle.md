@@ -1,6 +1,6 @@
 # 데이터 라이프사이클 (Data Lifecycle)
 
-> **보관·Audit 상세:** [data-retention-and-audit-policy.md](./data-retention-and-audit-policy.md) (§5 데이터 보관·audit 정책)  
+> **보관·Audit 상세:** [data-retention-and-audit-policy.md](./data-retention-and-audit-policy.md) (§2 데이터 보관 · §3 Audit)  
 > **서비스:** 중소형 K-Pop 기획사 대상 **B2B2C 팬덤 커머스·이벤트** — 오픈런 주문/결제 정합성, 드롭 종료 후 데이터 축소, 팬 개인정보 최소화.
 
 본 문서는 **시간이 지난 뒤 서비스 데이터가 어떻게 생성·변경·휴면·보관·삭제되는지**를 단계별로 정의한다.
@@ -101,7 +101,7 @@ MVP: [행사는 외부 티켓 링크](./erd-design.md#4-wait_queue--product_id-�
 
 ## 4. 개인정보 · 마스킹 · 최소 저장
 
-FANDROPS는 **10~30대 팬(B2C)** 과 **기획사( B2B)** 를 동시에 다루므로, 팬 PII는 주문·알림에 필요한 범위만 유지한다.
+FANDROPS는 **10~30대 팬(B2C)** 과 **기획사(B2B)** 를 동시에 다루므로, 팬 PII는 주문·알림에 필요한 범위만 유지한다.
 
 ### 4.1 수집 최소화
 

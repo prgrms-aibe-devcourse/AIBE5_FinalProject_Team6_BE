@@ -1,6 +1,6 @@
 # Persona — 지영재 (Platform · SRE)
 
-**선행:** [`../SHARED.md`](../SHARED.md) 필수.
+**선행 (매 세션):** [`../SHARED.md`](../SHARED.md) — Cursor: `@docs/ai/SHARED.md` + 본 파일 · Claude Code: 루트 `CLAUDE.md` + SHARED 읽기 + `@` 본 파일.
 
 ---
 
@@ -45,7 +45,7 @@ infra/**          # 있다면
 | --- | --- |
 | 알람 임계값 | `observability-metrics.md` |
 | 배포·롤백 절차 | `incident-response.md` |
-| `application-*.yml` retention 키 | `data-retention-and-audit-policy.md` §5 |
+| `application-*.yml` TTL·retention 키 | `invariants-and-state-machines.md` §4 · `data-retention-and-audit-policy.md` §2 |
 
 ---
 
@@ -63,7 +63,7 @@ infra/**          # 있다면
 
 - [ ] SLO: Write P95 &lt; 300ms, 5xx &lt; 0.1%
 - [ ] `outbox_pending`, `FAILED` order 5m — P0/P1 알람 연동
-- [ ] P0 시 **배포·`main` 머지 동결** (incident-response)
+- [ ] P0 시 **develop→prod 배포 동결** ([`incident-response.md`](../../operations/incident-response.md) §3)
 - [ ] 구조화 로그에 **이메일·토큰 금지**, `traceId` 필수
 - [ ] local/stg/prod 프로필 분리 — `application-local.yml` Redis optional
 

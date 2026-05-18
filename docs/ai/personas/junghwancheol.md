@@ -1,6 +1,6 @@
 # Persona — 정환철 (Community · Content)
 
-**선행:** [`../SHARED.md`](../SHARED.md) 필수.
+**선행 (매 세션):** [`../SHARED.md`](../SHARED.md) — Cursor: `@docs/ai/SHARED.md` + 본 파일 · Claude Code: 루트 `CLAUDE.md` + SHARED 읽기 + `@` 본 파일.
 
 ---
 
@@ -29,8 +29,8 @@ Auth는 Security + `user-api` 호출 또는 공통 Principal만 사용.
 | --- | --- |
 | `docs/architecture/architecture.md` | § user vs community |
 | `docs/api/mvp-api-spec.md` | § Artist / Event, § Notification `LIVE_START`·`NEW_POST_COMMENT` **발행** |
-| `docs/erd/data-lifecycle.md` | § 커뮤니티 soft delete, 피드 purge |
-| `docs/operations/failure-policy.md` | § 캐시 miss · SingleFlight |
+| `docs/erd/data-lifecycle.md` | §3.5 커뮤니티·콘텐츠 (soft delete · purge) |
+| `docs/operations/failure-policy.md` | §3.6 캐시 miss · SingleFlight |
 
 ---
 

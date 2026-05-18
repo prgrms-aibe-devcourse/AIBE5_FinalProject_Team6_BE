@@ -29,10 +29,10 @@
 | --- | --- |
 | [**AI 가이드 (시작)**](./ai/README.md) | SHARED + 담당 persona |
 | [공통 지침](./ai/SHARED.md) | 페르소나 김최고 · 필수 docs · 금지 사항 |
-| [루트 CLAUDE.md](../CLAUDE.md) · [AGENTS.md](../AGENTS.md) | Claude / Cursor 진입 (본문은 SHARED) |
+| [루트 CLAUDE.md](../CLAUDE.md) · [AGENTS.md](../AGENTS.md) | Claude / Cursor 진입 (경로만 — 본문·금지·SSOT는 [SHARED](./ai/SHARED.md) **매 세션 필수**) |
 
 담당별: `docs/ai/personas/{pyojimin,junghwancheol,hyungseongbin,jangseongjae,jiyoungjae}.md`  
-Cursor: 루트 [`AGENTS.md`](../AGENTS.md) · Claude Code: [`CLAUDE.md`](../CLAUDE.md)
+Cursor: [`AGENTS.md`](../AGENTS.md) 자동(경로만) + `@SHARED` + `@persona` · Claude Code: [`CLAUDE.md`](../CLAUDE.md) 자동 + `@SHARED` + `@persona`
 
 ## 협업 (Contributing)
 

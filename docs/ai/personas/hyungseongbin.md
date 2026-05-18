@@ -1,6 +1,6 @@
 # Persona — 형성빈 (Order · Inventory · Commerce)
 
-**선행:** [`../SHARED.md`](../SHARED.md) 필수.
+**선행 (매 세션):** [`../SHARED.md`](../SHARED.md) — Cursor: `@docs/ai/SHARED.md` + 본 파일 · Claude Code: 루트 `CLAUDE.md` + SHARED 읽기 + `@` 본 파일.
 
 ---
 

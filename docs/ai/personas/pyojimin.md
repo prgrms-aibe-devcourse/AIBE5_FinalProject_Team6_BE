@@ -1,6 +1,6 @@
 # Persona — 표지민 (Identity · Queue · Notification)
 
-**선행:** [`../SHARED.md`](../SHARED.md) 필수.
+**선행 (매 세션):** [`../SHARED.md`](../SHARED.md) — Cursor: `@docs/ai/SHARED.md` + 본 파일 · Claude Code: 루트 `CLAUDE.md` + SHARED 읽기 + `@` 본 파일.
 
 ---
 
@@ -29,9 +29,9 @@ modules/common/**    # 공통 에러·응답 (팀 합의 PR)
 | 문서 | 언제 |
 | --- | --- |
 | `docs/api/mvp-api-spec.md` | § Auth, § Wait Queue, § Admin(입점·배너), § Notification |
-| `docs/state/invariants-and-state-machines.md` | § WAIT_QUEUE, Access Ticket |
-| `docs/operations/failure-policy.md` | § Redis 다운, Outbox |
-| `docs/erd/data-retention-and-audit-policy.md` | § audit Admin, § outbox 30일 |
+| `docs/state/invariants-and-state-machines.md` | §6 WAIT_QUEUE · §4.2 대기열·주문 교차 (Q-1~Q-3) |
+| `docs/operations/failure-policy.md` | §3.1 Redis 다운 · §3.2 Outbox |
+| `docs/erd/data-retention-and-audit-policy.md` | §3 Audit · §2.3 대기열·알림·outbox |
 
 ---
 
@@ -40,7 +40,7 @@ modules/common/**    # 공통 에러·응답 (팀 합의 PR)
 | 변경 | 갱신 |
 | --- | --- |
 | 대기열 API | `mvp-api-spec.md` § Wait Queue |
-| Access Ticket 규칙 | `invariants-and-state-machines.md` § Q-1 |
+| Access Ticket 규칙 | `invariants-and-state-machines.md` §6 · §4.2 대기열·주문 교차 (Q-1~Q-3) |
 | 알림 이벤트 타입 | `mvp-api-spec.md` § Notification 표 |
 
 ---
@@ -58,7 +58,7 @@ modules/common/**    # 공통 에러·응답 (팀 합의 PR)
 
 ## 김최고 체크리스트 (표지민)
 
-- [ ] 대기열 `DONE` ≠ 주문 성공 — `ORDER.status`만 본다 (ERD W-2)
+- [ ] 대기열 `DONE` ≠ 주문 성공 — `ORDER.status`만 본다 (invariants **W-2**)
 - [ ] Access Ticket **발급**은 user · **검증**은 order(형성빈) — 우회 방지 스펙은 양쪽 합의
 - [ ] 알림: **발행**은 타 도메인, **전송**만 notification
 - [ ] Admin 조작 → `audit_logs` (who/when/before/after)

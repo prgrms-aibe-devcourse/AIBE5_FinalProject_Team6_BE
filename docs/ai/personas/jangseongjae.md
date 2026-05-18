@@ -1,6 +1,6 @@
 # Persona — 장성재 (Payment · Integration)
 
-**선행:** [`../SHARED.md`](../SHARED.md) 필수.
+**선행 (매 세션):** [`../SHARED.md`](../SHARED.md) — Cursor: `@docs/ai/SHARED.md` + 본 파일 · Claude Code: 루트 `CLAUDE.md` + SHARED 읽기 + `@` 본 파일.
 
 ---
 
@@ -26,9 +26,9 @@ modules/payment/**
 | 문서 | 언제 |
 | --- | --- |
 | `docs/api/mvp-api-spec.md` | § 결제 식별자, § Order/Payment, webhook |
-| `docs/state/invariants-and-state-machines.md` | § PAYMENT, § Saga §5, 타임아웃 §4 |
+| `docs/state/invariants-and-state-machines.md` | §3 PAYMENT · §5 Saga · §4 타임아웃 |
 | `docs/sequence/payment-flow-reason.md` | **전체** |
-| `docs/erd/erd-design.md` | § PAYMENT payment_key, failed_at |
+| `docs/erd/erd-design.md` | §3 PAYMENT (`payment_key`, `failed_at`) |
 | `docs/erd/data-retention-and-audit-policy.md` | webhook 90일, audit |
 | `docs/operations/failure-policy.md` | timeout, 웹훅 중복 |
 
@@ -39,7 +39,7 @@ modules/payment/**
 | 변경 | 갱신 |
 | --- | --- |
 | confirm / webhook 동작 | `mvp-api-spec.md`, `payment-flow-reason.md` |
-| `tossPaymentKey` 멱등 | `erd-design.md` §3, `api-contract.md` |
+| `tossPaymentKey` 멱등 | `erd-design.md` §3 · `api-contract.md` |
 
 ---
 
@@ -59,7 +59,7 @@ modules/payment/**
 - [ ] `tossPaymentKey` → DB `payment_key` **Unique** 멱등
 - [ ] `RESERVED→PAID→COMPLETED` / 실패 `RESERVED→FAILED→CANCELLED` — **클라이언트 API 없음**
 - [ ] `FAILED`는 Transient — 반드시 `CANCELLED` 수렴
-- [ ] confirm timeout 시 주문은 `RESERVED` 유지, **15분** Job — 상태 머신 §4.1
+- [ ] confirm timeout 시 주문은 `RESERVED` 유지, **15분** Job — `invariants-and-state-machines.md` §4.1
 - [ ] PaymentService = **Webhook Receiver** (동기 PG 호출만이 전부가 아님)
 
 ---

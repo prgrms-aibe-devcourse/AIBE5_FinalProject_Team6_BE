@@ -47,7 +47,7 @@
 | --- | --- | --- |
 | **`wait_queue`** | **180일** | `DONE` / `EXPIRED` 후 삭제 또는 집계 테이블만 |
 | **`notification_events`** | **1년** (`SENT`/`FAILED` 확정 후) | payload 내 PII 마스킹 후 삭제 |
-| **`outbox_events`** | **30일** | `published_at` 이후 삭제 또는 S3 cold storage | [ADR-001](../adr/ADR-001-multi-module-monolith.md) Outbox 패턴 |
+| **`outbox_events`** | **30일** | `published_at` 이후 삭제 또는 S3 cold storage ([ADR-001](../adr/ADR-001-multi-module-monolith.md) Outbox) |
 
 ### 2.4 예약 · 좌석 — Phase 2 (Not Scope MVP)
 

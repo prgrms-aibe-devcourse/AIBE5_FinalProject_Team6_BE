@@ -12,9 +12,9 @@ FANDROPS **B2B2C 오픈런** 서비스에서 장애 **등급·대응·커뮤니�
 | 역할 | 담당 | 책임 |
 | --- | --- | --- |
 | **Incident Commander (IC)** | 지영재 (SRE) | 등급 판정, 배포 중지/롤백 결정, 커뮤 조율 |
-| **Commerce** | 형성빈 | 주문·재고·대기열 유입 |
+| **Commerce** | 형성빈 | 주문·재고·핫딜 |
 | **Payment** | 장성재 | PG·웹훅·Saga |
-| **Platform / Identity** | 표지민 | Redis·대기열·알림·Outbox |
+| **Platform / Identity** | 표지민 | Redis·대기열·Access Ticket·알림·Outbox |
 | **Comms** | 당일 릴리즈 오너 | Slack/Notion 장애 공지 초안 |
 
 ---

@@ -30,7 +30,7 @@
 | Data | **MySQL 8 (RDS)**, **JPA + QueryDSL**, **Flyway** | 트랜잭션·`FOR UPDATE`(MVP). infra 레이어에만 JPA |
 | Cache/락 | **Redis (ElastiCache)**, **Redisson**(Phase 3) | 대기열·캐시·랭킹. MVP 재고는 MySQL 비관락 |
 | Security | **Spring Security**, **JWT**, **OAuth2**(카카오·구글), **Bucket4j** | 인가·핫딜 Rate Limit |
-| 결제 | **토스페이먼츠**, 멱등(`payment_key`) | 웹훅·실패 복구 집중 |
+| 결제 | **토스페이먼츠**, 멱등(`tossPaymentKey` → `payment_key`) | 웹훅·실패 복구 집중 |
 | 알림 | **JavaMail** (+FCM 추후), **DB Outbox** | 발행/전송 분리. Kafka Not Scope |
 | Ops | **Prometheus/Grafana**, **k6**, **GitHub Actions**, **Nginx**, **AWS** | SLO·무중단·stg/prod 분리 |
 | 문서/테스트 | **SpringDoc**, **JUnit5/Mockito**, **Testcontainers**, **ArchUnit**(선택) | Domain 순수 테스트·E2E |

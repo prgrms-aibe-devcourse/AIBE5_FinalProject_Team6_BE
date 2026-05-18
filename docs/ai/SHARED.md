@@ -24,8 +24,8 @@
 | 2 | **`personas/<이름>.md` 1개** | 담당 모듈·추가 필수 docs·체크리스트 | 담당자만 |
 | 3 | SSOT 설계 docs | `docs/api/`, `docs/state/` 등 | 작업 시 **해당 섹션만** |
 
-**Cursor:** 계층 0이 없으므로 **1 + 2를 반드시 `@`**.  
-**Claude Code:** 계층 0 자동 + 필요 시 1·2·3.
+**Cursor:** 루트 [`AGENTS.md`](../../AGENTS.md)는 **경로 안내**만(본문 미포함). **1 + 2를 반드시 `@`**.  
+**Claude Code:** 계층 0(`CLAUDE.md`) 자동. **1(`SHARED`) + 2(persona)는 매 세션 필수** — 자동 아님 → `@` 또는 프롬프트에 읽기 명시. 3(SSOT)은 작업 시 해당 섹션만.
 
 ---
 
@@ -34,7 +34,7 @@
 | 항목 | 규칙 |
 | --- | --- |
 | Default branch | **`develop`** |
-| 이슈 템플릿 | **Feature** → `feat/#번호` · **Bug** → `fix/#번호` |
+| 이슈 템플릿 | **Feature** → `feat/<이슈번호>` · **Bug** → `fix/<이슈번호>` (예: `feat/23` — 브랜치명에 `#` 없음) |
 | PR base | **`develop`** (`main`은 릴리스·배포용) |
 | 상세 | [`docs/contributing/git-collaboration-convention.md`](../contributing/git-collaboration-convention.md) |
 
@@ -104,7 +104,7 @@
 - DTO: `XxxCreateRequest`, `XxxResponse`
 - 패키지: `com.fandrops.<domain>.<layer>.<feature>`
 - 테스트: RestDocs 권장, Domain은 Mockito 단위 테스트
-- 로컬: `SPRING_PROFILES_ACTIVE=local`, Redis 없이 기동 가능 — `apps/api-server/.../application-local.yml`
+- 로컬: `SPRING_PROFILES_ACTIVE=local`, Redis 없이 기동 가능 — `apps/api-server/src/main/resources/application-local.yml` (시크릿·OAuth 키 금지; `application-local.override.yml` · `application-local.secrets.yml`만 gitignore). 참고: `application-local.example.yml`
 
 ---
 
