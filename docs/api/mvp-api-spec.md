@@ -48,11 +48,11 @@ Gradle 모듈·담당자 매핑은 [architecture.md § 도메인 오너십](../a
 
 `user-api` · 담당: **표지민**
 
+> `FAN` ERD 컬럼: `email`, `nickname`, `created_at`만 — **`password` 없음** ([ERD §4](../erd/erd-design.md#4-partner--artist--artist_member)). MVP 팬 가입·로그인은 **소셜 OAuth**만.
+
 | Method | Endpoint | 설명 | Request Body | Response |
 | --- | --- | --- | --- | --- |
-| POST | `/auth/signup` | 회원가입 | `email`, `password`, `nickname` | `201` `{ fanId, email, nickname }` |
-| POST | `/auth/login` | 로그인 (JWT 발급) | `email`, `password` | `{ accessToken, refreshToken, expiresIn }` |
-| POST | `/auth/social/{provider}` | 소셜 로그인 (`kakao` · `google`) | `providerToken` | `{ accessToken, refreshToken }` |
+| POST | `/auth/social/{provider}` | 소셜 로그인·가입 (`kakao` · `google`) | `providerToken` | `{ accessToken, refreshToken }` — `FAN` 행 upsert |
 | POST | `/auth/logout` | 로그아웃 (토큰 무효화) | — | `204 No Content` |
 | POST | `/auth/token/refresh` | Access Token 재발급 | `refreshToken` | `{ accessToken, expiresIn }` |
 | GET | `/fans/me` | 내 정보 조회 | — | `{ fanId, email, nickname, createdAt }` |
@@ -67,8 +67,8 @@ Gradle 모듈·담당자 매핑은 [architecture.md § 도메인 오너십](../a
 | Method | Endpoint | 설명 | Request Body / Param | Response |
 | --- | --- | --- | --- | --- |
 | GET | `/artists` | 아티스트 목록 조회 | `?cursor`, `size` | `{ items: [...], nextCursor }` |
-| GET | `/artists/{id}` | 아티스트 상세 | — | `{ id, name, agency, joinedAt }` |
-| POST | `/artists` | 아티스트 등록 (Admin) | `name`, `agency` | `201` `{ artistId }` |
+| GET | `/artists/{id}` | 아티스트 상세 | — | `{ id, partnerId, name, joinedAt }` |
+| POST | `/artists` | 아티스트 등록 (Admin) | `partnerId`, `name` | `201` `{ artistId }` |
 | GET | `/artists/{id}/calendar` | 드롭·팬미팅·라이브 통합 일정 | `?from`, `to` | `{ events: [{ type, title, startTime }] }` |
 | POST | `/artists/{id}/events` | 행사 등록 (운영자) | `title`, `type`, `startTime`, `externalTicketUrl` | `201` `{ eventId }` |
 | PATCH | `/lives/{id}/start` | 라이브 시작 (상태 갱신 + 알림 이벤트 발행) | — | `{ liveId, isLive: true }` |
@@ -83,14 +83,17 @@ Gradle 모듈·담당자 매핑은 [architecture.md § 도메인 오너십](../a
 
 | Method | Endpoint | 설명 | Request Body / Param | Response |
 | --- | --- | --- | --- | --- |
-| GET | `/products` | 상품 목록 조회 | `?type=hotdeal`, `cursor`, `size` | `{ items: [{ id, name, price, stockQuantity, reservedQuantity, isHotdeal }], nextCursor }` |
-| GET | `/products/{id}` | 상품 상세 | — | `{ id, name, price, stockQuantity, reservedQuantity, isHotdeal, updatedAt }` |
-| POST | `/products` | 상품 등록 (운영자) | `name`, `price`, `stockQuantity`, `isHotdeal` | `201` `{ productId }` |
+| GET | `/products` | 상품 목록 조회 | `?type=hotdeal`, `cursor`, `size` | `{ items: [{ id, artistId, name, price, hotdealStartAt, hotdealEndAt, stockQuantity, reservedQuantity, updatedAt }], nextCursor }` |
+| GET | `/products/{id}` | 상품 상세 | — | `{ id, artistId, name, price, hotdealStartAt, hotdealEndAt, stockQuantity, reservedQuantity, updatedAt }` |
+| POST | `/products` | 상품 등록 (운영자) | `artistId`, `name`, `price`, `stockQuantity`, `hotdealStartAt`, `hotdealEndAt` (optional) | `201` `{ productId }` |
 | POST | `/products/{id}/restock-subscribe` | 재입고 알림 구독 | — | `201` `{ alertId }` |
 | DELETE | `/products/{id}/restock-subscribe` | 구독 취소 | — | `204 No Content` |
 | POST | `/products/{id}/restock` | 재입고 처리 + 이벤트 발행 (운영자) | `quantity` | `{ productId, stockQuantity }` |
 
 재입고 시 `RESTOCK_ALERT` 이벤트 발행 → `notification` 전송 (표지민).
+
+- `?type=hotdeal`: `hotdeal_start_at ≤ now ≤ hotdeal_end_at` 인 행만 필터 ([ERD `PRODUCT`](../erd/erd-design.md#1-product--reserved_quantity-분리)).
+- `stockQuantity` / `reservedQuantity`: `INVENTORY` 조인.
 
 ---
 
@@ -197,8 +200,7 @@ PG  → POST .../webhook      → payload 내 키 → tossPaymentKey로 매핑 �
 | Method | Endpoint | 설명 | Request Body | Response |
 | --- | --- | --- | --- | --- |
 | POST | `/internal/notifications/publish` | 알림 이벤트 발행 | `eventType`, `resourceId`, `payload` | `201` `{ eventId }` |
-| GET | `/fans/me/notifications` | 내 알림 목록 | `?cursor`, `size` | `{ items: [{ id, type, title, message, isRead, sentAt }] }` |
-| PATCH | `/notifications/{id}/read` | 읽음 처리 | — | `{ id, isRead: true }` |
+| GET | `/fans/me/notifications` | 내 알림 목록 | `?cursor`, `size` | `{ items: [{ id, type, title, message, sentAt }] }` — [ERD `NOTIFICATION`](../erd/erd-design.md#9-banner--restock_alert--notification-팬-알림함) (`read` 컬럼 없음) |
 
 ### 이벤트 타입별 발행 오너
 
@@ -217,7 +219,7 @@ PG  → POST .../webhook      → payload 내 키 → tossPaymentKey로 매핑 �
 
 | Method | Endpoint | 모듈 | 담당 | 설명 |
 | --- | --- | --- | --- | --- |
-| GET | `/admin/artist-applications` | `user` | 표지민 | 입점 신청 목록 `?status=PENDING` |
+| GET | `/admin/artist-applications` | `user` | 표지민 | 입점 신청 목록 `?status=PENDING` — DB `PARTNER` ([ERD §4](../erd/erd-design.md#4-partner--artist--artist_member)) |
 | PATCH | `/admin/artist-applications/{id}` | `user` | 표지민 | 승인·반려 `status`, `reason` |
 | GET | `/admin/monitoring` | platform | 지영재 | 주문·결제·재고 모니터링 `?from`, `to` |
 | GET | `/admin/banners` | `user` | 표지민 | 배너 목록 |
@@ -253,10 +255,12 @@ PG  → POST .../webhook      → payload 내 키 → tossPaymentKey로 매핑 �
 | --- | --- | --- |
 | ORDER | `status` | 정상: `PENDING` → `RESERVED` → `PAID` → `COMPLETED` · 실패: `RESERVED` → `FAILED` → `CANCELLED` · 취소: `PENDING` → `CANCELLED` |
 | PAYMENT | `status` | `PENDING` → `SUCCESS` / `FAILED` (종료) |
-| WAIT_QUEUE | `status` | `WAITING` → `PROCESSING` → `DONE` / `EXPIRED` |
-| PRODUCT | — | `stock_quantity`, `reserved_quantity`, `is_hotdeal` |
-| RESTOCK_ALERT | `status` | `ACTIVE` / `SENT` |
-| NOTIFICATION_EVENT | `status` | `PENDING` → `SENT` / `FAILED` |
+| WAIT_QUEUE (Redis) | `status` | `WAITING` → `PROCESSING` → `DONE` / `EXPIRED` — [ERD §10](../erd/erd-design.md#10-핫딜-대기열--redis-db-erd-미포함) |
+| PRODUCT | — | `stock_quantity`, `reserved_quantity`, `hotdeal_start_at`, `hotdeal_end_at`, `artist_id` |
+| CART / CART_ITEM | — | RDB `carts`·`cart_items` — [ADR-003](../adr/ADR-003-cart-storage-rdb-phase1.md) (Phase 1 Redis 미사용) |
+| RESTOCK_ALERT | `status` | `ACTIVE` / `SENT` (구현 시 문자열 — [§7.2](../state/invariants-and-state-machines.md#72-restock_alert)) |
+| `outbox_events` | `status` | `PENDING` → `PUBLISHED` / `FAILED` (DLQ) — [ERD §11](../erd/erd-design.md#11-알림--notification-vs-outbox) |
+| NOTIFICATION | — | 팬 알림함: `type`, `title`, `message`, `sent_at` (전송 완료 후 기록) |
 
 > `POST /orders` 성공 응답은 `RESERVED`만 노출. `PENDING`은 TX 내부용 — [상태 머신 §2.3](../state/invariants-and-state-machines.md#23-공개-api-vs-내부-tx).
 
@@ -266,7 +270,7 @@ PG  → POST .../webhook      → payload 내 키 → tossPaymentKey로 매핑 �
 
 | 항목 | 평가 |
 | --- | --- |
-| ERD·시퀀스와의 정합 | ✅ `reserved_quantity`, 주문 상태, 웹훅 멱등, 대기열 토큰·Order 검증, Internal 포트, 알림 발행/전송 분리 — 기존 설계 문서와 일치 |
+| ERD·시퀀스와의 정합 | ✅ ERD 24테이블·`hotdeal_*`·`NOTIFICATION`(read 없음)·팬 OAuth-only·`CART` RDB — [erd-design](../erd/erd-design.md) |
 | 보안·멱등 | ✅ confirm/fail 비노출, 웹훅 내부 처리, `DUPLICATE_PAYMENT` |
 | UX 에러 구분 | ✅ 4004/4005 분리 — 문서화 우수 |
 | 제목 vs 범위 | ⚠️ "Full Domain"이나 **community 피드/댓글/랭킹 API는 미포함** — 본 문서는 **MVP Commerce + 콘텐츠 일정·라이브** 축으로 범위 명시함 |

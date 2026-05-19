@@ -10,7 +10,7 @@
 | Data · Retention / Audit | [erd/data-retention-and-audit-policy.md](./erd/data-retention-and-audit-policy.md) | — |
 | Data · Lifecycle | [erd/data-lifecycle.md](./erd/data-lifecycle.md) | — |
 | Sequence | [sequence/payment-flow-reason.md](./sequence/payment-flow-reason.md) | [sequence/payment-order-flow.png](./sequence/payment-order-flow.png) |
-| ADR | [ADR-001](./adr/ADR-001-multi-module-monolith.md) · [ADR-002](./adr/ADR-002-per-layer-gradle-modules.md) | — |
+| ADR | [ADR-001](./adr/ADR-001-multi-module-monolith.md) · [ADR-002](./adr/ADR-002-per-layer-gradle-modules.md) · [ADR-003 장바구니 RDB](./adr/ADR-003-cart-storage-rdb-phase1.md) | — |
 | Architecture | [architecture/architecture.md](./architecture/architecture.md) | — |
 | API (MVP) | [api/mvp-api-spec.md](./api/mvp-api-spec.md) | — |
 | API · Contract | [api/api-contract.md](./api/api-contract.md) | — |
@@ -21,7 +21,7 @@
 
 > **다이어그램 PNG** (`erd.png`, `order-state-machine.png`, `payment-order-flow.png`): 문서에서 링크하지만 **레포에 없으면** 해당 경로에 파일을 커밋한다. 없을 때는 각 `.md`의 표·Mermaid가 SSOT이다.
 
-> community 피드 API 명세는 순차 추가 예정.
+> community 피드 API 명세는 순차 추가 예정. DB 스키마는 [ERD §5](./erd/erd-design.md#5-커뮤니티--artist_space-feed-notice-comment-heart) (`FEED`, `COMMENT`, `HEART` 등).
 
 ## AI 코딩 (Claude Code · Cursor)
 

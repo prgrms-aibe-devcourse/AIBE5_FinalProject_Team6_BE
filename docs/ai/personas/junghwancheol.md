@@ -28,8 +28,9 @@ Auth는 Security + `user-api` 호출 또는 공통 Principal만 사용.
 | 문서 | 언제 |
 | --- | --- |
 | `docs/architecture/architecture.md` | § user vs community |
+| `docs/erd/erd-design.md` | §5 커뮤니티 · §7·§8 랭킹·일정 (해당 테이블 작업 시) |
 | `docs/api/mvp-api-spec.md` | § Artist / Event, § Notification `LIVE_START`·`NEW_POST_COMMENT` **발행** |
-| `docs/erd/data-lifecycle.md` | §3.5 커뮤니티·콘텐츠 (soft delete · purge) |
+| `docs/erd/data-lifecycle.md` | §3.5 커뮤니티·콘텐츠 (DELETE · purge) |
 | `docs/operations/failure-policy.md` | §3.6 캐시 miss · SingleFlight |
 
 ---

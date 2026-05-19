@@ -114,7 +114,7 @@ MVP 기본값. **환경별 `application-*.yml`에서 오버라이드** 가능. �
 | `ORDER` 결제 대기 (`RESERVED`) | `fandrops.order.payment-timeout` | **15분** | `RESERVED→FAILED→CANCELLED` + inventory `restore` |
 | `WAIT_QUEUE` `PROCESSING` | `fandrops.queue.processing-timeout` | **10분** | `PROCESSING→EXPIRED`, 토큰 무효 |
 | `PAID` 후처리 미완 | `fandrops.order.paid-completion-slo` | **60초** | 재시도 Job; 초과 시 **지영재** 모니터링 알람 |
-| 알림 전송 | `fandrops.notification.max-retry` | **3회** | `NOTIFICATION_EVENT` → `FAILED` → DLQ |
+| 알림 전송 (Outbox) | `fandrops.notification.max-retry` | **3회** | `outbox_events` → `FAILED` → DLQ |
 
 ### 4.1 RESERVED 결제 타임아웃 (상세)
 
@@ -199,7 +199,7 @@ ORDER.status = RESERVED AND reserved_at + payment-timeout < now()
 
 ## 6. WAIT_QUEUE 상태 머신
 
-ERD: [§4–5 WAIT_QUEUE](../erd/erd-design.md#4-wait_queue--product_id-단일-fk-확정)
+저장: **Redis** (`product_id` 단일 키). DB ERD 미포함 — [erd-design §10](../erd/erd-design.md#10-핫딜-대기열--redis-db-erd-미포함)
 
 ### 6.1 허용 전이
 
@@ -216,14 +216,14 @@ ERD: [§4–5 WAIT_QUEUE](../erd/erd-design.md#4-wait_queue--product_id-단일-f
 | ID | 불변조건 |
 | --- | --- |
 | **W-1** | `DONE` / `EXPIRED` 는 **Terminal** (재활성화는 신규 join) |
-| **W-2** | `DONE` ⟹ 주문 성공 여부는 **`ORDER.status`만** 본다 ([ERD §5](../erd/erd-design.md#5-wait_queue--status-허용값-명시)) |
+| **W-2** | `DONE` ⟹ 주문 성공 여부는 **`ORDER.status`만** 본다 ([ERD §10 허용값](../erd/erd-design.md#10-핫딜-대기열--redis-db-erd-미포함)) |
 | **W-3** | `PROCESSING` ⟹ 유효한 Access Ticket 1개 (fan × product) |
 
 담당: **표지민** (`user`)
 
 ---
 
-## 7. PRODUCT · RESTOCK_ALERT · NOTIFICATION_EVENT
+## 7. PRODUCT · RESTOCK_ALERT · 알림 (Outbox + NOTIFICATION)
 
 ### 7.1 PRODUCT (재고)
 
@@ -242,15 +242,19 @@ ERD: [§4–5 WAIT_QUEUE](../erd/erd-design.md#4-wait_queue--product_id-단일-f
 | `ACTIVE` | ❌ | `SENT` (재입고 알림 발행 후) |
 | `SENT` | ✅ | 없음 |
 
-### 7.3 NOTIFICATION_EVENT
+### 7.3 알림 파이프라인 (Outbox → `NOTIFICATION`)
+
+**Outbox** (`outbox_events`, ERD PNG 외 — [ERD §11](../erd/erd-design.md#11-알림--notification-vs-outbox)):
 
 | 상태 | Terminal | 전이 |
 | --- | --- | --- |
-| `PENDING` | ❌ | `SENT` / `FAILED` |
-| `SENT` | ✅ | 없음 |
+| `PENDING` | ❌ | `PUBLISHED` / `FAILED` |
+| `PUBLISHED` | ✅ | — |
 | `FAILED` | ✅ (DLQ) | 수동 재처리만 |
 
-[ERD §6](../erd/erd-design.md#6-notification_event--재시도-대응-필드-보완) · 전송: **표지민**
+**팬 알림함** (`NOTIFICATION`): 전송 성공 후 `sent_at`과 함께 INSERT. 행 단위 `status` 전이는 없음.
+
+전송: **표지민** (`notification`)
 
 ---
 

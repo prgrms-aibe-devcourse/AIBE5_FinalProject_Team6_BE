@@ -29,7 +29,8 @@
 | **`orders`**, **`order_items`** | **3년** | `status` = `CANCELLED` 또는 `COMPLETED` **이후** (최종 상태 시각) | anonymize 또는 cold storage 이관 후 운영 DB에서 제거 | 세법·분쟁 대비는 **법무·세무 합의로 5년까지 연장 가능** |
 | **`payments`** | **3년** (요약 필드) | `SUCCESS` / `FAILED` 확정 후 | PG 식별자·금액·상태·`paid_at`/`failed_at`만 유지 가능 | 원본 연동 상세는 §2.2 |
 | **`payment_webhook_events`** | **90일** (원본 payload) | 수신 시각 | 이후 **요약 행**만 `payments` 또는 `payment_webhook_summaries`에 유지 | 멱등·리컨실용 |
-| **`products`** (판매 종료) | **1년** | `is_active=false` 또는 드롭 종료 후 | archive 또는 비식별 통계만 | 핫딜 SKU 이력 |
+| **`products`** (판매 종료) | **1년** | `hotdeal_end_at` 경과 또는 Admin 삭제 후 | archive 또는 비식별 통계만 | `is_active` 컬럼 없음 — [ERD §1](./erd-design.md#1-product--reserved_quantity-분리) |
+| **`carts`**, **`cart_items`** | **활성 사용 중** | 주문 완료·취소 후 해당 행 삭제 | 팬 탈퇴 시 cascade | RDB only — [ADR-003](../adr/ADR-003-cart-storage-rdb-phase1.md) |
 | **`restock_alerts`** | **1년** | `SENT` 또는 구독 해지 후 | 삭제 | fan_id는 §4 마스킹 |
 
 ### 2.2 결제·웹훅 (장성재)
@@ -45,13 +46,13 @@
 
 | 데이터 | 보관 | 만료 후 |
 | --- | --- | --- |
-| **`wait_queue`** | **180일** | `DONE` / `EXPIRED` 후 삭제 또는 집계 테이블만 |
-| **`notification_events`** | **1년** (`SENT`/`FAILED` 확정 후) | payload 내 PII 마스킹 후 삭제 |
+| **핫딜 대기열 (Redis)** | **180일** (선택 스냅샷·집계) | `DONE` / `EXPIRED` 후 TTL·집계만 ([ERD §10](./erd-design.md#10-핫딜-대기열--redis-db-erd-미포함)) |
+| **`notifications`** | **1년** (`sent_at` 기준) | PII 마스킹 후 삭제 |
 | **`outbox_events`** | **30일** | `published_at` 이후 삭제 또는 S3 cold storage ([ADR-001](../adr/ADR-001-multi-module-monolith.md) Outbox) |
 
 ### 2.4 예약 · 좌석 — Phase 2 (Not Scope MVP)
 
-MVP는 행사 **외부 티켓 링크**만 제공([ERD §4](./erd-design.md#4-wait_queue--product_id-단일-fk-확정)). 인앱 예약 도입 시 아래를 적용한다.
+MVP는 행사 **외부 티켓 링크**만 제공([ERD §8](./erd-design.md#8-schedule--artist_schedule)). 인앱 예약 도입 시 아래를 적용한다.
 
 | 데이터 | 보관 | 만료 후 |
 | --- | --- | --- |
@@ -70,10 +71,12 @@ MVP는 행사 **외부 티켓 링크**만 제공([ERD §4](./erd-design.md#4-wai
 
 | 데이터 | 보관 | 비고 |
 | --- | --- | --- |
-| **`fans`** (탈퇴 후) | **30일** 유예 → 이후 anonymize | 재가입·분쟁 유예 |
-| **피드·댓글** | 계정 탈퇴 시 soft delete → **90일** 후 본문 삭제, 집계만 | Phase 1 커뮤니티 범위 |
-| **`artist_applications`** | `REJECTED` **1년**, `APPROVED`는 영구 메타만 | Admin audit 연동 |
-| **`banners`** | 노출 종료 후 **1년** | |
+| **`fans`** (탈퇴 후) | **30일** 유예 → `email`·`nickname` 마스킹 (행 유지) | ERD에 `deleted_at` 없음 |
+| **`feeds`**, **`notices`**, **`comments`** | 탈퇴·신고 시 **DELETE** → **90일** 후 purge Job | `community` 모듈 |
+| **`banners`** | `is_active=false` 또는 DELETE 후 **1년** | ERD `is_active` 사용 |
+| **`partners`** (입점) | `REJECTED`·만료 초대 **1년**, `APPROVED`는 영구 메타만 | `invitation_token` 만료 후 정리 · Admin audit |
+| **`fan_artist`** | 탈퇴 시 관계 **DELETE** | 팔로우 집계만 유지 가능 |
+| **`notifications`** | `sent_at` 기준 **1년** 후 DELETE | 읽음 상태 없음 — [ERD §9](./erd-design.md#9-banner--restock_alert--notification-팬-알림함) |
 
 ---
 
@@ -165,7 +168,8 @@ Audit 레코드는 **`audit_logs`** (append-only, 수정·삭제 API 없음). �
 | 데이터 | 최소 저장 | 마스킹 시점 |
 | --- | --- | --- |
 | 이메일 | 가입·주문·영수증 발송에 필요한 기간 | 탈퇴 유예 종료 · 주문 보관 만료 |
-| 비밀번호 | 해시만 저장, 원문·복호화 불가 | — |
+| 비밀번호 (팬) | **FAN 테이블에 저장 안 함** — OAuth only | — |
+| 비밀번호 (PARTNER·ARTIST_MEMBER) | 해시만 저장 | — |
 | 소셜 `providerToken` | **저장 금지** (검증 직후 폐기) | — |
 | 카드·계좌 | **PG 토큰만**, PAN 저장 금지 | — |
 | IP (로그·audit) | 90일 원문 → 이후 null | 배치 |
@@ -192,7 +196,8 @@ Audit 레코드는 **`audit_logs`** (append-only, 수정·삭제 API 없음). �
 | orders / order_items 3년 | ✅ | |
 | payments / webhook 90일→요약 | ✅ | |
 | outbox 30일 | ✅ | |
-| wait_queue 180일 | ✅ | |
+| 대기열 Redis 180일 (스냅샷) | ✅ | |
+| notifications 1년 | ✅ | |
 | audit_logs 1년 | ✅ | |
 | application_logs 14~30일 | ✅ | |
 | reservations / seats archive | — | ✅ |

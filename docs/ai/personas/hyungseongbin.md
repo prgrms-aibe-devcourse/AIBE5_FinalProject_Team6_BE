@@ -29,7 +29,8 @@ modules/inventory/**
 | `docs/api/mvp-api-spec.md` | § Product, § Order, § Inventory Internal |
 | `docs/state/invariants-and-state-machines.md` | **전체** (ORDER·재고·타임아웃·Saga 소비) |
 | `docs/sequence/payment-flow-reason.md` | 재고 실패·PENDING→CANCELLED |
-| `docs/erd/erd-design.md` | § PRODUCT reserved_quantity, § ORDER status |
+| `docs/erd/erd-design.md` | § PRODUCT reserved_quantity, § ORDER status, §6 CART (RDB) |
+| `docs/adr/ADR-003-cart-storage-rdb-phase1.md` | 장바구니·k6 Phase 2 트리거 (장바구니 작업 시) |
 | `docs/operations/failure-policy.md` | DB 고갈, RESERVE_FAILED |
 
 ---
@@ -39,6 +40,7 @@ modules/inventory/**
 | 변경 | 갱신 |
 | --- | --- |
 | 주문 API·상태 | `mvp-api-spec.md`, `invariants-and-state-machines.md` |
+| 장바구니 저장소·Phase 2 기준 | `ADR-003`, `observability-metrics.md` §2.1 |
 | `OUT_OF_STOCK` vs `RESERVE_FAILED` | `api-contract.md` |
 | 재고 포트 시그니처 | `mvp-api-spec.md` § Inventory Internal |
 
@@ -61,6 +63,7 @@ modules/inventory/**
 - [ ] `OUT_OF_STOCK`(전체 품절) ≠ `RESERVE_FAILED`(경쟁 패배, retryable)
 - [ ] `RESERVED`만 재고 선점 의미 — 실패 시 `PENDING→CANCELLED` (RESERVED 금지)
 - [ ] MVP 재고 락: MySQL `FOR UPDATE` (Redis 락은 Phase 3)
+- [ ] 장바구니: **RDB** `CART`/`CART_ITEM` only — Redis 장바구니 금지 (ADR-003)
 - [ ] `inventory` 포트: reserve / confirm / restore — HTTP 아님
 
 ---

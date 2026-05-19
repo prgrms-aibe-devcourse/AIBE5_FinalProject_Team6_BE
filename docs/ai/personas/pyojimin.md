@@ -29,7 +29,8 @@ modules/common/**    # 공통 에러·응답 (팀 합의 PR)
 | 문서 | 언제 |
 | --- | --- |
 | `docs/api/mvp-api-spec.md` | § Auth, § Wait Queue, § Admin(입점·배너), § Notification |
-| `docs/state/invariants-and-state-machines.md` | §6 WAIT_QUEUE · §4.2 대기열·주문 교차 (Q-1~Q-3) |
+| `docs/state/invariants-and-state-machines.md` | §6 WAIT_QUEUE (Redis) · §4.2 대기열·주문 교차 (Q-1~Q-3) |
+| `docs/erd/erd-design.md` | §10 대기열(Redis) · §11 Outbox·`NOTIFICATION` (알림 작업 시) |
 | `docs/operations/failure-policy.md` | §3.1 Redis 다운 · §3.2 Outbox |
 | `docs/erd/data-retention-and-audit-policy.md` | §3 Audit · §2.3 대기열·알림·outbox |
 

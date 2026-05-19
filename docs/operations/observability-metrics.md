@@ -49,6 +49,18 @@ MVP에서 **반드시 수집·대시보드·알람**할 메트릭.
 
 부하 검증: **k6** 핫딜 시나리오 — [ADR-001](../adr/ADR-001-multi-module-monolith.md).
 
+### 2.1 k6 · 장바구니 Phase 2 전환 트리거
+
+[ADR-003](../adr/ADR-003-cart-storage-rdb-phase1.md) — Phase 1은 RDB 장바구니. 아래를 k6·Prometheus에서 **반드시 수집**하고, 임계치 초과 시 Hybrid(Redis+RDB) 검토.
+
+| 메트릭 (custom 권장) | 용도 | Phase 2 트리거 |
+| --- | --- | --- |
+| `fandrops_cart_item_write_seconds` (histogram) | 담기·수량 변경 P95 | P95 ≥ **주문 생성 TX P95 × 0.2** (20% 이상) |
+| `hikaricp_connections_active` / `max` | 풀 점유율 | 핫딜 구간 **> 80%** 가 **5m** 지속 |
+| `hikaricp_connections_active` | 절대값 | `maximum-pool-size` **≥ 90%** 근접 |
+
+시나리오에 **장바구니 담기 burst** + **주문 생성**을 함께 넣어 `cart_item`이 실제 병목인지 검증한다. 미충족 시 RDB 유지.
+
 ---
 
 ## 3. 대시보드 구성 (Grafana)
@@ -56,7 +68,7 @@ MVP에서 **반드시 수집·대시보드·알람**할 메트릭.
 | Row | 패널 |
 | --- | --- |
 | **Overview** | RPS, 5xx%, P95/P99, active users (선택) |
-| **Commerce** | orders/min by status, reserve fail rate, `RESERVE_FAILED` count |
+| **Commerce** | orders/min by status, reserve fail rate, `RESERVE_FAILED` count, `cart_item` write P95 vs order TX P95 |
 | **Payment** | webhook QPS, duplicate skip rate, `PAID` stuck count |
 | **Queue** | depth, join rate, SSE connections, Redis health |
 | **Data** | DB pool, slow queries, outbox pending |

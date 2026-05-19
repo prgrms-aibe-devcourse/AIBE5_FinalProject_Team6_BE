@@ -220,5 +220,6 @@ A. ADR-001은 **왜 멀티모듈 모놀리스인가**(배포·팀·MSA). ADR-002
 | 문서 | 경로 |
 | --- | --- |
 | 멀티모듈 모놀리스 | [ADR-001](./ADR-001-multi-module-monolith.md) |
+| 장바구니 RDB (Phase 1) | [ADR-003](./ADR-003-cart-storage-rdb-phase1.md) |
 | Git 협업 (브랜치·PR) | [../contributing/git-collaboration-convention.md](../contributing/git-collaboration-convention.md) |
 | 실제 `settings.gradle.kts` | [../../settings.gradle.kts](../../settings.gradle.kts) |

@@ -74,6 +74,7 @@
 | 주문·결제·재고·상태 | `docs/state/invariants-and-state-machines.md` |
 | 결제·웹훅·Saga | `docs/sequence/payment-flow-reason.md` |
 | DB 컬럼·테이블 | `docs/erd/erd-design.md` (+ `erd.png`는 스키마 확인 시만) |
+| 장바구니·주문·재고 | `docs/adr/ADR-003-cart-storage-rdb-phase1.md` (Phase 1 RDB) |
 | 보관·audit·PII | `docs/erd/data-retention-and-audit-policy.md`, `docs/erd/data-lifecycle.md` |
 | 장애·복구·운영 | `docs/operations/failure-policy.md`, `docs/operations/incident-response.md`, `docs/operations/observability-metrics.md` |
 

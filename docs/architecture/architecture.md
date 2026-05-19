@@ -1,6 +1,6 @@
 # FANDROPS 아키텍처 개요
 
-> 상세 결정·기술 스택·호출 흐름: [ADR-001](../adr/ADR-001-multi-module-monolith.md) · 레이어별 Gradle: [ADR-002](../adr/ADR-002-per-layer-gradle-modules.md) · HTTP: [API 명세](../api/mvp-api-spec.md) · [계약](../api/api-contract.md) · 상태: [상태 머신](../state/invariants-and-state-machines.md) · 운영: [장애](../operations/failure-policy.md) · [메트릭](../operations/observability-metrics.md)
+> 상세 결정·기술 스택·호출 흐름: [ADR-001](../adr/ADR-001-multi-module-monolith.md) · 레이어별 Gradle: [ADR-002](../adr/ADR-002-per-layer-gradle-modules.md) · 장바구니 RDB: [ADR-003](../adr/ADR-003-cart-storage-rdb-phase1.md) · HTTP: [API 명세](../api/mvp-api-spec.md) · [계약](../api/api-contract.md) · 상태: [상태 머신](../state/invariants-and-state-machines.md) · 운영: [장애](../operations/failure-policy.md) · [메트릭](../operations/observability-metrics.md)
 
 **멀티모듈 모놀리스** — 하나의 Spring Boot 프로세스로 배포하되, 코드 경계는 Gradle 서브프로젝트로 분리하여 **의존성 방향을 컴파일 단계에서 강제**한다.
 
@@ -106,7 +106,7 @@ ArchUnit(선택): `domain` 패키지가 `org.springframework`, `jakarta.persiste
 
 | 구분 | 오너 | 비고 |
 | --- | --- | --- |
-| 주문 생성·상태·장바구니·재고 선점 | **형성빈** (`order`, `inventory`) | PG 승인 **이후** 상태 수렴은 장성재와 스키마·시퀀스 합의 |
+| 주문 생성·상태·장바구니·재고 선점 | **형성빈** (`order`, `inventory`) | 장바구니 = **RDB** `CART`/`CART_ITEM` ([ADR-003](../adr/ADR-003-cart-storage-rdb-phase1.md)). PG 승인 **이후** 상태 수렴은 장성재와 스키마·시퀀스 합의 |
 | 결제 승인·웹훅·멱등·실패 복구 | **장성재** (`payment`) | [상태 머신·Saga](../state/invariants-and-state-machines.md) · [시퀀스](../sequence/payment-flow-reason.md) |
 | 알림 전송 | **표지민** (`notification`) | 결제 완료·재입고 등 **이벤트 발행**은 형성빈·장성재·정환철이 각자 담당 |
 

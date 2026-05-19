@@ -1,7 +1,28 @@
 # ERD 설계 문서
 
 > **다이어그램:** [`erd.png`](./erd.png)  
-> 핫딜·결제·대기열·알림 도메인의 테이블 관계 및 컬럼 설계 근거를 정리한다.
+> K-Pop 팬덤 **B2B2C** 플랫폼의 테이블 관계·컬럼 설계 근거. 핫딜·결제·커뮤니티·아티스트 운영 도메인을 포함한다.
+
+---
+
+## 0. 엔티티 개요
+
+| 도메인 | 테이블 | 비고 |
+| --- | --- | --- |
+| **사용자·아티스트** | `FAN`, `PARTNER`, `ARTIST`, `ARTIST_MEMBER`, `FAN_ARTIST` | 팬(B2C) · 기획사(B2B) · 아티스트·멤버 |
+| **커뮤니티** | `ARTIST_SPACE`, `FEED`, `NOTICE`, `COMMENT`, `HEART` | 아티스트 공간 · 피드·공지 · 댓글·하트 |
+| **커머스** | `PRODUCT`, `INVENTORY`, `CART`, `CART_ITEM`, `ORDER`, `ORDER_ITEM`, `PAYMENT`, `RESTOCK_ALERT` | 상품·재고·**장바구니(RDB)** ·주문·결제 — [ADR-003](../adr/ADR-003-cart-storage-rdb-phase1.md) |
+| **랭킹·일정** | `VOTE`, `IDOL_RANKING`, `SCHEDULE`, `ARTIST_SCHEDULE` | 월간 투표 · 드롭·라이브·행사 |
+| **운영·알림** | `BANNER`, `NOTIFICATION` | 홈 배너 · 팬 알림함 |
+
+**DB ERD에 없고 별도 저장하는 것**
+
+| 기능 | 저장 | 문서 |
+| --- | --- | --- |
+| 핫딜 대기열 (F08-01) | **Redis** (상태·토큰) | [§10](#10-핫딜-대기열--redis-db-erd-미포함) · [상태 머신 §6](../state/invariants-and-state-machines.md#6-wait_queue-상태-머신) |
+| 알림 발행·재시도 | **`outbox_events`** (ADR Outbox) | [§11](#11-알림--notification-vs-outbox) · [ADR-001](../adr/ADR-001-multi-module-monolith.md) |
+| PG 웹훅 원본 | `payment_webhook_events` (보관 정책) | [data-retention §2.2](./data-retention-and-audit-policy.md#22-결제웹훅-장성재) |
+| Audit | `audit_logs` | [data-retention §3](./data-retention-and-audit-policy.md#3-audit--무엇을-남길지) |
 
 ---
 
@@ -9,7 +30,7 @@
 
 ### 설계 결정
 
-`stock_quantity`와 `reserved_quantity`를 **별도 컬럼**으로 분리한다.
+`stock_quantity`와 `reserved_quantity`를 **별도 컬럼**으로 분리한다. `PRODUCT`는 `artist_id`로 아티스트에 소속된다.
 
 ### 근거
 
@@ -19,6 +40,7 @@
 | --- | --- | --- |
 | `stock_quantity` | 실제 판매 완료 후 남은 재고 | 결제 최종 확정(`PAID` → `COMPLETED`) 시 차감 |
 | `reserved_quantity` | 결제 진행 중 선점된 재고 | 재고 예약(lock) 시 증가, 결제 완료/취소 시 감소 |
+| `hotdeal_start_at` / `hotdeal_end_at` | 핫딜 노출·가격 적용 구간 | Admin·아티스트 상품 등록 시 설정 |
 
 ### 오버셀 방지 공식
 
@@ -27,9 +49,7 @@
 ```
 
 > **주의:** 컬럼 분리만으로 오버셀이 막히지 **않는다**.  
-> 유저 A, B가 동시에 `stock=10, reserved=5`를 읽으면 둘 다 예약 가능하다고 판단할 수 있다.  
-> 재고 선점 시 **DB 비관락(`SELECT ... FOR UPDATE`)** 또는 **Redis 분산락**으로 동시성 충돌을 제어해야 한다.  
-> 컬럼 설계와 락 전략이 **함께** 작동해야 오버셀 0이 보장된다.
+> 재고 선점 시 **DB 비관락(`SELECT ... FOR UPDATE`)** 또는 **Redis 분산락**으로 동시성 충돌을 제어해야 한다.
 
 ---
 
@@ -37,20 +57,22 @@
 
 ### 설계 결정
 
-`status` 컬럼에 가능한 값과 각 상태의 **성격**을 ERD 레벨에서 명시한다.
+`fan_id`로 팬과 연결한다. `status` 컬럼에 가능한 값과 각 상태의 **성격**을 ERD 레벨에서 명시한다.
 
 | 상태 | 성격 | 설명 |
 | --- | --- | --- |
 | `PENDING` | 일반 | 주문 생성 직후, 재고 예약 전 |
 | `RESERVED` | 일반 | 재고 선점 완료, 결제 대기 중 |
 | `PAID` | 일반 | PG 결제 승인 확정 시점 기록 |
-| `FAILED` | **Transient (경유 상태)** | 결제 실패 직후, Saga 보상 실행 전 잠깐 머무는 중간 상태. **최종 상태가 아님** |
+| `FAILED` | **Transient (경유 상태)** | 결제 실패 직후, Saga 보상 실행 전. **최종 상태가 아님** |
 | `COMPLETED` | 최종 | 재고 차감 및 알림 발행까지 모든 후처리 완료 |
 | `CANCELLED` | 최종 | 재고 부족 / 결제 실패 / 사용자 취소로 주문 종료 |
 
+`idempotency_key`로 주문 생성 멱등을 보장한다.
+
 ### `FAILED`가 존재하는 이유
 
-Saga 보상 트랜잭션의 **트리거 기준**이 되는 상태다. `FAILED`로 저장된 레코드가 있어야 보상 실패 시 재처리 대상을 특정할 수 있다. 보상이 완료되면 반드시 `CANCELLED`로 전이한다.
+Saga 보상 트랜잭션의 **트리거 기준**이 되는 상태다. 보상이 완료되면 반드시 `CANCELLED`로 전이한다.
 
 ---
 
@@ -58,21 +80,11 @@ Saga 보상 트랜잭션의 **트리거 기준**이 되는 상태다. `FAILED`�
 
 ### 설계 결정 1 — `failed_at` 분리
 
-`paid_at`과 `failed_at`을 **분리된 컬럼**으로 둔다.
-
-#### 근거
-
-결제 실패 시점을 별도로 기록해야 **수동 리컨실리에이션(사후 검증)** 이 가능하다. SLO 문서에서 *"결제 실패 시나리오에서 60초 내 일관 상태 수렴, 수동 리컨실리에이션 로그"* 를 요구하므로 실패 시점 데이터가 DB에 반드시 남아 있어야 한다.
+`paid_at`과 `failed_at`을 **분리된 컬럼**으로 둔다. `ORDER`와 1:1.
 
 ### 설계 결정 2 — `payment_key` Unique Index
 
-`payment_key` 컬럼에 **Unique Index**를 설정하여 중복 웹훅 수신 시 **멱등성**을 보장한다.
-
-#### 근거
-
-토스페이먼츠는 웹훅을 **재전송**할 수 있다. 동일한 결제 건에 대해 웹훅이 두 번 수신됐을 때 `payment_key` Unique Index가 없으면 결제 확정 로직이 중복 실행되어 재고가 이중 차감되거나 알림이 중복 발송될 수 있다.
-
-시퀀스 다이어그램의 `idempotent key` 처리가 ERD 레벨에서 `payment_key` Unique Index로 뒷받침된다.
+`payment_key` 컬럼에 **Unique Index**를 설정하여 중복 웹훅 수신 시 **멱등성**을 보장한다. API·DTO에서는 `tossPaymentKey`로 매핑한다.
 
 ```
 시퀀스: 결제 요청 (with idempotent key)
@@ -80,27 +92,119 @@ Saga 보상 트랜잭션의 **트리거 기준**이 되는 상태다. `FAILED`�
 ERD:    PAYMENT.payment_key (Unique Index)
 ```
 
+| `status` | 의미 |
+| --- | --- |
+| `PENDING` | 결제 세션 생성 |
+| `SUCCESS` | PG 승인 확정 (`paid_at` 기록) |
+| `FAILED` | PG 거절·타임아웃 (`failed_at` 기록) |
+
 ---
 
-## 4. WAIT_QUEUE — `product_id` 단일 FK 확정
+## 4. PARTNER · ARTIST · ARTIST_MEMBER · FAN
 
 ### 설계 결정
 
-기존 `drop_target_id (PRODUCT or EVENT)` **다형성 설계를 폐기**하고, `product_id (FK → PRODUCT)` **단일 참조**로 확정한다.
+- **`FAN`**: `email`, `nickname`, `created_at`만 저장. **비밀번호 컬럼 없음** — MVP 인증은 소셜 OAuth ([mvp-api § Auth](../api/mvp-api-spec.md#auth--fan-계정)).
+- **`PARTNER`**: 기획사(B2B). `login_id`, `password`, `company_name`, `contact_email`, `status`, `invitation_token`, `token_expired_at`. `status` 예: `PENDING` \| `APPROVED` \| `REJECTED` (Admin 입점 API는 `PARTNER` 행 대상).
+- **`ARTIST`**: `partner_id` FK, `name`, `joined_at`. 굿즈·일정·랭킹의 **앵커 엔티티**.
+- **`ARTIST_MEMBER`**: `login_id`, `password`, `member_name`, `role` 기본값 `ROLE_ARTIST`. **피드·공지 작성 주체**.
 
 ### 근거
 
-| 검토 항목 | 내용 |
-| --- | --- |
-| 기획서 Not Scope | 콘서트·팬미팅 티켓 예매는 외부 링크 제공만. 인앱 결제 없음 |
-| 대기열 용도 | 핫딜 굿즈 드롭 트래픽 흡수 전용 (F08-01) |
-| MVP 원칙 | 복잡도 최소화. EVENT 인앱 결제가 생기는 시점에 재설계 |
-
-`target_type` 컬럼을 추가하는 다형성 참조 방식은 **Phase 2 이후** EVENT 인앱 결제가 확정될 때 검토한다.
+B2B2C에서 기획사-아티스트-멤버 계층을 DB에 명시해야 커뮤니티(`ARTIST_SPACE`)·커머스(`PRODUCT`)·투표(`VOTE`)가 동일한 `artist_id`로 묶인다.
 
 ---
 
-## 5. WAIT_QUEUE — `status` 허용값 명시
+## 5. 커뮤니티 — `ARTIST_SPACE`, `FEED`, `NOTICE`, `COMMENT`, `HEART`
+
+### 설계 결정
+
+| 테이블 | 역할 |
+| --- | --- |
+| `ARTIST_SPACE` | 아티스트당 커뮤니티 허브 (`status`로 개설·운영 상태) |
+| `FEED` | 멤버(`artist_member_id`)가 올리는 피드. `artist_space_id` 소속 |
+| `NOTICE` | 공식 공지 (제목·본문·`image_urls`) |
+| `COMMENT` | 팬(`fan_id`)이 피드에 작성. `parent_id`로 **대댓글** (self FK) |
+| `HEART` | `target_type` = `FEED` \| `COMMENT`, `target_id` — **다형 좋아요** |
+
+### 근거
+
+피드·댓글·반응을 `community` 모듈 단일 바운디드 컨텍스트로 구현한다. [architecture § user vs community](../architecture/architecture.md#user-vs-community--왜-나뉘는가)
+
+---
+
+## 6. CART · CART_ITEM
+
+### 설계 결정
+
+- **저장소: MySQL RDB (Phase 1)** — Redis-only 장바구니는 채택하지 않음. 근거·Phase 2 전환 조건: [ADR-003](../adr/ADR-003-cart-storage-rdb-phase1.md)
+- `FAN` ↔ `CART` **1:1** — `CART`: `fan_id`, `created_at`, `updated_at`
+- `CART_ITEM`: `cart_id`, `product_id`, `quantity`, `added_at`. UK 권장: `(cart_id, product_id)`
+- 주문 생성(`POST /orders`) 시 `ORDER` + `ORDER_ITEM` + `INVENTORY.reserve()`는 **단일 TX**로 정합성 보장. 장바구니는 주문 **전** 임시 목록이며, 주문 성공 후 `cart_item` 삭제·수량 반영은 애플리케이션 정책(동일 TX 또는 직후)으로 처리한다.
+
+### Redis와의 구분
+
+| 저장 | 용도 |
+| --- | --- |
+| **RDB `CART` / `CART_ITEM`** | 로그인 팬 장바구니 영속 (담기·수량 변경·조회) |
+| **Redis** | 핫딜 **대기열**·Read 캐시·랭킹 등 — [§10](#10-핫딜-대기열--redis-db-erd-미포함) · **장바구니 아님** |
+
+---
+
+## 7. FAN_ARTIST · VOTE · IDOL_RANKING
+
+| 테이블 | 설계 포인트 |
+| --- | --- |
+| `FAN_ARTIST` | 팬의 아티스트 팔로우 (`followed_at`) |
+| `VOTE` | 팬·아티스트·`round`·`month` 단위 투표 기록 (중복 방지는 앱·UK로 보장) |
+| `IDOL_RANKING` | 아티스트별 `vote_count` 집계 (`round`, `month`) |
+
+---
+
+## 8. SCHEDULE · ARTIST_SCHEDULE
+
+| 테이블 | `type` 예시 | 용도 |
+| --- | --- | --- |
+| `SCHEDULE` | `DROP` \| `EVENT` \| `LIVE` | 팬 알림 트리거 (`NOTIFICATION` 연계) |
+| `ARTIST_SCHEDULE` | `DROP` \| `LIVE` \| `EVENT` \| `NOTICE` | 아티스트·운영 캘린더 등록 |
+
+### MVP — 인앱 좌석 예약 Not Scope
+
+콘서트·팬미팅 **인앱 결제·좌석 DB는 없음**. `EVENT` 타입 일정은 **외부 티켓 URL** 노출만 한다. Phase 2에서 `reservations` / `seats` 검토 — [data-retention §2.4](./data-retention-and-audit-policy.md#24-예약--좌석--phase-2-not-scope-mvp).
+
+---
+
+## 9. BANNER · RESTOCK_ALERT · NOTIFICATION (팬 알림함)
+
+### `BANNER`
+
+홈 노출용. `exposure_order`, `is_active`, `start_at` / `end_at`로 기간·순서 제어. 비노출은 **`is_active=false`** (ERD에 `deleted_at` 없음). Admin CRUD는 `user` 모듈.
+
+### `RESTOCK_ALERT`
+
+`fan_id` + `product_id` 구독. ERD `status`는 `string` — 앱 허용값: `ACTIVE` \| `SENT` ([상태 머신 §7.2](../state/invariants-and-state-machines.md#72-restock_alert)).
+
+### `NOTIFICATION`
+
+팬 **알림함** (`fan_id`, `type`, `title`, `message`, `sent_at`). `SCHEDULE` 등 이벤트 처리 후 INSERT. **읽음(`is_read` / `read_at`) 컬럼 없음** — 목록 API도 `sentAt`만 반환.
+
+---
+
+## 10. 핫딜 대기열 — Redis (DB ERD 미포함)
+
+### 설계 결정
+
+대기열 **행은 RDB ERD에 두지 않는다**. F08-01 핫딜 트래픽 흡수·Access Ticket은 **Redis**에 `product_id` 단일 키 기준으로 저장한다.
+
+### 근거 (기존 §4 WAIT_QUEUE DB안 폐기)
+
+| 검토 항목 | 내용 |
+| --- | --- |
+| 트래픽 | 대기열은 고빈도·단기 TTL 데이터 |
+| MVP | `product_id`만 참조 (EVENT 인앱 결제 없음) |
+| 정합 | 주문 성공 여부는 **`ORDER.status`만** 본다 |
+
+### 허용 상태 (Redis / API)
 
 ```
 WAITING | PROCESSING | DONE | EXPIRED
@@ -108,43 +212,33 @@ WAITING | PROCESSING | DONE | EXPIRED
 
 | 값 | 의미 |
 | --- | --- |
-| `WAITING` | 대기열 진입, 순번 대기 중 |
-| `PROCESSING` | 진입 토큰 발행, 주문 진행 중 |
-| `DONE` | 주문 프로세스 종료. 성공/실패 여부는 `ORDER.status`에서 판단. 대기열은 대기열 역할만 담당 |
-| `EXPIRED` | 토큰 만료, 재진입 필요 |
+| `WAITING` | 대기열 진입 |
+| `PROCESSING` | Access Ticket 발급, 주문 진행 중 |
+| `DONE` | 대기열 흐름 종료 (주문 성공 여부와 무관) |
+| `EXPIRED` | 토큰 만료 |
 
-### `DONE`의 범위
-
-`DONE`은 **"대기열 흐름이 끝났음"** 을 의미할 뿐, 주문 성공을 의미하지 않는다. 주문 결과는 `ORDER.status`를 기준으로 판단한다. **대기열과 주문의 관심사를 분리**하는 것이 설계 원칙이다.
+상세 전이·불변조건: [invariants §6](../state/invariants-and-state-machines.md#6-wait_queue-상태-머신).
 
 ---
 
-## 6. NOTIFICATION_EVENT — 재시도 대응 필드 보완
+## 11. 알림 — `NOTIFICATION` vs Outbox
 
-### 현재 설계
+### 설계 결정
 
-```
-id / event_type / resource_id / occurred_at
-```
-
-### 권고 추가 필드
-
-| 컬럼 | 타입 | 이유 |
+| 계층 | 저장소 | 역할 |
 | --- | --- | --- |
-| `payload` | json | 알림 전송에 필요한 데이터를 이벤트 발행 시점에 스냅샷으로 저장. 재시도 시 원본 데이터 보장 |
-| `status` | string | `PENDING` / `SENT` / `FAILED` — 전송 성공 여부 추적 |
-| `retry_count` | int | 재시도 횟수 기록. 최대 재시도 초과 시 DLQ 이관 기준 |
+| **발행·재시도** | `outbox_events` (인프라, [ADR-001](../adr/ADR-001-multi-module-monolith.md)) | `PENDING` → 발행 → `published_at`. 실패 시 `retry_count`, DLQ |
+| **팬 조회** | `NOTIFICATION` (본 ERD) | 전송 완료 후 팬 알림함에 남는 **최종 기록** |
 
-### 근거
+`NOTIFICATION` 행에는 전송 파이프라인 `status`를 두지 않는다. 재시도·`FAILED` 추적은 **Outbox** 책임.
 
-알림 전송은 외부 채널(이메일, 푸시) 의존성이 있어 실패 가능성이 있다. 재시도 없이 단순 발행만 하면 팬이 결제 완료 알림을 못 받는 상황이 발생한다. `retry_count`와 `status`가 있어야 실패한 이벤트를 추적하고 재처리할 수 있다.
+### 권고 Outbox 필드 (ERD PNG 외)
 
-### 예시
-
-| event_type | resource_id | retry_count | status |
-| --- | --- | --- | --- |
-| `PAYMENT_SUCCESS` | `order_123` | 2 | `SENT` |
-| `RESTOCK_ALERT` | `product_456` | 3 | `FAILED` → DLQ 이관 |
+| 컬럼 | 이유 |
+| --- | --- |
+| `payload` (json) | 재시도 시 스냅샷 |
+| `status` | `PENDING` / `PUBLISHED` / `FAILED` |
+| `retry_count` | DLQ 기준 |
 
 ---
 
@@ -156,6 +250,6 @@ id / event_type / resource_id / occurred_at
 | 데이터 보관 · Audit | [`data-retention-and-audit-policy.md`](./data-retention-and-audit-policy.md) |
 | 데이터 라이프사이클 | [`data-lifecycle.md`](./data-lifecycle.md) |
 | 멀티모듈 모놀리스 (ADR) | [`../adr/ADR-001-multi-module-monolith.md`](../adr/ADR-001-multi-module-monolith.md) |
-| 레이어별 Gradle (ADR) | [`../adr/ADR-002-per-layer-gradle-modules.md`](../adr/ADR-002-per-layer-gradle-modules.md) |
+| 장바구니 저장소 (ADR) | [`../adr/ADR-003-cart-storage-rdb-phase1.md`](../adr/ADR-003-cart-storage-rdb-phase1.md) |
 | 불변조건 · 상태 머신 | [`../state/invariants-and-state-machines.md`](../state/invariants-and-state-machines.md) |
 | 결제·주문 시퀀스 | [`../sequence/payment-flow-reason.md`](../sequence/payment-flow-reason.md) |

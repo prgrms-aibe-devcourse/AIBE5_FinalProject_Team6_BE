@@ -10,37 +10,36 @@
 ## 1. 라이프사이클 단계
 
 ```
-[Create] → [Active] → [Soft Delete?] → [Archive] → [Anonymize / Purge]
-              ↑              ↑              ↑
-         비즈니스 사용   UI 비노출      cold storage
+[Create] → [Active] → [비노출·삭제] → [Archive] → [Anonymize / Purge]
 ```
 
 | 단계 | 의미 | 대표 대상 |
 | --- | --- | --- |
-| **Active** | 읽기·쓰기 정상 | 진행 중 주문, 노출 중 배너, 대기열 `WAITING` |
-| **Soft Delete** | `deleted_at` 설정, **API·목록에서 숨김**, DB 행 유지 | 팬 탈퇴 요청, 배너 삭제, (선택) 댓글 |
-| **Archive** | 운영 DB에서 분리, 조회는 배치·CS·법무만 | 종료 이벤트 좌석(Phase 2), 오래된 `wait_queue` |
-| **Anonymize** | PII 제거·치환, 통계·분쟁 키만 유지 | 보관 만료 `orders` 연관 fan 스냅샷 |
-| **Purge** | 물리 삭제 | outbox, 웹훅 원본, 만료 로그 |
+| **Active** | 읽기·쓰기 정상 | 진행 중 주문, `BANNER.is_active=true`, 대기열 `WAITING` |
+| **비노출·삭제** | ERD 컬럼 기준 처리 (`deleted_at` **미사용**) | 배너 `is_active=false`, 콘텐츠 **물리 삭제**, 팬 **PII 마스킹** |
+| **Archive** | 운영 DB에서 분리 | Phase 2 좌석, Redis 대기열 스냅샷(선택) |
+| **Anonymize** | PII 치환 | 탈퇴 `fans.email` / `nickname` |
+| **Purge** | 물리 삭제 | outbox, 웹훅 원본, 만료 알림 |
 
-**거래 핵심(`orders`, `payments`)은 Soft Delete를 사용하지 않는다.** 종료는 `COMPLETED` / `CANCELLED` + audit + 보관 기간으로만 표현한다.
+**거래 핵심(`orders`, `payments`)** 은 상태 전이(`COMPLETED` / `CANCELLED`) + audit + 보관 기간만 사용한다.
 
 ---
 
-## 2. Soft Delete 정책
+## 2. 비노출·삭제 정책 (ERD 컬럼 기준)
 
-| 엔티티 | Soft Delete | 필드 | 복구 | 비고 |
-| --- | --- | --- | --- | --- |
-| `orders`, `order_items` | **❌** | — | — | 상태 전이만 허용 |
-| `payments` | **❌** | — | — | |
-| `fans` | **✅** | `deleted_at`, `anonymized_at` | 30일 유예 내 CS만 | 이후 이메일·닉네임 마스킹 |
-| `products` | **✅** (운영자) | `deleted_at` | Admin | 판매 이력은 `order_items`에 스냅샷 |
-| `banners` | **✅** | `deleted_at` | Admin | |
-| `posts`, `comments` (community) | **✅** | `deleted_at` | 작성자·Admin | 90일 후 본문 purge |
-| `wait_queue` | **❌** | — | — | `EXPIRED`/`DONE` 후 retention 삭제 |
-| `payment_webhook_events` | **❌** | — | — | 기간 만료 시 purge |
+> MVP ERD에는 `deleted_at` / `anonymized_at` **없음**. 아래는 ERD 필드·물리 삭제로 표현한다.
 
-**쿼리 규칙:** soft delete 대상은 기본 `WHERE deleted_at IS NULL`. Admin·audit 조회는 role 기반으로만 `deleted_at` 포함.
+| 엔티티 | ERD 기준 처리 | 비고 |
+| --- | --- | --- |
+| `orders`, `order_items`, `payments` | 상태 전이만 | soft delete 없음 |
+| `carts`, `cart_items` | 주문 성공 시 삭제 · 탈퇴 cascade | [ADR-003](../adr/ADR-003-cart-storage-rdb-phase1.md) |
+| `fans` | 탈퇴 시 `email`·`nickname` **마스킹**(동일 행) | 30일 유예 후 irreversible |
+| `products` | Admin **DELETE** 또는 드롭 종료(`hotdeal_end_at` 경과) | 이력은 `order_items` |
+| `banners` | `is_active=false` 또는 DELETE | |
+| `feeds`, `notices`, `comments` | 작성자·Admin **DELETE** | 90일 후 purge Job |
+| `hearts` | 부모 삭제 시 연쇄 DELETE | |
+| 핫딜 대기열 (Redis) | TTL · 집계 | [ERD §10](./erd-design.md#10-핫딜-대기열--redis-db-erd-미포함) |
+| `payment_webhook_events` | 기간 만료 purge | ERD PNG 외 |
 
 ---
 
@@ -60,26 +59,38 @@
 
 상태 전이·Saga는 [상태 머신](../state/invariants-and-state-machines.md), audit는 [§3.3 보관 정책](./data-retention-and-audit-policy.md#33-주문-상태-변경-형성빈--장성재).
 
-### 3.2 대기열 (핫딜 F08-01)
+#### 장바구니 (`carts` / `cart_items`)
 
-| 단계 | `wait_queue` |
+| 단계 | 동작 |
+| --- | --- |
+| Active | 담기·수량 변경·조회 — **MySQL RDB** ([ADR-003](../adr/ADR-003-cart-storage-rdb-phase1.md)) |
+| 주문 연동 | `POST /orders` 성공 후 해당 `cart_item` 삭제(또는 수량 차감) |
+| 종료 | 팬 탈퇴·anonymize 시 `cart` cascade 삭제 |
+
+Redis 장바구니·TTL 자동 만료는 Phase 1 **미사용**.
+
+### 3.2 대기열 (핫딜 F08-01, Redis)
+
+DB ERD에는 없음 — [erd-design §10](./erd-design.md#10-핫딜-대기열--redis-db-erd-미포함).
+
+| 단계 | Redis 대기열 키 |
 | --- | --- |
 | Active | `WAITING` → `PROCESSING` |
 | 종료 | `DONE` / `EXPIRED` (주문 성공 여부는 `ORDER.status` 참조) |
-| 보관 | 종료 후 **180일** |
-| Purge | Job 삭제 또는 일 단위 집계 |
+| 보관 | 종료 후 **180일** (선택 스냅샷·집계만) |
+| Purge | TTL 만료 또는 일 단위 집계 |
 
 ### 3.3 알림 · Outbox
 
-| 단계 | `notification_events` | `outbox_events` |
+| 단계 | `notifications` (팬 알림함) | `outbox_events` |
 | --- | --- | --- |
-| Active | `PENDING` → 전송 | 미발행 |
-| 종료 | `SENT` / `FAILED` | `published_at` 설정 |
-| Purge | 1년 후 (payload PII 마스킹 선행) | **30일** 후 삭제 또는 cold storage |
+| Active | `sent_at` 기록 후 조회 | `PENDING` → 발행 |
+| 종료 | — (append 위주) | `published_at` 설정 / `FAILED` |
+| Purge | **1년** 후 삭제 (PII 마스킹 선행) | **30일** 후 삭제 또는 cold storage |
 
 ### 3.4 이벤트 · 예약 (Phase 2)
 
-MVP: [행사는 외부 티켓 링크](./erd-design.md#4-wait_queue--product_id-단일-fk-확정)만 — `reservations` / `seats` 테이블 없음.
+MVP: [행사는 외부 티켓 링크](./erd-design.md#8-schedule--artist_schedule)만 — `reservations` / `seats` 테이블 없음.
 
 | 단계 | Phase 2 `reservations`, `seats` |
 | --- | --- |
@@ -91,11 +102,14 @@ MVP: [행사는 외부 티켓 링크](./erd-design.md#4-wait_queue--product_id-�
 
 ### 3.5 커뮤니티 · 콘텐츠
 
-| 데이터 | Active | Soft Delete | Purge |
+[ERD §5](./erd-design.md#5-커뮤니티--artist_space-feed-notice-comment-heart) · `ARTIST_SPACE`, `FEED`, `NOTICE`, `COMMENT`, `HEART`
+
+| 데이터 | Active | 비노출·삭제 | Purge |
 | --- | --- | --- | --- |
-| 피드·댓글 | 노출 중 | 작성자/Admin 삭제 | 90일 후 |
-| 랭킹 집계 | 이벤트 기간 | — | 원본 purge 후 집계만 유지 |
-| 라이브 메타 | 방송 중 | 종료 | 1년 |
+| `feeds`, `notices`, `comments` | 노출 중 | 작성자·Admin **DELETE** | 90일 후 연관 `hearts` 정리 |
+| `hearts` | 반응 중 | — | 피드·댓글 purge 시 연쇄 또는 고아 정리 |
+| `votes`, `idol_ranking` | 이벤트 기간 | — | 원본 purge 후 집계만 유지 |
+| `artist_schedules` (LIVE 등) | 방송·일정 중 | 종료 | 1년 |
 
 ---
 
@@ -107,7 +121,8 @@ FANDROPS는 **10~30대 팬(B2C)** 과 **기획사(B2B)** 를 동시에 다루므
 
 | 항목 | 정책 |
 | --- | --- |
-| 회원가입 | `email`, `nickname`, 비밀번호(해시) — 실명·주민번호 **수집 안 함** (MVP) |
+| 회원가입 (팬) | `email`, `nickname`만 `FAN`에 저장 — **비밀번호 DB 미저장**, 소셜 OAuth ([ERD §4](./erd-design.md#4-partner--artist--artist_member)) |
+| B2B·멤버 | `PARTNER` / `ARTIST_MEMBER`의 `password` (해시) — ERD 컬럼 |
 | 주문 | `fan_id`, 배송지(도입 시) — 주문 시점 스냅샷을 `order_items` 또는 `order_shipping_snapshot` |
 | 결제 | PG 위임 — 카드번호·CVV **미저장** |
 | 소셜 로그인 | `providerToken` **일회성 검증만**, DB 미저장 |
@@ -126,10 +141,9 @@ FANDROPS는 **10~30대 팬(B2C)** 과 **기획사(B2B)** 를 동시에 다루므
 
 ```
 fan 탈퇴 요청
-  → soft delete (deleted_at)
-  → 30일 유예 (분쟁·재가입)
-  → email/nickname anonymize
-  → orders는 fan_id 유지하되 PII 스냅샷만 마스킹 (3년 보관 정책까지)
+  → 30일 유예 (행 유지, 로그인 차단)
+  → FAN.email / FAN.nickname 마스킹 (동일 PK)
+  → orders는 fan_id 유지 (3년 보관)
   → 3년 후 order purge/archive (보관 정책 §2.1)
 ```
 
@@ -153,7 +167,7 @@ Audit 스키마·이벤트 종류: [data-retention-and-audit-policy §3](./data-
 
 | 대상 | 트리거 | archive 위치 | 운영 DB |
 | --- | --- | --- | --- |
-| `wait_queue` (선택) | 180일 | 동일 스키마 `_archive` 또는 Parquet S3 | DELETE |
+| 대기열 Redis 스냅샷 (선택) | 180일 | Parquet S3 등 | 키 TTL |
 | `reservations`, `seats` (P2) | 이벤트+180일 | `*_archive` 테이블 | DELETE |
 | `orders` (만료) | 3년 | S3 + 메타 DB 또는 `_archive` | anonymize 후 DELETE |
 | `audit_logs` | 1년 | Glacier | DELETE (정책 합의 후) |
@@ -168,8 +182,8 @@ Archive 테이블은 **INSERT only**, 애플리케이션 일반 API에서 조회
 Day 0     주문·결제·웹훅·audit 생성
 Day 1~30  outbox purge / 로그 롤링
 Day 90    webhook raw_payload purge
-Day 180   wait_queue purge
-Day 365   audit_logs archive 검토 / notification purge
+Day 180   대기열 Redis 스냅샷·집계 purge (운영 정책)
+Day 365   audit_logs archive 검토 / notifications purge
 Year 3    orders·payments 요약 만료 → anonymize / archive
 ```
 

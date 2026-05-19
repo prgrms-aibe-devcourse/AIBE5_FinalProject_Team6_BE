@@ -36,7 +36,7 @@ Java 21 / Spring Boot 기반으로 구성한다.
 | --- | --- | --- |
 | RDBMS | MySQL 8.x (AWS RDS) | 주문·결제·재고 상태 정합성을 트랜잭션으로 보장. |
 | ORM | Spring Data JPA + QueryDSL | 커서 페이징·N+1 제어. **JPA는 `*-infrastructure`에만** 둔다. |
-| Cache / 대기열 | Redis (AWS ElastiCache) | 핫딜 대기열 Sorted Set, 랭킹 집계, Read 캐시. |
+| Cache / 대기열 | Redis (AWS ElastiCache) | 핫딜 대기열 Sorted Set, 랭킹 집계, Read 캐시. **장바구니는 RDB** — [ADR-003](./ADR-003-cart-storage-rdb-phase1.md). |
 | 분산락 | Redisson (Phase 3) | **MVP:** 재고 선점은 MySQL `SELECT … FOR UPDATE` 비관락. **Phase 3:** Redis `RLock` vs DB 락 **비교 실험** 및 부하 테스트 근거 수집. |
 | Migration | Flyway | 멀티모듈 환경에서 스키마 변경 이력 버전 관리. 롤백 스크립트 운영. |
 
@@ -266,6 +266,7 @@ order / payment / inventory 경계가 뚜렷하고, 향후 서비스 분리 가�
 | 문서 | 경로 |
 | --- | --- |
 | 레이어별 Gradle 모듈 (ADR-002) | [ADR-002-per-layer-gradle-modules.md](./ADR-002-per-layer-gradle-modules.md) |
+| 장바구니 저장소 (ADR-003) | [ADR-003-cart-storage-rdb-phase1.md](./ADR-003-cart-storage-rdb-phase1.md) |
 | ERD | [../erd/erd-design.md](../erd/erd-design.md) |
 | 결제·주문 시퀀스 | [../sequence/payment-flow-reason.md](../sequence/payment-flow-reason.md) |
 | Git 협업 컨벤션 | [../contributing/git-collaboration-convention.md](../contributing/git-collaboration-convention.md) |
