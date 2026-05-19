@@ -233,8 +233,17 @@ ORDER.status = RESERVED AND reserved_at + payment-timeout < now()
 | **I-2** | `available_qty = total_qty - reserved_qty` | 저장 컬럼 drift 감지 · 리컨실 |
 | **I-3** | `COMPLETED` 주문만 `total_qty` 영구 차감 | confirm 시점 |
 | **I-4** | `available_qty = 0`이면 `PRODUCT.status = SOLD_OUT`, 재입고로 1 이상이면 `ON_SALE` | 상품 노출·품절 알림 판단 |
+| **I-5** | `INVENTORY` 변경 시 반드시 `INVENTORY_HISTORY` 에 이력(변동량, 사유 등)을 동기적으로 기록해야 함 | 오버셀 방지 및 추적 불가 |
 
 [ERD §1](../erd/erd-design.md#1-inventory--재고-테이블-분리-및-이력history-기록) · 담당: **형성빈**
+
+### 7.1.1 PRODUCT 상태 전이 (status)
+
+| From | Event / 조건 | To | 비고 |
+| --- | --- | --- | --- |
+| *(create)* | 상품 등록 시 기본값 | `ON_SALE` | - |
+| `ON_SALE` | 주문(`reserve`) 또는 확정(`confirm`)으로 `available_qty` 가 `0`이 됨 | `SOLD_OUT` | 품절 알림 판단 근거 |
+| `SOLD_OUT` | 취소 보상(`restore`) 또는 재입고로 `available_qty` 가 `1` 이상이 됨 | `ON_SALE` | 재입고 알림(`RESTOCK_ALERT`) 발행 트리거 |
 
 ### 7.2 RESTOCK_ALERT
 

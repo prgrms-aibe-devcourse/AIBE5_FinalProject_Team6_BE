@@ -186,9 +186,9 @@ PG  → POST .../webhook      → payload 내 키 → tossPaymentKey로 매핑 �
 
 | Method | Endpoint | 설명 | Request Body | 호출 주체 |
 | --- | --- | --- | --- | --- |
-| POST | `/internal/inventory/reserve` | 재고 예약 (`reserved_qty` ↑) | `productId`, `quantity` | `OrderService` |
-| POST | `/internal/inventory/confirm` | 결제 확정 (`reserved_qty` ↓, `total_qty` ↓, `available_qty` 재계산) | `productId`, `quantity` | `PaymentService` (웹훅 후) |
-| POST | `/internal/inventory/restore` | 결제 실패 복구 (`reserved_qty` ↓ rollback, `available_qty` 재계산) | `productId`, `quantity` | Saga 보상 |
+| POST | `/internal/inventory/reserve` | 재고 예약 (`reserved_qty` ↑, `available_qty` ↓, 이력 기록) | `productId`, `quantity` | `OrderService` |
+| POST | `/internal/inventory/confirm` | 결제 확정 (`reserved_qty` ↓, `total_qty` ↓, 이력 기록) | `productId`, `quantity` | `PaymentService` (웹훅 후) |
+| POST | `/internal/inventory/restore` | 결제 실패 복구 (`reserved_qty` ↓ rollback, `available_qty` ↑, 이력 기록) | `productId`, `quantity` | Saga 보상 |
 
 > 멀티모듈 모놀리스에서는 위 표는 **계약(포트) 문서화**용이다. 실제 구현은 HTTP가 아닌 `InventoryReservePort` 등 **interface 직접 호출**.
 
@@ -257,7 +257,7 @@ PG  → POST .../webhook      → payload 내 키 → tossPaymentKey로 매핑 �
 | ORDER | `status` | 정상: `PENDING` → `RESERVED` → `PAID` → `COMPLETED` · 실패: `RESERVED` → `FAILED` → `CANCELLED` · 취소: `PENDING` → `CANCELLED` |
 | PAYMENT | `status` | `PENDING` → `SUCCESS` / `FAILED` (종료) |
 | WAIT_QUEUE (Redis) | `status` | `WAITING` → `PROCESSING` → `DONE` / `EXPIRED` — [ERD §10](../erd/erd-design.md#10-핫딜-대기열--redis-db-erd-미포함) |
-| PRODUCT | `status` | `hotdeal_start_at`, `hotdeal_end_at`, `artist_id` |
+| PRODUCT | `status` | `ON_SALE` / `SOLD_OUT` |
 | INVENTORY | — | `total_qty`, `reserved_qty`, `available_qty` (`available_qty = total_qty - reserved_qty`) |
 | INVENTORY_HISTORY | `change_type` | `RESERVE` / `RELEASE` / `DECREASE` / `INCREASE` / `COMPENSATE` |
 | CART / CART_ITEM | — | RDB `carts`·`cart_items` — [ADR-003](../adr/ADR-003-cart-storage-rdb-phase1.md) (Phase 1 Redis 미사용) |

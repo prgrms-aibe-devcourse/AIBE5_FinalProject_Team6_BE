@@ -74,6 +74,7 @@ modules/inventory/**
 - [ ] MVP 재고 락: MySQL `FOR UPDATE` (Redis 락은 Phase 3)
 - [ ] 장바구니: **RDB** `CART`/`CART_ITEM` only — Redis 장바구니 금지 (ADR-003)
 - [ ] `inventory` 포트: reserve / confirm / restore — HTTP 아님
+- [ ] 재고(`INVENTORY`) 변경 시 반드시 `INVENTORY_HISTORY` 에 이력을 기록 (I-5 불변조건)
 
 ---
 
