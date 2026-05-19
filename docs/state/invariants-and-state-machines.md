@@ -31,16 +31,16 @@
 | From | Event / 조건 | To | 담당 모듈 | 재고·결제 부수 효과 |
 | --- | --- | --- | --- | --- |
 | *(start)* | 주문 생성 (`POST /orders`, TX 시작) | `PENDING` | `order` | — |
-| `PENDING` | 재고 예약 성공 | `RESERVED` | `order` + `inventory` | `reserved_quantity` ↑ |
+| `PENDING` | 재고 예약 성공 | `RESERVED` | `order` + `inventory` | `reserved_qty` ↑ |
 | `PENDING` | 재고 부족·예약 실패 (`ERR_4004`/`4005`) | `CANCELLED` | `order` | 예약 없음 |
 | `PENDING` | 사용자 취소 (재고 예약 전) | `CANCELLED` | `order` | — |
 | `RESERVED` | PG 결제 성공 (웹훅·멱등) | `PAID` | `payment` → `order` | — |
 | `RESERVED` | PG 결제 실패 | `FAILED` | `payment` → `order` | — |
 | `RESERVED` | 결제 **타임아웃** (§4.1) | `FAILED` → `CANCELLED` | `order` (스케줄러) | 보상: `restore` |
 | `RESERVED` | 사용자 취소 (`DELETE /orders/{id}`) | `CANCELLED` | `order` | 보상: `restore` |
-| `PAID` | 재고 확정 + 후처리 완료 | `COMPLETED` | `payment` + `inventory` | `confirm`: reserved↓ stock↓ |
+| `PAID` | 재고 확정 + 후처리 완료 | `COMPLETED` | `payment` + `inventory` | `confirm`: `reserved_qty`↓ `total_qty`↓ |
 | `PAID` | 후처리 실패 (재고·알림) | `PAID` 유지 | — | **재시도 Job** (§4.3) |
-| `FAILED` | Saga 보상 완료 | `CANCELLED` | `payment` / `order` | `restore`: reserved↓ |
+| `FAILED` | Saga 보상 완료 | `CANCELLED` | `payment` / `order` | `restore`: `reserved_qty`↓ |
 | `FAILED` | 보상 실패·중단 | `FAILED` 유지 | — | **모니터링·수동 개입** (§5) |
 
 ### 2.3 공개 API vs 내부 TX
@@ -63,7 +63,7 @@
 | ID | 불변조건 | 검증 시점 |
 | --- | --- | --- |
 | **O-1** | `status ∈ { PENDING, RESERVED, PAID, FAILED, COMPLETED, CANCELLED }` | 매 전이 |
-| **O-2** | `RESERVED` ⟹ 해당 주문 line item에 대해 `reserved_quantity`가 반영됨 | reserve 직후 |
+| **O-2** | `RESERVED` ⟹ 해당 주문 line item에 대해 `reserved_qty`가 반영됨 | reserve 직후 |
 | **O-3** | `COMPLETED` ⟹ `PAYMENT.status = SUCCESS` 이고 재고 `confirm` 완료 | `PAID→COMPLETED` |
 | **O-4** | `CANCELLED` ⟹ 활성 재고 선점 없음 (`reserved` 롤백 완료 또는 미예약) | 종료 시 |
 | **O-5** | `FAILED` ⟹ `PAYMENT.failed_at` 또는 동등 실패 기록 존재 | `RESERVED→FAILED` |
@@ -193,7 +193,7 @@ ORDER.status = RESERVED AND reserved_at + payment-timeout < now()
 | 조건 | 조치 |
 | --- | --- |
 | `ORDER.status = FAILED` AND `updated_at` > **5분** | Pager / Slack (지영재 SRE) |
-| `reserved_quantity` ≠ 실제 선점 합 | 재고 리컨실 배치 (형성빈) |
+| `reserved_qty` ≠ 실제 선점 합 | 재고 리컨실 배치 (형성빈) |
 
 ---
 
@@ -223,17 +223,18 @@ ORDER.status = RESERVED AND reserved_at + payment-timeout < now()
 
 ---
 
-## 7. PRODUCT · RESTOCK_ALERT · 알림 (Outbox + NOTIFICATION)
+## 7. INVENTORY · PRODUCT · RESTOCK_ALERT · 알림 (Outbox + NOTIFICATION)
 
-### 7.1 PRODUCT (재고)
+### 7.1 INVENTORY (재고)
 
 | ID | 불변조건 | 위반 시 |
 | --- | --- | --- |
-| **I-1** | `stock_quantity ≥ 0`, `reserved_quantity ≥ 0` | DB CHECK 또는 도메인 검증 |
-| **I-2** | `stock_quantity - reserved_quantity ≥ 0` (가용 재고) | reserve 거부 `ERR_4004`/`4005` |
-| **I-3** | `COMPLETED` 주문만 `stock_quantity` 영구 차감 | confirm 시점 |
+| **I-1** | `total_qty ≥ 0`, `reserved_qty ≥ 0`, `available_qty ≥ 0` | DB CHECK 또는 도메인 검증 |
+| **I-2** | `available_qty = total_qty - reserved_qty` | 저장 컬럼 drift 감지 · 리컨실 |
+| **I-3** | `COMPLETED` 주문만 `total_qty` 영구 차감 | confirm 시점 |
+| **I-4** | `available_qty = 0`이면 `PRODUCT.status = SOLD_OUT`, 재입고로 1 이상이면 `ON_SALE` | 상품 노출·품절 알림 판단 |
 
-[ERD §1](../erd/erd-design.md#1-product--reserved_quantity-분리) · 담당: **형성빈**
+[ERD §1](../erd/erd-design.md#1-inventory--재고-테이블-분리-및-이력history-기록) · 담당: **형성빈**
 
 ### 7.2 RESTOCK_ALERT
 

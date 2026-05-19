@@ -1,6 +1,6 @@
 # ERD 설계 문서
 
-> **다이어그램:** [`erd.png`](./erd.png)  
+> **다이어그램:** [`erd.md`](./erd.md)<br>
 > K-Pop 팬덤 **B2B2C** 플랫폼의 테이블 관계·컬럼 설계 근거. 핫딜·결제·커뮤니티·아티스트 운영 도메인을 포함한다.
 
 ---
@@ -11,7 +11,7 @@
 | --- | --- | --- |
 | **사용자·아티스트** | `FAN`, `PARTNER`, `ARTIST`, `ARTIST_MEMBER`, `FAN_ARTIST` | 팬(B2C) · 기획사(B2B) · 아티스트·멤버 |
 | **커뮤니티** | `ARTIST_SPACE`, `FEED`, `NOTICE`, `COMMENT`, `HEART` | 아티스트 공간 · 피드·공지 · 댓글·하트 |
-| **커머스** | `PRODUCT`, `INVENTORY`, `CART`, `CART_ITEM`, `ORDER`, `ORDER_ITEM`, `PAYMENT`, `RESTOCK_ALERT` | 상품·재고·**장바구니(RDB)** ·주문·결제 — [ADR-003](../adr/ADR-003-cart-storage-rdb-phase1.md) |
+| **커머스** | `PRODUCT`, `INVENTORY`, `INVENTORY_HISTORY`, `CART`, `CART_ITEM`, `ORDER`, `ORDER_ITEM`, `PAYMENT`, `RESTOCK_ALERT` | 상품·재고·재고 이력·**장바구니(RDB)** ·주문·결제 — [ADR-003](../adr/ADR-003-cart-storage-rdb-phase1.md) |
 | **랭킹·일정** | `VOTE`, `IDOL_RANKING`, `SCHEDULE`, `ARTIST_SCHEDULE` | 월간 투표 · 드롭·라이브·행사 |
 | **운영·알림** | `BANNER`, `NOTIFICATION` | 홈 배너 · 팬 알림함 |
 
@@ -26,30 +26,34 @@
 
 ---
 
-## 1. PRODUCT — `reserved_quantity` 분리
+## 1. INVENTORY — 재고 테이블 분리 및 이력(HISTORY) 기록
 
 ### 설계 결정
 
-`stock_quantity`와 `reserved_quantity`를 **별도 컬럼**으로 분리한다. `PRODUCT`는 `artist_id`로 아티스트에 소속된다.
+재고 데이터를 `PRODUCT`에서 분리하여 `INVENTORY` 테이블로 관리하고, `INVENTORY_HISTORY`를 추가해 변경 이력을 감사 로그로 남긴다. `INVENTORY`에는 `total_qty`, `reserved_qty`, `available_qty`를 둔다. `PRODUCT`에는 `status`(`ON_SALE` | `SOLD_OUT`) 컬럼을 추가한다.
 
 ### 근거
 
-핫딜 오픈 순간 수천 명이 동시에 결제를 시도하는 환경에서, 결제 진행 중인 재고와 실제 판매 가능한 재고를 구분하지 않으면 **오버셀**이 발생한다.
+핫딜 오픈 순간 수천 명이 동시에 결제를 시도하는 환경에서, 결제 진행 중인 재고와 실제 판매 가능한 재고를 구분하지 않으면 **오버셀**이 발생한다. 또한 Phase 4 부하 테스트 등에서 오버셀이 발생하지 않았음을 증명하기 위해 모든 재고 변동 내역을 기록하는 테이블이 필요하다.
 
-| 컬럼 | 의미 | 변경 시점 |
-| --- | --- | --- |
-| `stock_quantity` | 실제 판매 완료 후 남은 재고 | 결제 최종 확정(`PAID` → `COMPLETED`) 시 차감 |
-| `reserved_quantity` | 결제 진행 중 선점된 재고 | 재고 예약(lock) 시 증가, 결제 완료/취소 시 감소 |
-| `hotdeal_start_at` / `hotdeal_end_at` | 핫딜 노출·가격 적용 구간 | Admin·아티스트 상품 등록 시 설정 |
+| 테이블 | 컬럼 | 의미 | 변경 시점 |
+| --- | --- | --- | --- |
+| `INVENTORY` | `total_qty` | 전체 재고 (판매 완료 전까지 유지) | 결제 최종 확정(`PAID` → `COMPLETED`) 시 차감 |
+| `INVENTORY` | `reserved_qty` | 결제 진행 중 선점된 재고 | 재고 예약 시 증가, 결제 완료/취소 시 감소 |
+| `INVENTORY` | `available_qty` | 판매 가능 재고 (`total_qty - reserved_qty`) | 재고 예약, 결제 완료, 취소, 재입고 시 동기화 |
+| `PRODUCT` | `status` | 판매 상태 (`ON_SALE`, `SOLD_OUT`) | `available_qty`가 0이면 `SOLD_OUT`, 재입고로 1 이상이면 `ON_SALE` |
+| `INVENTORY_HISTORY` | `change_type` | 재고 변동 유형 | 재고 변동(`RESERVE`, `RELEASE`, `DECREASE`, `INCREASE`, `COMPENSATE`) 시 INSERT |
 
 ### 오버셀 방지 공식
 
 ```
-판매 가능 재고 = stock_quantity - reserved_quantity
+available_qty = total_qty - reserved_qty
 ```
 
+`available_qty`를 저장 컬럼으로 둘 경우 위 공식은 **DB CHECK 또는 도메인 invariant**로 검증한다. 구현에서 generated column/read model을 선택하면 저장 대신 계산값으로 노출할 수 있다.
+
 > **주의:** 컬럼 분리만으로 오버셀이 막히지 **않는다**.  
-> 재고 선점 시 **DB 비관락(`SELECT ... FOR UPDATE`)** 또는 **Redis 분산락**으로 동시성 충돌을 제어해야 한다.
+> 재고 선점 시 낙관적 락(`version`)이나 **DB 비관락(`SELECT ... FOR UPDATE`)** 또는 **Redis 분산락**으로 동시성 충돌을 제어해야 한다.
 
 ---
 
@@ -246,7 +250,7 @@ WAITING | PROCESSING | DONE | EXPIRED
 
 | 문서 | 경로 |
 | --- | --- |
-| ERD 다이어그램 | [`erd.png`](./erd.png) |
+| ERD 다이어그램 | [`erd.md`](./erd.md) |
 | 데이터 보관 · Audit | [`data-retention-and-audit-policy.md`](./data-retention-and-audit-policy.md) |
 | 데이터 라이프사이클 | [`data-lifecycle.md`](./data-lifecycle.md) |
 | 멀티모듈 모놀리스 (ADR) | [`../adr/ADR-001-multi-module-monolith.md`](../adr/ADR-001-multi-module-monolith.md) |

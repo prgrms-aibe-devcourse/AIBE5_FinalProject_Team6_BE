@@ -83,17 +83,18 @@ Gradle 모듈·담당자 매핑은 [architecture.md § 도메인 오너십](../a
 
 | Method | Endpoint | 설명 | Request Body / Param | Response |
 | --- | --- | --- | --- | --- |
-| GET | `/products` | 상품 목록 조회 | `?type=hotdeal`, `cursor`, `size` | `{ items: [{ id, artistId, name, price, hotdealStartAt, hotdealEndAt, stockQuantity, reservedQuantity, updatedAt }], nextCursor }` |
-| GET | `/products/{id}` | 상품 상세 | — | `{ id, artistId, name, price, hotdealStartAt, hotdealEndAt, stockQuantity, reservedQuantity, updatedAt }` |
-| POST | `/products` | 상품 등록 (운영자) | `artistId`, `name`, `price`, `stockQuantity`, `hotdealStartAt`, `hotdealEndAt` (optional) | `201` `{ productId }` |
+| GET | `/products` | 상품 목록 조회 | `?type=hotdeal`, `cursor`, `size` | `{ items: [{ id, artistId, name, price, status, hotdealStartAt, hotdealEndAt, totalQty, reservedQty, availableQty, updatedAt }], nextCursor }` |
+| GET | `/products/{id}` | 상품 상세 | — | `{ id, artistId, name, price, status, hotdealStartAt, hotdealEndAt, totalQty, reservedQty, availableQty, updatedAt }` |
+| POST | `/products` | 상품 등록 (운영자) | `artistId`, `name`, `price`, `totalQty`, `hotdealStartAt`, `hotdealEndAt` (optional) | `201` `{ productId }` |
 | POST | `/products/{id}/restock-subscribe` | 재입고 알림 구독 | — | `201` `{ alertId }` |
 | DELETE | `/products/{id}/restock-subscribe` | 구독 취소 | — | `204 No Content` |
-| POST | `/products/{id}/restock` | 재입고 처리 + 이벤트 발행 (운영자) | `quantity` | `{ productId, stockQuantity }` |
+| POST | `/products/{id}/restock` | 재입고 처리 + 이벤트 발행 (운영자) | `quantity` | `{ productId, totalQty }` |
 
 재입고 시 `RESTOCK_ALERT` 이벤트 발행 → `notification` 전송 (표지민).
 
-- `?type=hotdeal`: `hotdeal_start_at ≤ now ≤ hotdeal_end_at` 인 행만 필터 ([ERD `PRODUCT`](../erd/erd-design.md#1-product--reserved_quantity-분리)).
-- `stockQuantity` / `reservedQuantity`: `INVENTORY` 조인.
+- `?type=hotdeal`: `hotdeal_start_at ≤ now ≤ hotdeal_end_at` 인 행만 필터 ([ERD `PRODUCT`](../erd/erd-design.md#1-inventory--재고-테이블-분리-및-이력history-기록)).
+- `totalQty` / `reservedQty` / `availableQty`: `INVENTORY` 조인.
+- `POST /products/{id}/restock`: `total_qty` 증가, `available_qty = total_qty - reserved_qty` 재계산, `PRODUCT.status`를 `ON_SALE`로 복구, `INVENTORY_HISTORY.change_type = INCREASE` 기록.
 
 ---
 
@@ -185,9 +186,9 @@ PG  → POST .../webhook      → payload 내 키 → tossPaymentKey로 매핑 �
 
 | Method | Endpoint | 설명 | Request Body | 호출 주체 |
 | --- | --- | --- | --- | --- |
-| POST | `/internal/inventory/reserve` | 재고 예약 (`reserved_quantity` ↑) | `productId`, `quantity` | `OrderService` |
-| POST | `/internal/inventory/confirm` | 결제 확정 (`reserved` ↓, `stock` ↓) | `productId`, `quantity` | `PaymentService` (웹훅 후) |
-| POST | `/internal/inventory/restore` | 결제 실패 복구 (`reserved` ↓ rollback) | `productId`, `quantity` | Saga 보상 |
+| POST | `/internal/inventory/reserve` | 재고 예약 (`reserved_qty` ↑) | `productId`, `quantity` | `OrderService` |
+| POST | `/internal/inventory/confirm` | 결제 확정 (`reserved_qty` ↓, `total_qty` ↓, `available_qty` 재계산) | `productId`, `quantity` | `PaymentService` (웹훅 후) |
+| POST | `/internal/inventory/restore` | 결제 실패 복구 (`reserved_qty` ↓ rollback, `available_qty` 재계산) | `productId`, `quantity` | Saga 보상 |
 
 > 멀티모듈 모놀리스에서는 위 표는 **계약(포트) 문서화**용이다. 실제 구현은 HTTP가 아닌 `InventoryReservePort` 등 **interface 직접 호출**.
 
@@ -239,10 +240,10 @@ PG  → POST .../webhook      → payload 내 키 → tossPaymentKey로 매핑 �
 
 | `error.code` | 의미 | `retryable` |
 | --- | --- | --- |
-| `OUT_OF_STOCK` | `stock_quantity` = 0 (전체 품절) | false |
+| `OUT_OF_STOCK` | `available_qty` = 0 (전체 품절) | false |
 | `RESERVE_FAILED` | 동시 경쟁 패배 | true |
 
-[ERD §1](../erd/erd-design.md#1-product--reserved_quantity-분리) · [failure-policy](../operations/failure-policy.md#5-장애--api-계약-매핑).
+[ERD §1](../erd/erd-design.md#1-inventory--재고-테이블-분리-및-이력history-기록) · [failure-policy](../operations/failure-policy.md#5-장애--api-계약-매핑).
 
 ---
 
@@ -256,7 +257,9 @@ PG  → POST .../webhook      → payload 내 키 → tossPaymentKey로 매핑 �
 | ORDER | `status` | 정상: `PENDING` → `RESERVED` → `PAID` → `COMPLETED` · 실패: `RESERVED` → `FAILED` → `CANCELLED` · 취소: `PENDING` → `CANCELLED` |
 | PAYMENT | `status` | `PENDING` → `SUCCESS` / `FAILED` (종료) |
 | WAIT_QUEUE (Redis) | `status` | `WAITING` → `PROCESSING` → `DONE` / `EXPIRED` — [ERD §10](../erd/erd-design.md#10-핫딜-대기열--redis-db-erd-미포함) |
-| PRODUCT | — | `stock_quantity`, `reserved_quantity`, `hotdeal_start_at`, `hotdeal_end_at`, `artist_id` |
+| PRODUCT | `status` | `hotdeal_start_at`, `hotdeal_end_at`, `artist_id` |
+| INVENTORY | — | `total_qty`, `reserved_qty`, `available_qty` (`available_qty = total_qty - reserved_qty`) |
+| INVENTORY_HISTORY | `change_type` | `RESERVE` / `RELEASE` / `DECREASE` / `INCREASE` / `COMPENSATE` |
 | CART / CART_ITEM | — | RDB `carts`·`cart_items` — [ADR-003](../adr/ADR-003-cart-storage-rdb-phase1.md) (Phase 1 Redis 미사용) |
 | RESTOCK_ALERT | `status` | `ACTIVE` / `SENT` (구현 시 문자열 — [§7.2](../state/invariants-and-state-machines.md#72-restock_alert)) |
 | `outbox_events` | `status` | `PENDING` → `PUBLISHED` / `FAILED` (DLQ) — [ERD §11](../erd/erd-design.md#11-알림--notification-vs-outbox) |

@@ -29,7 +29,7 @@
 | **`orders`**, **`order_items`** | **3년** | `status` = `CANCELLED` 또는 `COMPLETED` **이후** (최종 상태 시각) | anonymize 또는 cold storage 이관 후 운영 DB에서 제거 | 세법·분쟁 대비는 **법무·세무 합의로 5년까지 연장 가능** |
 | **`payments`** | **3년** (요약 필드) | `SUCCESS` / `FAILED` 확정 후 | PG 식별자·금액·상태·`paid_at`/`failed_at`만 유지 가능 | 원본 연동 상세는 §2.2 |
 | **`payment_webhook_events`** | **90일** (원본 payload) | 수신 시각 | 이후 **요약 행**만 `payments` 또는 `payment_webhook_summaries`에 유지 | 멱등·리컨실용 |
-| **`products`** (판매 종료) | **1년** | `hotdeal_end_at` 경과 또는 Admin 삭제 후 | archive 또는 비식별 통계만 | `is_active` 컬럼 없음 — [ERD §1](./erd-design.md#1-product--reserved_quantity-분리) |
+| **`products`** (판매 종료) | **1년** | `hotdeal_end_at` 경과 또는 Admin 삭제 후 | archive 또는 비식별 통계만 | `is_active` 컬럼 없음 — [ERD §1](./erd-design.md#1-inventory--재고-테이블-분리-및-이력history-기록) |
 | **`carts`**, **`cart_items`** | **활성 사용 중** | 주문 완료·취소 후 해당 행 삭제 | 팬 탈퇴 시 cascade | RDB only — [ADR-003](../adr/ADR-003-cart-storage-rdb-phase1.md) |
 | **`restock_alerts`** | **1년** | `SENT` 또는 구독 해지 후 | 삭제 | fan_id는 §4 마스킹 |
 

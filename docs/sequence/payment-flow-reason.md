@@ -37,7 +37,7 @@ StoreAPI → OrderService       : 대기열 토큰 검증 및 주문 생성 (sta
 
 > **주의:** "품절 알림"이 아닌 **"주문 실패 알림(재고 부족)"** 을 발행하는 이유  
 > 재고 예약 실패는 "내 예약만 실패"한 상황일 수 있다. 동시 경쟁에서 밀린 것이지 상품 전체가 품절된 것이 아니다.  
-> **품절 알림**은 `stock_quantity`가 실제로 0이 됐을 때만 발행한다.  
+> **품절 알림**은 `available_qty`가 0이 되고 PRODUCT `status`가 `SOLD_OUT`으로 바뀌었을 때만 발행한다.  
 > 두 개념을 혼용하면 재고가 남아 있는데 팬이 품절로 오인하는 문제가 생긴다.
 
 ```
@@ -67,7 +67,7 @@ OrderService → NotificationService    : 주문 실패 알림 발행 (재고 �
 ```
 [결제 성공] 분기
 OrderService                    : 상태 전이 (RESERVED→PAID) ← DB 저장
-InventoryService                : 재고 확정 (reserved_quantity 감소, stock_quantity 차감)
+InventoryService                : 재고 확정 (reserved_qty 감소, total_qty 차감, history 기록)
 OrderService                    : 상태 전이 (PAID→COMPLETED) ← DB 저장
 NotificationService             : 결제완료 알림 발행
 ```
@@ -94,7 +94,7 @@ NotificationService             : 결제완료 알림 발행
 ```
 [결제 실패] 분기
 OrderService                    : 상태 전이 (RESERVED→FAILED) — DB 저장, failed_at 기록
-InventoryService                : 재고 복구 (Saga 보상) — reserved_quantity 복구
+InventoryService                : 재고 복구 (Saga 보상) — reserved_qty 복구 (history 기록)
 OrderService                    : 상태 전이 (FAILED→CANCELLED) — DB 저장
 NotificationService             : 결제 실패 알림 발행
 ```

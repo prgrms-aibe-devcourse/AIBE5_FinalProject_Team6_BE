@@ -145,7 +145,7 @@ API 응답 예: [api-contract § PAYMENT_FAILED / retryable](../api/api-contract
 
 - [ ] `outbox_pending_count` ≈ 0 또는 감소 추세
 - [ ] `ORDER` in `FAILED` > 5분 건 0건
-- [ ] `reserved_quantity` vs 주문 합계 리컨실
+- [ ] `reserved_qty` vs 주문 합계 리컨실
 - [ ] 5xx < 0.1%, Write P95 < 300ms ([SLO](./observability-metrics.md#2-slo-목표-mvp))
 - [ ] 핫딜 smoke: queue join → order → (test PG) → COMPLETED
 

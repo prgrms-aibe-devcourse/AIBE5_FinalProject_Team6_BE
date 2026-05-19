@@ -38,7 +38,7 @@ modules/inventory/**
 | `docs/api/mvp-api-spec.md` | § Product, § Order, § Inventory Internal |
 | `docs/state/invariants-and-state-machines.md` | **전체** (ORDER·재고·타임아웃·Saga 소비) |
 | `docs/sequence/payment-flow-reason.md` | 재고 실패·PENDING→CANCELLED |
-| `docs/erd/erd-design.md` | § PRODUCT reserved_quantity, § ORDER status, §6 CART (RDB) |
+| `docs/erd/erd-design.md` | § INVENTORY 재고 분리, § ORDER status, §6 CART (RDB) |
 | `docs/adr/ADR-003-cart-storage-rdb-phase1.md` | 장바구니·k6 Phase 2 트리거 (장바구니 작업 시) |
 | `docs/operations/failure-policy.md` | DB 고갈, RESERVE_FAILED |
 
@@ -87,7 +87,7 @@ modules/inventory/**
 
 > 로컬 파일 저장 시 k6를 자동 실행하려면 `.claude/settings.json`의 `PostToolUse` 훅으로 설정 가능 (지영재와 협의 후 구성).
 
-**오버셀 판단 기준:** `reserved_quantity > stock_quantity` 레코드가 1건이라도 존재하면 실패.
+**오버셀 판단 기준:** `reserved_qty > total_qty` (또는 `available_qty < 0`) 레코드가 1건이라도 존재하면 실패.
 
 ---
 
