@@ -23,16 +23,16 @@
 
 > community 피드 API 명세는 순차 추가 예정. DB 스키마는 [ERD §5](./erd/erd-design.md#5-커뮤니티--artist_space-feed-notice-comment-heart) (`FEED`, `COMMENT`, `HEART` 등).
 
-## AI 코딩 (Claude Code · Cursor)
+## AI 코딩 (Claude Code)
 
 | 문서 | 설명 |
 | --- | --- |
 | [**AI 가이드 (시작)**](./ai/README.md) | SHARED + 담당 persona |
 | [공통 지침](./ai/SHARED.md) | 페르소나 김최고 · 필수 docs · 금지 사항 |
-| [루트 CLAUDE.md](../CLAUDE.md) · [AGENTS.md](../AGENTS.md) | Claude / Cursor 진입 (경로만 — 본문·금지·SSOT는 [SHARED](./ai/SHARED.md) **매 세션 필수**) |
+| [루트 CLAUDE.md](../CLAUDE.md) · [AGENTS.md](../AGENTS.md) | Claude 진입 (경로만 — 본문·금지·SSOT는 [SHARED](./ai/SHARED.md) **매 세션 필수**) |
 
 담당별: `docs/ai/personas/{pyojimin,junghwancheol,hyungseongbin,jangseongjae,jiyoungjae}.md`  
-Cursor: [`AGENTS.md`](../AGENTS.md) 자동(경로만) + `@SHARED` + `@persona` · Claude Code: [`CLAUDE.md`](../CLAUDE.md) 자동 + `@SHARED` + `@persona`
+Claude Code: [`CLAUDE.md`](../CLAUDE.md) 자동 + `@SHARED` + `@persona`
 
 ## 협업 (Contributing)
 

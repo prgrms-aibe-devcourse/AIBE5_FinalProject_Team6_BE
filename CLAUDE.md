@@ -15,8 +15,6 @@
 
 작업 전 **전체 docs를 읽지 말 것.** SHARED + persona의 **필수 참조 목록**만 `@` 로 로드한다.
 
-**Cursor:** [`AGENTS.md`](AGENTS.md)는 경로 안내만. 매 세션 `@docs/ai/SHARED.md` + `@docs/ai/personas/<본인>.md` (`CLAUDE.md`는 Cursor에서 자동 로드되지 않음).
-
 ---
 
 ## 도메인 라우팅 (작업 경로 → Persona)

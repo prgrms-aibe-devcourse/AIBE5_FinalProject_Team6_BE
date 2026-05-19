@@ -71,7 +71,7 @@ set SPRING_PROFILES_ACTIVE=local   # Windows
 ```
 
 - 시크릿: 레포에 값 없음 → [`application-local.example.yml`](apps/api-server/src/main/resources/application-local.example.yml)
-- AI 코딩: [`CLAUDE.md`](CLAUDE.md) / Cursor [`AGENTS.md`](AGENTS.md) · [`docs/ai/SHARED.md`](docs/ai/SHARED.md) + persona
+- AI 코딩: [`CLAUDE.md`](CLAUDE.md) · [`docs/ai/SHARED.md`](docs/ai/SHARED.md) + persona
 - API: [`docs/api/mvp-api-spec.md`](docs/api/mvp-api-spec.md) · [`api-contract.md`](docs/api/api-contract.md)
 
 ---
