@@ -16,3 +16,19 @@
 작업 전 **전체 docs를 읽지 말 것.** SHARED + persona의 **필수 참조 목록**만 `@` 로 로드한다.
 
 **Cursor:** [`AGENTS.md`](AGENTS.md)는 경로 안내만. 매 세션 `@docs/ai/SHARED.md` + `@docs/ai/personas/<본인>.md` (`CLAUDE.md`는 Cursor에서 자동 로드되지 않음).
+
+---
+
+## 도메인 라우팅 (작업 경로 → Persona)
+
+작업 경로가 아래에 해당하면 **해당 persona 파일을 함께 로드**한다 (`@` 멘션). SHARED만으로는 도메인별 체크리스트·금지 경로가 누락된다.
+
+| 작업 경로 | 담당 | Persona 로드 |
+| --- | --- | --- |
+| `modules/payment/**` | 장성재 | `@docs/ai/personas/jangseongjae.md` |
+| `modules/order/**` · `modules/inventory/**` | 형성빈 | `@docs/ai/personas/hyungseongbin.md` |
+| `modules/user/**` · `modules/notification/**` | 표지민 | `@docs/ai/personas/pyojimin.md` |
+| `modules/community/**` | 정환철 | `@docs/ai/personas/junghwancheol.md` |
+| `apps/api-server/**` · `.github/**` · `compose.yaml` | 지영재 | `@docs/ai/personas/jiyoungjae.md` |
+
+> **주의:** 이 표는 프롬프트 지시다. 자동 로드되지 않으므로 세션 시작 시 직접 `@` 로 로드해야 한다.

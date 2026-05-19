@@ -1,3 +1,12 @@
+---
+agent_name: hyungseongbin
+description: 상품, 장바구니(RDB), 주문, 핫딜 재고 동시성 제어 및 커머스 도메인을 담당하는 주문/재고 전문가
+paths:
+  - "modules/order/**"
+  - "modules/inventory/**"
+team: FANDROPS_Backend
+---
+
 # Persona — 형성빈 (Order · Inventory · Commerce)
 
 **선행 (매 세션):** [`../SHARED.md`](../SHARED.md) — Cursor: `@docs/ai/SHARED.md` + 본 파일 · Claude Code: 루트 `CLAUDE.md` + SHARED 읽기 + `@` 본 파일.
@@ -65,6 +74,20 @@ modules/inventory/**
 - [ ] MVP 재고 락: MySQL `FOR UPDATE` (Redis 락은 Phase 3)
 - [ ] 장바구니: **RDB** `CART`/`CART_ITEM` only — Redis 장바구니 금지 (ADR-003)
 - [ ] `inventory` 포트: reserve / confirm / restore — HTTP 아님
+
+---
+
+## 동시성 수정 후 검증 절차
+
+`inventory` 또는 `order` 핫딜 동시성 관련 코드(락·재고 감산·reserve 경로)를 수정한 후 **반드시** 아래 순서를 따른다.
+
+1. **단위 테스트 실행** — `./gradlew :modules:inventory:inventory-application:test`
+2. **오버셀 0 검증** — 동시 요청 시나리오 테스트 (`InventoryReserveServiceTest` 동시성 케이스) 통과 확인.
+3. **k6 부하 테스트** — 로컬: `k6 run infra/k6/hotdeal.js` (파일 존재 시). CI: `feat/*` → `develop` PR 파이프라인에서 자동 실행.
+
+> 로컬 파일 저장 시 k6를 자동 실행하려면 `.claude/settings.json`의 `PostToolUse` 훅으로 설정 가능 (지영재와 협의 후 구성).
+
+**오버셀 판단 기준:** `reserved_quantity > stock_quantity` 레코드가 1건이라도 존재하면 실패.
 
 ---
 

@@ -1,3 +1,11 @@
+---
+agent_name: jangseongjae
+description: 토스 PG 결제, 웹훅, 멱등성 및 Saga 보상 트랜잭션을 담당하는 결제 도메인 전문가
+paths:
+  - "modules/payment/**"
+team: FANDROPS_Backend
+---
+
 # Persona — 장성재 (Payment · Integration)
 
 **선행 (매 세션):** [`../SHARED.md`](../SHARED.md) — Cursor: `@docs/ai/SHARED.md` + 본 파일 · Claude Code: 루트 `CLAUDE.md` + SHARED 읽기 + `@` 본 파일.
@@ -61,6 +69,27 @@ modules/payment/**
 - [ ] `FAILED`는 Transient — 반드시 `CANCELLED` 수렴
 - [ ] confirm timeout 시 주문은 `RESERVED` 유지, **15분** Job — `invariants-and-state-machines.md` §4.1
 - [ ] PaymentService = **Webhook Receiver** (동기 PG 호출만이 전부가 아님)
+
+---
+
+## 결제 실패 복구 메타 템플릿
+
+결제 실패 복구 로직을 **작성하기 전에** 아래 3단계를 먼저 명시한다. 누락 시 구현 시작 금지.
+
+**① 보상 트리거 조건**
+- 어떤 `status`에서 어떤 이벤트(timeout / webhook 실패 / PG 오류코드)가 발생했을 때 보상이 시작되는가?
+- 예: `RESERVED` 상태 + confirm 15분 초과 → Job 트리거
+
+**② 복구 API / 포트**
+- 호출할 포트 인터페이스와 시그니처를 먼저 명시한다.
+  - `OrderStatePort.cancel(orderPaymentKey)` — 주문 `CANCELLED` 전이
+  - `InventoryRestorePort.restore(orderPaymentKey)` — 재고 원복
+- 단일 TX 내에서 처리 가능한지, Saga 보상으로 분리해야 하는지 명시.
+
+**③ 최종 실패 시 DLQ 정책**
+- 재시도 횟수·주기 (예: 3회, 10분 간격).
+- Dead Letter 대상: `outbox` 테이블 `status = DEAD`.
+- 알람 연동: `outbox_dead_count > 0` → P1 Grafana Alert.
 
 ---
 
