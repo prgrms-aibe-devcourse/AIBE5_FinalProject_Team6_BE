@@ -34,7 +34,10 @@
 ## 예시
 
 ```
-**[적용 예시]**<br>상황에 따라 아래 두 가지 방식 중 하나를 선택하여 컨텍스트를 명시적으로 주입:<br><br>**1. 일반적인 작업 시작 시:**<br>`> @docs/ai/SHARED.md @docs/ai/personas/jangseongjae.md 결제 도메인 작업 시작할게.`<br><br>**2. github 워크플로우 기반 작업 시:**<br>`> @docs/ai/SHARED.md @docs/ai/personas/hyungseongbin.md @docs/ai/workflows/auto-pr.md 파일의 워크플로우에 따라 '장바구니 담기 API 및 RDB 저장 로직' 구현 시작해 줘.`
+**[적용 예시]**
+상황에 따라 아래 두 가지 방식 중 하나를 선택하여 컨텍스트를 명시적으로 주입:
+1. 일반적인 작업 시작 시: @docs/ai/SHARED.md @docs/ai/personas/jangseongjae.md 결제 도메인 작업 시작할게.
+2. github 워크플로우 기반 작업 시:**<br>`> @docs/ai/SHARED.md @docs/ai/personas/hyungseongbin.md @docs/ai/workflows/auto-pr.md 파일의 워크플로우에 따라 '장바구니 담기 API 및 RDB 저장 로직' 구현 시작해 줘.`
 ```
 
 ---
