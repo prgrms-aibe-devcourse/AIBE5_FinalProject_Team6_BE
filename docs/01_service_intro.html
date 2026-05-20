@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FANDROPS — 서비스 소개</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --text-primary: #111111;
+  --text-secondary: #555555;
+  --text-muted: #999999;
+  --border: #e5e5e5;
+  --bg: #ffffff;
+  --bg-subtle: #f8f8f6;
+  --bg-dark: #111111;
+  --accent: #111111;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: 'Noto Sans KR', sans-serif;
+  font-size: 15px;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+
+.page {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 0 2.5rem 6rem;
+}
+
+/* ── Top bar ── */
+.topbar {
+  border-bottom: 1px solid var(--border);
+  padding: 1.5rem 0;
+  margin-bottom: 5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.topbar-left {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.topbar-right {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.doc-tag {
+  display: inline-block;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: var(--bg-dark);
+  color: #fff;
+  padding: 3px 10px;
+  border-radius: 3px;
+}
+
+/* ── Hero ── */
+.hero {
+  margin-bottom: 5rem;
+}
+
+.hero-eyebrow {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 1.25rem;
+}
+
+.hero-title {
+  font-family: 'DM Sans', sans-serif;
+  font-size: clamp(2.8rem, 7vw, 4.5rem);
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 1.0;
+  color: var(--text-primary);
+  margin-bottom: 1.75rem;
+}
+
+.hero-title span {
+  color: var(--text-muted);
+  font-weight: 300;
+}
+
+.hero-desc {
+  font-size: 1.05rem;
+  color: var(--text-secondary);
+  max-width: 540px;
+  line-height: 1.85;
+  border-left: 2px solid var(--text-primary);
+  padding-left: 1.25rem;
+}
+
+/* ── Section ── */
+.section {
+  margin-bottom: 4rem;
+}
+
+.section-header {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  margin-bottom: 1.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.section-num {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+}
+
+.section-title {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+
+/* ── Body text ── */
+.body-text {
+  color: var(--text-secondary);
+  line-height: 1.85;
+  margin-bottom: 1rem;
+  font-size: 14.5px;
+}
+
+.body-text strong { color: var(--text-primary); font-weight: 500; }
+
+/* ── One-liner ── */
+.one-liner {
+  background: var(--bg-dark);
+  color: #fff;
+  border-radius: 6px;
+  padding: 2rem 2.25rem;
+  margin: 2rem 0;
+}
+
+.one-liner-label {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #888;
+  margin-bottom: 0.75rem;
+}
+
+.one-liner-text {
+  font-size: 1.15rem;
+  font-weight: 400;
+  line-height: 1.7;
+  color: #f0f0f0;
+}
+
+.one-liner-text em {
+  font-style: normal;
+  color: #fff;
+  font-weight: 500;
+  border-bottom: 1px solid rgba(255,255,255,0.35);
+  padding-bottom: 1px;
+}
+
+/* ── Why cards ── */
+.why-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  margin: 1.5rem 0;
+}
+
+.why-card {
+  background: var(--bg);
+  padding: 1.5rem;
+}
+
+.why-label {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+
+.why-text {
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+.why-text strong { color: var(--text-primary); font-weight: 500; }
+
+/* ── ICP table ── */
+.icp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+  margin: 1.5rem 0;
+}
+
+.icp-table th {
+  text-align: left;
+  padding: 9px 14px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+}
+
+.icp-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+  vertical-align: top;
+  line-height: 1.6;
+}
+
+.icp-table tr:last-child td { border-bottom: none; }
+
+.icp-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 500;
+  font-family: 'DM Sans', sans-serif;
+  padding: 2px 8px;
+  border-radius: 3px;
+  letter-spacing: 0.04em;
+}
+
+.badge-primary {
+  background: var(--text-primary);
+  color: #fff;
+}
+
+.badge-secondary {
+  background: #e5e5e5;
+  color: var(--text-secondary);
+}
+
+.badge-end {
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+/* ── Value numbers ── */
+.value-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  margin: 1.5rem 0;
+}
+
+.value-item {
+  background: var(--bg);
+  padding: 1.5rem;
+}
+
+.value-num {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 2rem;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  color: var(--text-primary);
+  line-height: 1;
+  margin-bottom: 0.4rem;
+}
+
+.value-desc {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* ── Differentiator list ── */
+.diff-list {
+  list-style: none;
+  margin: 1.25rem 0;
+}
+
+.diff-list li {
+  display: flex;
+  gap: 1rem;
+  padding: 0.9rem 0;
+  border-bottom: 1px solid var(--border);
+  align-items: flex-start;
+}
+
+.diff-list li:last-child { border-bottom: none; }
+
+.diff-num {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  min-width: 22px;
+  padding-top: 2px;
+}
+
+.diff-content-title {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.diff-content-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+/* ── Doc series nav ── */
+.topbar-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+.doc-nav {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.doc-nav a {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-decoration: none;
+  padding: 4px 10px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+}
+.doc-nav a:hover {
+  background: var(--bg-dark);
+  color: #fff;
+  border-color: var(--bg-dark);
+}
+.doc-nav a.current {
+  background: var(--bg-dark);
+  color: #fff;
+  border-color: var(--bg-dark);
+  cursor: default;
+}
+.related-docs {
+  margin: 2.5rem 0 0;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-subtle);
+  font-size: 13px;
+  line-height: 1.8;
+}
+.related-docs .related-label {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  display: block;
+  margin-bottom: 0.35rem;
+}
+.related-docs a {
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-weight: 500;
+  margin-right: 1rem;
+}
+.related-docs a:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
+}
+.body-text a.doc-link { color: var(--text-primary); font-weight: 500; }
+
+/* ── Footer ── */
+.footer {
+  border-top: 1px solid var(--border);
+  padding-top: 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.footer-project {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.footer-nav {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.footer-nav a {
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+@media (max-width: 600px) {
+  .page { padding: 0 1.25rem 4rem; }
+  .why-grid { grid-template-columns: 1fr; }
+  .value-row { grid-template-columns: 1fr; }
+  .hero-title { font-size: 2.5rem; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="topbar">
+    <div class="topbar-left">FANDROPS · Backend Portfolio</div>
+    <div class="topbar-right">
+      <nav class="doc-nav" aria-label="문서 시리즈">
+        <a href="01_service_intro.html" class="current">01 서비스</a>
+        <a href="02_research.html">02 리서치</a>
+        <a href="03_planning.html">03 기획</a>
+        <a href="04_IA.html">04 IA</a>
+      </nav>
+    </div>
+  </div>
+
+  <!-- Hero -->
+  <div class="hero">
+    <div class="hero-eyebrow">K-Pop Fandom Commerce &amp; Event Reservation Platform</div>
+    <h1 class="hero-title">FAN<span>DROPS</span></h1>
+    <p class="hero-desc">
+      K-Pop 팬덤 커머스·이벤트 예약 플랫폼.<br>
+      오픈런 트래픽 스파이크 환경에서 동시성 제어, 분산 트랜잭션, 대용량 성능 최적화를 증명하는 백엔드 포트폴리오 프로젝트.
+    </p>
+  </div>
+
+  <!-- 01 · 한 줄 정의 -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">01</span>
+      <span class="section-title">서비스 정의</span>
+    </div>
+
+    <div class="one-liner">
+      <div class="one-liner-label">One-liner</div>
+      <div class="one-liner-text">
+        <em>중소형 K-Pop 기획사</em>가 굿즈 드롭과 팬미팅 예약을 안정적으로 운영할 수 있도록,
+        오픈런 스파이크를 견디는 <em>고성능 B2B2C 커머스·예약 플랫폼</em>을 제공한다.
+      </div>
+    </div>
+
+    <p class="body-text">
+      위버스 같은 대형 플랫폼은 대형 기획사 중심으로 설계되어 있고, 네이버·쿠팡은 팬덤 특화 기능이 없습니다.
+      중소형 기획사는 자체 플랫폼을 만들 여력이 없어 범용 마켓에 의존하고 있습니다.
+      FANDROPS는 이 틈새를 겨냥한 <strong>B2B2C 플랫폼</strong>으로, 기획사에게는 독점 계약 기반의 운영 도구를,
+      팬에게는 공정한 선착순·안정적인 결제 경험을 제공합니다.
+    </p>
+  </div>
+
+  <!-- 02 · 왜 이 도메인인가 -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">02</span>
+      <span class="section-title">왜 이 도메인인가</span>
+    </div>
+
+    <p class="body-text">
+      팬덤 커머스는 <strong>'드롭(Drop)' 방식의 한정 판매</strong>에 의존합니다. 굿즈 오픈 순간
+      평소 트래픽의 100×–1000×가 몰리는 환경은, 일반 이커머스에서는 만나기 어려운
+      극단적인 기술 조건을 자연스럽게 만들어냅니다.
+    </p>
+
+    <div class="why-grid">
+      <div class="why-card">
+        <div class="why-label">트래픽</div>
+        <div class="why-text">오픈 1분 이내 <strong>100×–1000× 스파이크</strong>. Rate Limiting·대기열 없이는 즉시 다운.</div>
+      </div>
+      <div class="why-card">
+        <div class="why-label">동시성</div>
+        <div class="why-text">한정 재고 100개에 수만 명이 동시 접근. <strong>레이스 컨디션·데드락</strong>이 필연적으로 발생.</div>
+      </div>
+      <div class="why-card">
+        <div class="why-label">결제 정합성</div>
+        <div class="why-text">결제 실패 시 재고·상태 복구가 보장되어야 함. <a href="state/invariants-and-state-machines.md" class="doc-link">Saga</a>·<a href="operations/failure-policy.md" class="doc-link">Outbox</a> 패턴 필수.</div>
+      </div>
+      <div class="why-card">
+        <div class="why-label">어뷰징</div>
+        <div class="why-text">봇 트래픽이 정상 팬의 구매를 막음. <a href="architecture/architecture.md" class="doc-link">Rate Limiting</a>·<a href="api/mvp-api-spec.md" class="doc-link">대기열</a>으로 방어.</div>
+      </div>
+    </div>
+
+    <p class="body-text">
+      이 하나의 시나리오 안에서 동시성 제어·분산 트랜잭션·캐시 최적화·부하 테스트까지
+      백엔드 핵심 기술 과제를 유기적으로 증명할 수 있습니다.
+    </p>
+  </div>
+
+  <!-- 03 · ICP -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">03</span>
+      <span class="section-title">목표 고객 (ICP)</span>
+    </div>
+
+    <p class="body-text">
+      FANDROPS가 가장 잘 맞고 가치를 전달할 수 있는 핵심 고객군 프로필입니다.
+    </p>
+
+    <table class="icp-table">
+      <thead>
+        <tr>
+          <th>우선순위</th>
+          <th>고객</th>
+          <th>특징</th>
+          <th>핵심 니즈</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="icp-badge badge-primary">Primary</span></td>
+          <td style="font-weight: 500; color: var(--text-primary);">중소형 K-Pop 기획사·레이블</td>
+          <td>자체 플랫폼 비용·인력 부족<br>드롭·팬미팅 운영 필요</td>
+          <td>오픈런 안정성<br>결제·예약 정합성<br>빠른 런칭</td>
+        </tr>
+        <tr>
+          <td><span class="icp-badge badge-secondary">Secondary</span></td>
+          <td style="font-weight: 500; color: var(--text-primary);">버추얼·니치 팬덤 운영</td>
+          <td>이벤트 빈도·피크 불규칙<br>소규모·고빈도 운영</td>
+          <td>선착순 공정성<br>어뷰징 방어<br>스파이크 대응</td>
+        </tr>
+        <tr>
+          <td><span class="icp-badge badge-end">End User</span></td>
+          <td style="font-weight: 500; color: var(--text-primary);">10–30대 팬 (B2C)</td>
+          <td>모바일·드롭 참여<br>실패 경험 빈번</td>
+          <td>빠른 진입<br>명확한 오류 안내<br>중복결제 없음</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 04 · 핵심 가치 -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">04</span>
+      <span class="section-title">FANDROPS가 다른 이유</span>
+    </div>
+
+    <ul class="diff-list">
+      <li>
+        <span class="diff-num">01</span>
+        <div>
+          <div class="diff-content-title">오픈런을 견디는 아키텍처</div>
+          <div class="diff-content-desc">Rate Limiting + Redis 대기열로 스파이크를 흡수. 서버 다운 없이 정상 처리량만 허용합니다.</div>
+        </div>
+      </li>
+      <li>
+        <span class="diff-num">02</span>
+        <div>
+          <div class="diff-content-title">오버셀·중복 결제 0건 보장</div>
+          <div class="diff-content-desc">분산 락 + 멱등 키 + Saga 보상 트랜잭션으로 데이터 정합성을 강제합니다.</div>
+        </div>
+      </li>
+      <li>
+        <span class="diff-num">03</span>
+        <div>
+          <div class="diff-content-title">중소형 기획사를 위한 전문 플랫폼</div>
+          <div class="diff-content-desc">위버스가 커버하지 못하는 중소형 기획사·버추얼 아이돌을 위한 독점 계약 기반 B2B2C 모델.</div>
+        </div>
+      </li>
+      <li>
+        <span class="diff-num">04</span>
+        <div>
+          <div class="diff-content-title">측정 가능한 성능</div>
+          <div class="diff-content-desc">k6 부하 테스트 + Grafana로 Write P95 &lt; 300ms, 5xx &lt; 0.1% 목표를 정량으로 증명합니다.</div>
+        </div>
+      </li>
+    </ul>
+  </div>
+
+  <!-- 05 · 핵심 수치 -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">05</span>
+      <span class="section-title">핵심 목표 수치</span>
+    </div>
+    <p class="body-text" style="margin-bottom: 0.25rem;">상세 KPI·SLO는 <a href="03_planning.html" class="doc-link">03 · Not Scope / KPI·SLO</a>에서 정의합니다.</p>
+
+    <div class="value-row">
+      <div class="value-item">
+        <div class="value-num">0건</div>
+        <div class="value-desc">오버셀·중복 예약·중복 결제</div>
+      </div>
+      <div class="value-item">
+        <div class="value-num">300ms</div>
+        <div class="value-desc">Write P95 목표<br>(주문·예약·결제)</div>
+      </div>
+      <div class="value-item">
+        <div class="value-num">0.1%</div>
+        <div class="value-desc">5xx 에러율<br>허용 상한</div>
+      </div>
+    </div>
+  </div>
+
+  <aside class="related-docs">
+    <span class="related-label">관련 문서</span>
+    <a href="02_research.html">02 리서치</a><a href="03_planning.html">03 Not Scope · KPI</a>
+    <a href="04_IA.html">04 IA</a><a href="requirements/mvp-functional-requirements.md">§3 기능</a>
+    <a href="architecture/architecture.md">아키텍처</a>
+  </aside>
+  <div class="footer">
+    <div class="footer-project">FANDROPS · Backend Portfolio · 5인 팀 · 2025.05.19 – 06.25</div>
+    <div class="footer-nav">다음 → <a href="02_research.html">02 · 리서치/페인포인트</a></div>
+  </div>
+
+</div>
+</body>
+</html>

@@ -140,7 +140,7 @@ FANDROPS 공개 REST API(`/api/v1/**`)의 **응답 envelope·에러 코드·페�
 | `true` | 지수 백오프 재시도 (1s → 2s → 4s, 최대 3회) | `RESERVE_FAILED`, `RATE_LIMITED`, `INTERNAL_ERROR`, `DB_LOCK_TIMEOUT` |
 | `false` | 재시도 없이 UI 안내·다른 플로우 | `OUT_OF_STOCK`, `INVALID_QUEUE_TICKET`, `PAYMENT_FAILED` |
 
-핫딜 주문(`POST /orders`)에서 `RESERVE_FAILED` 재시도 시 **동일 `accessTicket`** 으로만 재호출 ([상태 머신](../state/invariants-and-state-machines.md)).
+드롭스 주문(`POST /orders`)에서 `RESERVE_FAILED` 재시도 시 **동일 `accessTicket`** 으로만 재호출 ([상태 머신](../state/invariants-and-state-machines.md)).
 
 ---
 

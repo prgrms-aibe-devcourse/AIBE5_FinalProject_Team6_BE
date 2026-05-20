@@ -12,9 +12,10 @@ FANDROPS **B2B2C 오픈런** 서비스에서 장애 **등급·대응·커뮤니�
 | 역할 | 담당 | 책임 |
 | --- | --- | --- |
 | **Incident Commander (IC)** | 지영재 (SRE) | 등급 판정, 배포 중지/롤백 결정, 커뮤 조율 |
-| **Commerce** | 형성빈 | 주문·재고·핫딜 |
+| **Commerce** | 형성빈 | 주문·재고·드롭스 |
 | **Payment** | 장성재 | PG·웹훅·Saga |
-| **Platform / Identity** | 표지민 | Redis·대기열·Access Ticket·알림·Outbox |
+| **Identity / Notification** | 표지민 | Auth·알림·Outbox |
+| **Traffic Policy** | 장성재 | 대기열·Access Ticket·RateLimit 정책, 결제/주문 진입 제한 기준 |
 | **Comms** | 당일 릴리즈 오너 | Slack/Notion 장애 공지 초안 |
 
 ---
@@ -68,7 +69,7 @@ FANDROPS **B2B2C 오픈런** 서비스에서 장애 **등급·대응·커뮤니�
 
 > 현재 일부 주문·결제 확인이 지연되고 있습니다.  
 > 이미 결제하신 건은 취소되지 않으며, 확인 후 순차 반영됩니다.  
-> traceId: 고객센터 문의 시 주문 번호와 함께 전달해 주세요.
+> traceId: 운영 문의 시 주문 번호와 함께 전달해 주세요.
 
 ---
 

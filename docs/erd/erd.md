@@ -5,33 +5,41 @@ erDiagram
     FAN ||--o{ RESTOCK_ALERT : subscribes
     FAN ||--o{ NOTIFICATION : receives
     FAN ||--o{ VOTE : "투표"
+    FAN ||--o{ ATTENDANCE_CHECK : "출석"
 
     PARTNER ||--o{ ARTIST : "소속"
     ARTIST ||--o{ ARTIST_MEMBER : "멤버"
     ARTIST ||--o{ ARTIST_SPACE : owns
     ARTIST ||--o{ PRODUCT : owns
     ARTIST ||--o{ SCHEDULE : hosts
-    ARTIST ||--o{ IDOL_RANKING : participates
     ARTIST ||--o{ FEED : posts
     ARTIST ||--o{ ARTIST_SCHEDULE : "등록"
-    ARTIST ||--o{ FAN_ARTIST : "팔로워"
+    ARTIST ||--o{ FAN_ARTIST : "가입 팬"
     ARTIST ||--o{ VOTE : "득표"
+    ARTIST ||--o{ GOODS_POLL : "굿즈 투표"
+    ARTIST ||--o{ ATTENDANCE_EVENT : "출석 이벤트"
 
     ARTIST_MEMBER ||--o{ FEED : "작성"
     ARTIST_MEMBER ||--o{ NOTICE : "작성"
 
-    FAN ||--o{ FAN_ARTIST : "팔로우"
+    FAN ||--o{ FAN_ARTIST : "팬 가입"
     FAN ||--|| CART : "보유"
 
     %% === COMMUNITY DOMAINS ===
     ARTIST_SPACE ||--o{ FEED : "includes"
     ARTIST_SPACE ||--o{ NOTICE : "includes"
+    ARTIST_SPACE ||--o{ GOODS_POLL : "poll tab"
+    ARTIST_SPACE ||--o{ ATTENDANCE_EVENT : "attendance"
     FEED ||--o{ COMMENT : has
     FEED ||--o{ HEART : has
     COMMENT ||--o{ HEART : receives
     COMMENT ||--o{ COMMENT : "parent(대댓글)"
     FAN ||--o{ COMMENT : writes
     FAN ||--o{ HEART : reacts
+    GOODS_POLL ||--o{ GOODS_POLL_OPTION : has
+    GOODS_POLL ||--o{ VOTE : receives
+    GOODS_POLL_OPTION ||--o{ VOTE : selected
+    ATTENDANCE_EVENT ||--o{ ATTENDANCE_CHECK : has
 
     %% === COMMERCE DOMAINS ===
     PRODUCT ||--|{ ORDER_ITEM : contains
@@ -43,8 +51,7 @@ erDiagram
     CART ||--o{ CART_ITEM : "담김"
     INVENTORY ||--o{ INVENTORY_HISTORY : "이력"
 
-    %% === RANKING & SCHEDULE ===
-    IDOL_RANKING }o--|| ARTIST : ranks
+    %% === VOTE & SCHEDULE ===
     SCHEDULE ||--o{ NOTIFICATION : notifies
 
     %% === ENTITY DEFINITIONS ===
@@ -52,6 +59,8 @@ erDiagram
         bigint id PK
         string email
         string nickname
+        string password_hash
+        datetime terms_agreed_at
         datetime created_at
     }
 
@@ -127,14 +136,55 @@ erDiagram
         datetime created_at
     }
 
+    GOODS_POLL {
+        bigint id PK
+        bigint artist_id FK
+        bigint artist_space_id FK
+        string title
+        string status
+        datetime start_at
+        datetime end_at
+        datetime created_at
+    }
+
+    GOODS_POLL_OPTION {
+        bigint id PK
+        bigint poll_id FK
+        string label
+        varchar image_url
+        int sort_order
+    }
+
+    ATTENDANCE_EVENT {
+        bigint id PK
+        bigint artist_id FK
+        bigint artist_space_id FK
+        string title
+        datetime start_at
+        datetime end_at
+        int required_days
+        string reward_description
+    }
+
+    ATTENDANCE_CHECK {
+        bigint id PK
+        bigint attendance_event_id FK
+        bigint fan_id FK
+        bigint artist_id FK
+        date checked_date
+        int streak_days
+        boolean reward_candidate
+        datetime checked_at
+    }
+
     PRODUCT {
         bigint id PK
         bigint artist_id FK
         string name
         decimal price
         varchar status "ON_SALE | SOLD_OUT"
-        datetime hotdeal_start_at
-        datetime hotdeal_end_at
+        datetime drops_start_at
+        datetime drops_end_at
         datetime updated_at
     }
 
@@ -207,15 +257,15 @@ erDiagram
         bigint id PK
         bigint fan_id FK
         bigint artist_id FK
-        datetime followed_at
+        datetime joined_at
     }
 
     VOTE {
         bigint id PK
         bigint fan_id FK
         bigint artist_id FK
-        int round
-        varchar month
+        bigint poll_id
+        bigint option_id
         datetime voted_at
     }
 
@@ -233,14 +283,6 @@ erDiagram
         string title
         datetime start_time
         string type "DROP | EVENT | LIVE"
-    }
-
-    IDOL_RANKING {
-        bigint id PK
-        bigint artist_id FK
-        int vote_count
-        int round
-        varchar month
     }
 
     ARTIST_SCHEDULE {

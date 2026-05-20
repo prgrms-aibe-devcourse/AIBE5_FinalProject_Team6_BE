@@ -16,7 +16,7 @@ WaitQueueService가 발행한 Access Ticket을 StoreAPI가 아닌 **OrderService
 StoreAPI 레벨에서만 검증하면 OrderService API를 직접 호출하는 **우회 공격**이 가능하다. 주문 생성의 진입점인 OrderService에서 토큰을 검증해야 대기열을 거치지 않은 요청을 원천 차단할 수 있다.
 
 ```
-Fan → WaitQueueService        : 대기열 등록 (F08-01)
+Fan → WaitQueueService        : 대기열 등록
 WaitQueueService → Fan        : 순번 안내 (SSE)
 WaitQueueService → Fan        : 진입 토큰 발행 (Access Ticket)
 Fan → StoreAPI                : 주문 요청 (대기열 토큰 포함)

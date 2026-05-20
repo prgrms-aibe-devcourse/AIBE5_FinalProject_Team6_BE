@@ -63,6 +63,7 @@ infra/**          # 있다면
 | 주제 | 리뷰 요청 |
 | --- | --- |
 | Actuator·traceId 필터 | 표지민 (Security) |
+| 대기열/RateLimit filter·Nginx/ALB 임계값 | 장성재 |
 | 커스텀 메트릭 (order, outbox) | 해당 도메인 오너 |
 | 부하 테스트 시나리오 | 형성빈 · 장성재 |
 
@@ -72,6 +73,7 @@ infra/**          # 있다면
 
 - [ ] SLO: Write P95 &lt; 300ms, 5xx &lt; 0.1%
 - [ ] `outbox_pending`, `FAILED` order 5m — P0/P1 알람 연동
+- [ ] 대기열/RateLimit/traffic shaping 값은 장성재 정책을 기준으로 Nginx/ALB와 애플리케이션 설정을 맞춘다
 - [ ] P0 시 **develop→prod 배포 동결** ([`incident-response.md`](../../operations/incident-response.md) §3)
 - [ ] 구조화 로그에 **이메일·토큰 금지**, `traceId` 필수
 - [ ] local/stg/prod 프로필 분리 — `application-local.yml` Redis optional

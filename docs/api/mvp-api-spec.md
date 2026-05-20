@@ -2,18 +2,43 @@
 
 K-Pop 팬덤 커머스 / 예약 플랫폼 — **MVP 핵심 도메인** HTTP API
 
-> **관련 문서:** [API 계약](./api-contract.md) · [ERD](../erd/erd-design.md) · [결제·주문 시퀀스](../sequence/payment-flow-reason.md) · [불변조건·상태 머신](../state/invariants-and-state-machines.md) · [장애 정책](../operations/failure-policy.md) · [아키텍처](../architecture/architecture.md)
+> **포트폴리오:** [01](../01_service_intro.html) · [02](../02_research.html) · [03](../03_planning.html) · [04 IA](../04_IA.html)  
+> **관련 문서:** [MVP 기능 요구사항 §3](../requirements/mvp-functional-requirements.md) · [API 계약](./api-contract.md) · [ERD](../erd/erd-design.md) · [결제·주문 시퀀스](../sequence/payment-flow-reason.md) · [불변조건·상태 머신](../state/invariants-and-state-machines.md) · [장애 정책](../operations/failure-policy.md) · [아키텍처](../architecture/architecture.md)
 
 ---
 
 ## 문서 범위
 
-| 포함 (본 명세) | MVP 이후·별도 명세 예정 |
-| --- | --- |
-| Auth, Fan, 대기열, 상품·주문·결제, 재고 Internal, 알림, Admin(입점·배너·모니터링) | **피드·댓글·랭킹·하트** (`community` — 정환철) |
-| Artist·Event·Calendar·Live (콘텐츠·행사 축) | 장바구니 다건, 쿠폰, 정산 등 Commerce 확장 |
+본 명세는 [mvp-functional-requirements.md](../requirements/mvp-functional-requirements.md) **§3 기능 목록에 등재된 F-ID만** 다룬다.
 
-Gradle 모듈·담당자 매핑은 [architecture.md § 도메인 오너십](../architecture/architecture.md#도메인-오너십--모듈-매핑)을 따른다.
+| F 그룹 | 포함 |
+| --- | --- |
+| F01~F08 (표 등재분) | Auth, 입점, 커뮤니티, 상시·드롭스 상품, 장바구니·주문, 행사·외부 티켓, 결제 E2E, 마이페이지, Admin 모니터링 |
+| 미등재 | 고객센터, 신고·제재 Admin, 쿠폰·정산, 인앱 좌석 예매, 자체 라이브·영상 업로드 |
+
+Gradle 모듈·담당자: [architecture.md § 도메인 오너십](../architecture/architecture.md#도메인-오너십--모듈-매핑) · F-scope: [requirements § 오너십](../requirements/mvp-functional-requirements.md#도메인-오너십-f-scope).
+
+### F-ID → API 색인
+
+| F-ID | Endpoint (요약) | 모듈 |
+| --- | --- | --- |
+| F01-01~03 | `/auth/*` | `user` |
+| F01-04 | `POST /artists/{id}/join` | `community` |
+| F02-01~02 | `/admin/artist-applications` | `user` |
+| F02-03 | `GET /artists/{id}` (프로필·SNS) | `community` |
+| F03-01 | `POST /artists/{id}/spaces` | `community` |
+| F03-02~03 | `/feeds`, `/comments`, `/hearts` | `community` |
+| F03-04 | `/fans/me/notifications`, 이벤트 발행 | `notification` / 각 도메인 |
+| F03-05~06 | `/calendar`, `/lives`, `PATCH .../start` | `community` |
+| F03-07~08 | `/attendance-events/.../check-in`, `/polls`, `/votes` | `community` |
+| F04-01 | `POST /products` (상시), `?type=regular` | `order` |
+| F04-02 | `POST /products` (드롭스 기간), `?type=drops`, `/queue/*` | `order` · `payment` |
+| F04-03 | `/banners/main`, `/admin/main-banners` | `community` |
+| F04-04~05 | `/cart`, `/orders`, `.../restock-subscribe` | `order` |
+| F05-01~03 | `POST /artists/{id}/events` (+ 외부 URL) | `community` |
+| F06-01~03 | `/payments/*`, webhook | `payment` |
+| F07-01~02 | `/fans/me/artists`, `/activities`, `/orders`, `/payments` | `community` · `order` · `payment` |
+| F08-02 | `/admin/monitoring` | platform |
 
 ---
 
@@ -34,9 +59,11 @@ Gradle 모듈·담당자 매핑은 [architecture.md § 도메인 오너십](../a
 
 | 접두 경로 / 영역 | 모듈 | 담당 |
 | --- | --- | --- |
-| `/auth/*`, `/fans/me` (계정), `/queue/*`, `/admin/artist-applications`, `/admin/banners` | `user` | 표지민 |
-| `/artists/*`, `/lives/*`, 행사·일정 | `community` | 정환철 |
-| `/products/*`, `/orders/*`, `/fans/me/orders` | `order` · `inventory` | 형성빈 |
+| `/auth/*`, `/fans/me` (계정), `/admin/artist-applications` | `user` | 표지민 |
+| `/queue/*` | `payment` | 장성재 |
+| `/artists/*`, `/spaces/*`, `/feeds/*`, `/comments/*`, `/lives/*`, 행사·일정·출석·투표 | `community` | 정환철 |
+| `/products/*`, `/cart/*`, `/orders/*`, `/fans/me/orders` | `order` · `inventory` | 형성빈 |
+| `/banners/main`, `/admin/main-banners` | `community` | 정환철 (F04-03) |
 | `/payments/*`, `/fans/me/payments/*` | `payment` | 장성재 |
 | `/internal/inventory/*` | `inventory` (포트) | 형성빈 |
 | `/internal/notifications/publish`, `/fans/me/notifications`, `/notifications/*` | `notification` | 표지민 (전송) |
@@ -48,11 +75,15 @@ Gradle 모듈·담당자 매핑은 [architecture.md § 도메인 오너십](../a
 
 `user-api` · 담당: **표지민**
 
-> `FAN` ERD 컬럼: `email`, `nickname`, `created_at`만 — **`password` 없음** ([ERD §4](../erd/erd-design.md#4-partner--artist--artist_member)). MVP 팬 가입·로그인은 **소셜 OAuth**만.
+> `FAN`은 이메일 가입과 소셜 가입을 모두 지원한다. 비밀번호는 `password_hash`로만 저장하고, 소셜 `providerToken`은 저장하지 않는다 ([ERD §4](../erd/erd-design.md#4-partner--artist--artist_member--fan)).
 
 | Method | Endpoint | 설명 | Request Body | Response |
 | --- | --- | --- | --- | --- |
+| POST | `/auth/signup` | 이메일 회원가입 + 약관 동의 | `email`, `password`, `nickname`, `termsAgreed: true` | `201` `{ fanId, accessToken, refreshToken }` |
+| POST | `/auth/login` | 이메일 로그인 | `email`, `password` | `{ accessToken, refreshToken }` |
 | POST | `/auth/social/{provider}` | 소셜 로그인·가입 (`kakao` · `google`) | `providerToken` | `{ accessToken, refreshToken }` — `FAN` 행 upsert |
+| POST | `/auth/password-reset/request` | 비밀번호 재설정 메일 발송 | `email` | `204 No Content` |
+| POST | `/auth/password-reset/confirm` | 재설정 토큰 검증 후 비밀번호 변경 | `token`, `newPassword` | `204 No Content` |
 | POST | `/auth/logout` | 로그아웃 (토큰 무효화) | — | `204 No Content` |
 | POST | `/auth/token/refresh` | Access Token 재발급 | `refreshToken` | `{ accessToken, expiresIn }` |
 | GET | `/fans/me` | 내 정보 조회 | — | `{ fanId, email, nickname, createdAt }` |
@@ -66,41 +97,88 @@ Gradle 모듈·담당자 매핑은 [architecture.md § 도메인 오너십](../a
 
 | Method | Endpoint | 설명 | Request Body / Param | Response |
 | --- | --- | --- | --- | --- |
-| GET | `/artists` | 아티스트 목록 조회 | `?cursor`, `size` | `{ items: [...], nextCursor }` |
-| GET | `/artists/{id}` | 아티스트 상세 | — | `{ id, partnerId, name, joinedAt }` |
+| GET | `/artists` | 아티스트 목록 (스토어 탐색) | `?cursor`, `size`, `sort=fanCount` (F04-01) | `{ items: [{ id, name, fanCount, ... }], nextCursor }` |
+| GET | `/artists/{id}` | 아티스트 상세 · 프로필·외부 링크 (F02-03) | — | `{ id, partnerId, name, joinedAt, profileImageUrl, snsLinks[], scheduleSummary[] }` |
+| POST | `/artists/{id}/join` | 팬 가입(아티스트별) + 팬 수 증가 | — | `201` `{ artistId, fanId, joinedAt }` |
+| DELETE | `/artists/{id}/join` | 팬 가입 해지 | — | `204 No Content` |
 | POST | `/artists` | 아티스트 등록 (Admin) | `partnerId`, `name` | `201` `{ artistId }` |
 | GET | `/artists/{id}/calendar` | 드롭·팬미팅·라이브 통합 일정 | `?from`, `to` | `{ events: [{ type, title, startTime }] }` |
-| POST | `/artists/{id}/events` | 행사 등록 (운영자) | `title`, `type`, `startTime`, `externalTicketUrl` | `201` `{ eventId }` |
+| POST | `/artists/{id}/events` | 행사 안내·외부 예매 링크 (F05-01~03) | `title`, `type`, `venue`, `startTime`, `ticketOpenAt` (참고), `externalTicketUrls[]` (F05-02), `externalTicketUrlExpiresAt` (optional) | `201` `{ eventId }` |
 | PATCH | `/lives/{id}/start` | 라이브 시작 (상태 갱신 + 알림 이벤트 발행) | — | `{ liveId, isLive: true }` |
 
 `PATCH /lives/{id}/start` 성공 시 `notification`에 `LIVE_START` 이벤트 발행 → 표지민 모듈이 전송.
 
 ---
 
-## Product / Hotdeal / Restock
+## Community
 
-`order-api` · `inventory-*` · 담당: **형성빈**
+`community-api` · 담당: **정환철**
 
 | Method | Endpoint | 설명 | Request Body / Param | Response |
 | --- | --- | --- | --- | --- |
-| GET | `/products` | 상품 목록 조회 | `?type=hotdeal`, `cursor`, `size` | `{ items: [{ id, artistId, name, price, status, hotdealStartAt, hotdealEndAt, totalQty, reservedQty, availableQty, updatedAt }], nextCursor }` |
-| GET | `/products/{id}` | 상품 상세 | — | `{ id, artistId, name, price, status, hotdealStartAt, hotdealEndAt, totalQty, reservedQty, availableQty, updatedAt }` |
-| POST | `/products` | 상품 등록 (운영자) | `artistId`, `name`, `price`, `totalQty`, `hotdealStartAt`, `hotdealEndAt` (optional) | `201` `{ productId }` |
-| POST | `/products/{id}/restock-subscribe` | 재입고 알림 구독 | — | `201` `{ alertId }` |
-| DELETE | `/products/{id}/restock-subscribe` | 구독 취소 | — | `204 No Content` |
-| POST | `/products/{id}/restock` | 재입고 처리 + 이벤트 발행 (운영자) | `quantity` | `{ productId, totalQty }` |
+| POST | `/artists/{id}/spaces` | 승인된 아티스트 공간 생성 | `tabs` (optional) | `201` `{ spaceId }` |
+| GET | `/artists/{id}/notices` | 공지 목록 (④ 공지 탭) | `?cursor`, `size` | `{ items: [...], nextCursor }` |
+| GET | `/artists/{id}/notices/{noticeId}` | 공지 상세 | — | `{ id, title, content, imageUrls[], createdAt }` |
+| POST | `/artists/{id}/notices` | 공지 작성 (아티스트 멤버) | `title`, `content`, `imageUrls[]` | `201` `{ noticeId }` |
+| POST | `/artists/{id}/feeds` | 아티스트 게시글 작성(텍스트+이미지) | `content`, `imageUrls[]` | `201` `{ feedId }` |
+| GET | `/artists/{id}/feeds` | 피드 목록 | `?cursor`, `size` | `{ items: [...], nextCursor }` |
+| POST | `/feeds/{id}/comments` | 댓글/답글 작성 | `content`, `parentId` (optional) | `201` `{ commentId }` |
+| POST | `/feeds/{id}/hearts` | 피드 좋아요 | — | `201` |
+| DELETE | `/feeds/{id}/hearts` | 피드 좋아요 취소 | — | `204 No Content` |
+| POST | `/artists/{id}/attendance-events/{eventId}/check-in` | 출석 체크 | — | `{ checkedAt, streakDays, rewardCandidate }` |
+| POST | `/artists/{id}/polls` | 굿즈 투표 생성(운영자/아티스트) | `title`, `options: [{ imageUrl, label }]` | `201` `{ pollId }` |
+| POST | `/polls/{id}/votes` | 굿즈 투표 참여 | `optionId` | `201` |
+| GET | `/fans/me/activities` | 내가 남긴 댓글/하트 히스토리 | `?cursor`, `size` | `{ items: [...], nextCursor }` |
+| GET | `/fans/me/artists` | 가입 아티스트 목록 | `?cursor`, `size` | `{ items: [...], nextCursor }` |
 
-재입고 시 `RESTOCK_ALERT` 이벤트 발행 → `notification` 전송 (표지민).
+- 피드 작성은 이미지 업로드 URL만 받는다. 동영상 업로드는 MVP 제외.
+- 댓글/하트/출석/투표는 해당 아티스트 **팬 가입(F01-04)** 후 write 가능. 미가입 시 일부 읽기만 허용.
+- 출석 7일 달성(F03-07)은 `rewardCandidate=true`로 **대상자만** 산정. 리워드 지급/배송 자동화는 Not Scope.
+- 외부 티켓(F05-02~03): `http`/`https`만 허용, 만료 후 비노출.
+- `POST /artists/{id}/spaces`(F03-01): 기본 탭 `feed`, `profile`, `poll`, `media`, `notice`, `schedule`. **상점(Store)은 GNB 스토어 탭(F04)** — 아티스트 홈 탭 아님.
 
-- `?type=hotdeal`: `hotdeal_start_at ≤ now ≤ hotdeal_end_at` 인 행만 필터 ([ERD `PRODUCT`](../erd/erd-design.md#1-inventory--재고-테이블-분리-및-이력history-기록)).
-- `totalQty` / `reservedQty` / `availableQty`: `INVENTORY` 조인.
-- `POST /products/{id}/restock`: `total_qty` 증가, `available_qty = total_qty - reserved_qty` 재계산, `PRODUCT.status`를 `ON_SALE`로 복구, `INVENTORY_HISTORY.change_type = INCREASE` 기록.
+---
+
+## Product (F04)
+
+`order-api` · `inventory-*` · 담당: **형성빈**
+
+| Method | Endpoint | F-ID | 설명 | Request Body / Param | Response |
+| --- | --- | --- | --- | --- | --- |
+| GET | `/products` | F04-01·02 | 상품 목록 | `?type=regular` \| `drops`, `cursor`, `size` | `{ items: [...], nextCursor }` |
+| GET | `/products/{id}` | F04-01·02 | 상품 상세 | — | `{ id, artistId, name, price, status, dropsStartAt, dropsEndAt, totalQty, reservedQty, availableQty, updatedAt }` |
+| POST | `/products` | F04-01 | **상시** 상품 등록 | `artistId`, `name`, `price`, `totalQty` | `201` `{ productId }` |
+| POST | `/products` | F04-02 | **드롭스** 상품 등록 | 위 + `dropsStartAt`, `dropsEndAt`, `totalQty` | `201` `{ productId }` |
+| PATCH | `/products/{id}` | F04-01·02 | 수정·품절 | `name`, `price`, `status`, 기간(드롭스) | `{ productId, status }` |
+| POST | `/products/{id}/restock-subscribe` | F04-05 | 재입고 알림 구독 | — | `201` `{ alertId }` |
+| DELETE | `/products/{id}/restock-subscribe` | F04-05 | 구독 취소 | — | `204` |
+| POST | `/products/{id}/restock` | F04-05 | 재입고 + 이벤트 발행 | `quantity` | `{ productId, totalQty }` |
+
+- **F04-01** `?type=regular`: `drops_start_at`·`drops_end_at` 모두 NULL.
+- **F04-02** `?type=drops`: `drops_start_at ≤ now ≤ drops_end_at`. 카운트다운·대기열([§ Wait Queue](#wait-queue-대기열)) 적용.
+- 재입고 시 `RESTOCK_ALERT` 발행 → 표지민 전송.
+- `totalQty` / `reservedQty` / `availableQty`: `INVENTORY` 조인 ([ERD §1](../erd/erd-design.md#1-inventory--재고-테이블-분리-및-이력history-기록)).
+
+---
+
+## Cart
+
+`order-api` · 담당: **형성빈**
+
+| Method | Endpoint | 설명 | Request Body / Param | Response |
+| --- | --- | --- | --- | --- |
+| GET | `/cart` | 내 장바구니 조회 | — | `{ items: [{ productId, quantity, price }] }` |
+| POST | `/cart/items` | 장바구니 담기 | `productId`, `quantity` | `201` `{ cartItemId }` |
+| PATCH | `/cart/items/{id}` | 수량 변경 | `quantity` | `{ cartItemId, quantity }` |
+| DELETE | `/cart/items/{id}` | 장바구니 항목 삭제 | — | `204 No Content` |
+
+장바구니 저장소는 RDB `CART`/`CART_ITEM`만 사용한다. Redis 장바구니는 MVP 금지([ADR-003](../adr/ADR-003-cart-storage-rdb-phase1.md)).
 
 ---
 
 ## Wait Queue (대기열)
 
-`user-api` · 담당: **표지민**
+`payment-api` · 담당: **장성재**
 
 | Method | Endpoint | 설명 | Request Body / Param | Response |
 | --- | --- | --- | --- | --- |
@@ -115,6 +193,7 @@ Gradle 모듈·담당자 매핑은 [architecture.md § 도메인 오너십](../a
 - 이후 `POST /orders` 요청 body에 `accessTicket` 포함 **필수**.
 - **검증 위치:** `OrderService` (우회 호출 차단). [시퀀스 문서 §1](../sequence/payment-flow-reason.md#1-대기열-토큰-검증을-orderservice에서-수행) 참고.
 - 토큰 없음·만료 → `403` + `ERR_4003` (`INVALID_QUEUE_TICKET`).
+- 대기열·RateLimit 정책은 장성재가 관리하고, Redis/Nginx/ALB 운영값은 지영재 리뷰를 받는다.
 
 ---
 
@@ -211,6 +290,7 @@ PG  → POST .../webhook      → payload 내 키 → tossPaymentKey로 매핑 �
 | `RESTOCK_ALERT` | 형성빈 (`inventory`) | 표지민 |
 | `LIVE_START` | 정환철 (`community`) | 표지민 |
 | `NEW_POST_COMMENT` | 정환철 (`community`) | 표지민 |
+| `ARTIST_APPLICATION_APPROVED` | 표지민 (`user`) | 표지민 |
 
 `POST /internal/notifications/publish`도 런타임에서는 **포트 호출**; HTTP 경로는 계약·테스트 더블용으로만 사용 가능.
 
@@ -223,12 +303,13 @@ PG  → POST .../webhook      → payload 내 키 → tossPaymentKey로 매핑 �
 | GET | `/admin/artist-applications` | `user` | 표지민 | 입점 신청 목록 `?status=PENDING` — DB `PARTNER` ([ERD §4](../erd/erd-design.md#4-partner--artist--artist_member)) |
 | PATCH | `/admin/artist-applications/{id}` | `user` | 표지민 | 승인·반려 `status`, `reason` |
 | GET | `/admin/monitoring` | platform | 지영재 | 주문·결제·재고 모니터링 `?from`, `to` |
-| GET | `/admin/banners` | `user` | 표지민 | 배너 목록 |
-| POST | `/admin/banners` | `user` | 표지민 | 배너 등록 |
-| PATCH | `/admin/banners/{id}` | `user` | 표지민 | 배너 수정 |
-| DELETE | `/admin/banners/{id}` | `user` | 표지민 | 배너 삭제 |
+| GET | `/admin/main-banners` | `community` | 정환철 | 메인 배너 목록 (F04-03) |
+| POST | `/admin/main-banners` | `community` | 정환철 | 메인 배너 등록 |
+| PATCH | `/admin/main-banners/{id}` | `community` | 정환철 | 메인 배너 수정 |
+| DELETE | `/admin/main-banners/{id}` | `community` | 정환철 | 메인 배너 삭제 |
+| GET | `/banners/main` | `community` | 정환철 | GNB 홈 메인 배너 노출 (F04-03) |
 
-배너 **노출 Read** (팬 화면)는 `community` 쪽 Public API로 추가 예정.
+F04-03은 **메인 배너만**. 스토어 아티스트 노출 순서는 F04-01 (`GET /artists?sort=fanCount`).
 
 ---
 
@@ -256,7 +337,7 @@ PG  → POST .../webhook      → payload 내 키 → tossPaymentKey로 매핑 �
 | --- | --- | --- |
 | ORDER | `status` | 정상: `PENDING` → `RESERVED` → `PAID` → `COMPLETED` · 실패: `RESERVED` → `FAILED` → `CANCELLED` · 취소: `PENDING` → `CANCELLED` |
 | PAYMENT | `status` | `PENDING` → `SUCCESS` / `FAILED` (종료) |
-| WAIT_QUEUE (Redis) | `status` | `WAITING` → `PROCESSING` → `DONE` / `EXPIRED` — [ERD §10](../erd/erd-design.md#10-핫딜-대기열--redis-db-erd-미포함) |
+| WAIT_QUEUE (Redis) | `status` | `WAITING` → `PROCESSING` → `DONE` / `EXPIRED` — [ERD §10](../erd/erd-design.md#10-드롭스-대기열--redis-db-erd-미포함) |
 | PRODUCT | `status` | `ON_SALE` / `SOLD_OUT` |
 | INVENTORY | — | `total_qty`, `reserved_qty`, `available_qty` (`available_qty = total_qty - reserved_qty`) |
 | INVENTORY_HISTORY | `change_type` | `RESERVE` / `RELEASE` / `DECREASE` / `INCREASE` / `COMPENSATE` |
@@ -273,10 +354,10 @@ PG  → POST .../webhook      → payload 내 키 → tossPaymentKey로 매핑 �
 
 | 항목 | 평가 |
 | --- | --- |
-| ERD·시퀀스와의 정합 | ✅ ERD 24테이블·`hotdeal_*`·`NOTIFICATION`(read 없음)·팬 OAuth-only·`CART` RDB — [erd-design](../erd/erd-design.md) |
+| ERD·시퀀스와의 정합 | ✅ ERD 24테이블·`drops_*`(드롭스 기간 컬럼)·`NOTIFICATION`(read 없음)·이메일/소셜 Auth·`CART` RDB — [erd-design](../erd/erd-design.md) |
 | 보안·멱등 | ✅ confirm/fail 비노출, 웹훅 내부 처리, `DUPLICATE_PAYMENT` |
 | UX 에러 구분 | ✅ 4004/4005 분리 — 문서화 우수 |
-| 제목 vs 범위 | ⚠️ "Full Domain"이나 **community 피드/댓글/랭킹 API는 미포함** — 본 문서는 **MVP Commerce + 콘텐츠 일정·라이브** 축으로 범위 명시함 |
+| 제목 vs 범위 | ✅ F01~F08 MVP 핵심 기능을 본 문서에 반영. 좌석 예매·자체 라이브·리워드 배송 자동화는 Not Scope로 분리 |
 | 용어 | ✅ `orderPaymentKey` / `tossPaymentKey` 분리 ([결제 식별자](#결제-식별자-orderpaymentkey--tosspaymentkey)) |
 | 시퀀스 vs API | ℹ️ 시퀀스에 `PENDING` 후 reserve 표현이 있으나, 공개 API는 **원자적 `RESERVED`** 응답으로 단순화 — 내부 구현은 동일 TX 안에서 처리 가능 |
 

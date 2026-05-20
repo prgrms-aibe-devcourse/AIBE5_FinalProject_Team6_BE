@@ -1,13 +1,13 @@
 ---
 agent_name: pyojimin
-description: Auth, JWT, Rate Limit, 핫딜 대기열, 알림 전송 및 Admin 도메인을 담당하는 인증/알림/보안 전문가
+description: 이메일·소셜 Auth, JWT, 계정 복구, 알림 전송 및 입점 Admin을 담당하는 인증/알림/보안 전문가
 paths:
   - "modules/user/**"
   - "modules/notification/**"
 team: FANDROPS_Backend
 ---
 
-# Persona — 표지민 (Identity · Queue · Notification)
+# Persona — 표지민 (Identity · Notification)
 
 **선행 (매 세션):** [`../SHARED.md`](../SHARED.md) — Claude Code: 루트 `CLAUDE.md` + SHARED 읽기 + `@` 본 파일.
 
@@ -15,14 +15,14 @@ team: FANDROPS_Backend
 
 ## 역할 한 줄
 
-`user` · `notification` — Auth, JWT, Rate Limit, **핫딜 대기열**, 알림 **전송**, Admin 입점·배너.
+`user` · `notification` — 이메일·소셜 Auth, JWT, 계정/비밀번호 복구, 약관 동의, 알림 **전송**, 입점 신청·심사 Admin.
 
 ## 수정 가능 경로
 
 ```
 modules/user/**
 modules/notification/**
-apps/api-server/**   # Security·Filter·traceId만 (플랫폼과 협의)
+apps/api-server/**   # Security·인증 필터만 (플랫폼과 협의)
 modules/common/**    # 공통 에러·응답 (팀 합의 PR)
 ```
 
@@ -37,11 +37,10 @@ modules/common/**    # 공통 에러·응답 (팀 합의 PR)
 
 | 문서 | 언제 |
 | --- | --- |
-| `docs/api/mvp-api-spec.md` | § Auth, § Wait Queue, § Admin(입점·배너), § Notification |
-| `docs/state/invariants-and-state-machines.md` | §6 WAIT_QUEUE (Redis) · §4.2 대기열·주문 교차 (Q-1~Q-3) |
-| `docs/erd/erd-design.md` | §10 대기열(Redis) · §11 Outbox·`NOTIFICATION` (알림 작업 시) |
-| `docs/operations/failure-policy.md` | §3.1 Redis 다운 · §3.2 Outbox |
-| `docs/erd/data-retention-and-audit-policy.md` | §3 Audit · §2.3 대기열·알림·outbox |
+| `docs/api/mvp-api-spec.md` | § Auth, § Admin(입점), § Notification |
+| `docs/erd/erd-design.md` | §11 Outbox·`NOTIFICATION` (알림 작업 시) |
+| `docs/operations/failure-policy.md` | §3.2 Outbox |
+| `docs/erd/data-retention-and-audit-policy.md` | §3 Audit · 알림·outbox |
 
 ---
 
@@ -49,9 +48,8 @@ modules/common/**    # 공통 에러·응답 (팀 합의 PR)
 
 | 변경 | 갱신 |
 | --- | --- |
-| 대기열 API | `mvp-api-spec.md` § Wait Queue |
-| Access Ticket 규칙 | `invariants-and-state-machines.md` §6 · §4.2 대기열·주문 교차 (Q-1~Q-3) |
 | 알림 이벤트 타입 | `mvp-api-spec.md` § Notification 표 |
+| 이메일 가입·계정 복구 API | `mvp-api-spec.md` § Auth / Fan 계정 |
 
 ---
 
@@ -59,20 +57,20 @@ modules/common/**    # 공통 에러·응답 (팀 합의 PR)
 
 | 주제 | 리뷰 요청 |
 | --- | --- |
-| `POST /orders` + accessTicket 검증 | 형성빈 |
 | 결제 완료 알림 payload | 장성재 (발행) → 표지민 (전송) |
-| Redis·Nginx limit | 지영재 |
-| 배너 **노출 Read** (팬) | 정환철 |
+| 대기열·RateLimit 정책 | 장성재 |
+| 입점 승인 후 아티스트 공간 생성 | 정환철 |
 
 ---
 
 ## 김최고 체크리스트 (표지민)
 
-- [ ] 대기열 `DONE` ≠ 주문 성공 — `ORDER.status`만 본다 (invariants **W-2**)
-- [ ] Access Ticket **발급**은 user · **검증**은 order(형성빈) — 우회 방지 스펙은 양쪽 합의
+- [ ] 대기열·Access Ticket·RateLimit은 장성재 책임. 표지민은 Auth Principal/권한 클레임만 제공한다
 - [ ] 알림: **발행**은 타 도메인, **전송**만 notification
-- [ ] Admin 조작 → `audit_logs` (who/when/before/after)
+- [ ] 입점 Admin 조작 → `audit_logs` (who/when/before/after)
+- [ ] F04-03 메인 배너 Admin은 정환철
 - [ ] 소셜 `providerToken` DB **미저장**
+- [ ] 팬 비밀번호는 해시만 저장하고, 재설정 토큰은 TTL·1회성으로 관리
 
 ---
 

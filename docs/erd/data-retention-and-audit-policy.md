@@ -1,6 +1,6 @@
 # 데이터 보관 · Audit 정책
 
-> **서비스 맥락:** K-Pop 팬덤 **B2B2C 커머스·이벤트 예약** 플랫폼. 오픈런(핫딜) 주문·결제 정합성과 분쟁·세무 대응을 전제로 보관 기간을 둔다.  
+> **서비스 맥락:** K-Pop 팬덤 **B2B2C 커머스·이벤트 예약** 플랫폼. 오픈런(드롭스) 주문·결제 정합성과 분쟁·세무 대응을 전제로 보관 기간을 둔다.  
 > **연관:** [ERD 설계](./erd-design.md) · [상태 머신](../state/invariants-and-state-machines.md) · [데이터 라이프사이클](./data-lifecycle.md)
 
 본 문서는 **DB·로그·감사(audit) 레코드**를 얼마나, 어떤 형태로 남길지 정의한다.  
@@ -12,7 +12,7 @@
 
 | 원칙 | 설명 |
 | --- | --- |
-| **최소 수집** | 주문·결제·분쟁에 필요한 필드만 DB에 저장. PG·소셜 원문 토큰은 저장하지 않음. |
+| **최소 수집** | 주문·결제·분쟁에 필요한 필드만 DB에 저장. 비밀번호는 해시만 저장하고, PG·소셜 원문 토큰은 저장하지 않음. |
 | **불변 거래 기록** | `orders` / `payments`는 **soft delete 하지 않음**. 취소·환불은 상태·audit으로만 표현. |
 | **감사 가능성** | 관리자 조작·상태 전이·웹훅 처리는 **append-only audit** + `traceId`로 상관. |
 | **계층적 삭제** | 원본(payload) → 요약(summary) → archive → purge 순으로 단계적 축소. |
@@ -29,7 +29,7 @@
 | **`orders`**, **`order_items`** | **3년** | `status` = `CANCELLED` 또는 `COMPLETED` **이후** (최종 상태 시각) | anonymize 또는 cold storage 이관 후 운영 DB에서 제거 | 세법·분쟁 대비는 **법무·세무 합의로 5년까지 연장 가능** |
 | **`payments`** | **3년** (요약 필드) | `SUCCESS` / `FAILED` 확정 후 | PG 식별자·금액·상태·`paid_at`/`failed_at`만 유지 가능 | 원본 연동 상세는 §2.2 |
 | **`payment_webhook_events`** | **90일** (원본 payload) | 수신 시각 | 이후 **요약 행**만 `payments` 또는 `payment_webhook_summaries`에 유지 | 멱등·리컨실용 |
-| **`products`** (판매 종료) | **1년** | `hotdeal_end_at` 경과 또는 Admin 삭제 후 | archive 또는 비식별 통계만 | `is_active` 컬럼 없음 — [ERD §1](./erd-design.md#1-inventory--재고-테이블-분리-및-이력history-기록) |
+| **`products`** (판매 종료) | **1년** | `drops_end_at` 경과 또는 Admin 삭제 후 | archive 또는 비식별 통계만 | `is_active` 컬럼 없음 — [ERD §1](./erd-design.md#1-inventory--재고-테이블-분리-및-이력history-기록) |
 | **`carts`**, **`cart_items`** | **활성 사용 중** | 주문 완료·취소 후 해당 행 삭제 | 팬 탈퇴 시 cascade | RDB only — [ADR-003](../adr/ADR-003-cart-storage-rdb-phase1.md) |
 | **`restock_alerts`** | **1년** | `SENT` 또는 구독 해지 후 | 삭제 | fan_id는 §4 마스킹 |
 
@@ -42,11 +42,11 @@
 
 토스 재전송·[멱등](../state/invariants-and-state-machines.md#3-payment-상태-머신) 대응 기간(통상 7~30일)을 넘기는 원본 보관은 **운영 비용 대비 이득이 적다**는 전제.
 
-### 2.3 대기열 · 알림 (표지민)
+### 2.3 대기열 · 알림 (장성재 · 표지민)
 
 | 데이터 | 보관 | 만료 후 |
 | --- | --- | --- |
-| **핫딜 대기열 (Redis)** | **180일** (선택 스냅샷·집계) | `DONE` / `EXPIRED` 후 TTL·집계만 ([ERD §10](./erd-design.md#10-핫딜-대기열--redis-db-erd-미포함)) |
+| **드롭스 대기열 (Redis)** | **180일** (선택 스냅샷·집계) | `DONE` / `EXPIRED` 후 TTL·집계만. 담당: 장성재 ([ERD §10](./erd-design.md#10-드롭스-대기열--redis-db-erd-미포함)) |
 | **`notifications`** | **1년** (`sent_at` 기준) | PII 마스킹 후 삭제 |
 | **`outbox_events`** | **30일** | `published_at` 이후 삭제 또는 S3 cold storage ([ADR-001](../adr/ADR-001-multi-module-monolith.md) Outbox) |
 
@@ -72,10 +72,12 @@ MVP는 행사 **외부 티켓 링크**만 제공([ERD §8](./erd-design.md#8-sch
 | 데이터 | 보관 | 비고 |
 | --- | --- | --- |
 | **`fans`** (탈퇴 후) | **30일** 유예 → `email`·`nickname` 마스킹 (행 유지) | ERD에 `deleted_at` 없음 |
-| **`feeds`**, **`notices`**, **`comments`** | 탈퇴·신고 시 **DELETE** → **90일** 후 purge Job | `community` 모듈 |
+| **`feeds`**, **`notices`**, **`comments`** | 탈퇴·운영 삭제 시 **DELETE** → **90일** 후 purge Job | `community` 모듈 |
+| **`attendance_events`**, **`attendance_checks`** | 이벤트 종료 후 **1년** | 리워드 대상자 산정 근거. 배송/지급 자동화는 별도 정책 |
+| **`goods_polls`**, **`goods_poll_options`**, **`votes`** | 투표 종료 후 **1년** | 굿즈 투표 집계·중복 투표 검증 |
 | **`banners`** | `is_active=false` 또는 DELETE 후 **1년** | ERD `is_active` 사용 |
 | **`partners`** (입점) | `REJECTED`·만료 초대 **1년**, `APPROVED`는 영구 메타만 | `invitation_token` 만료 후 정리 · Admin audit |
-| **`fan_artist`** | 탈퇴 시 관계 **DELETE** | 팔로우 집계만 유지 가능 |
+| **`fan_artist`** | 탈퇴 시 관계 **DELETE** | 아티스트별 가입 팬 수 집계만 유지 가능 |
 | **`notifications`** | `sent_at` 기준 **1년** 후 DELETE | 읽음 상태 없음 — [ERD §9](./erd-design.md#9-banner--restock_alert--notification-팬-알림함) |
 
 ---
@@ -101,7 +103,7 @@ Audit 레코드는 **`audit_logs`** (append-only, 수정·삭제 API 없음). �
 | `reason` | 선택 (취소 사유, Admin 메모) |
 | `client_ip` | Admin·의심 요청만 (90일 후 IP 필드 null) |
 
-### 3.2 Admin API (표지민 · 지영재)
+### 3.2 Admin API (도메인 오너 · 지영재)
 
 **대상:** `/admin/**` 전 엔드포인트 ([MVP API](../api/mvp-api-spec.md#admin))
 
@@ -109,10 +111,10 @@ Audit 레코드는 **`audit_logs`** (append-only, 수정·삭제 API 없음). �
 | --- | --- |
 | who | `admin_id`, role |
 | when | `occurred_at` |
-| what | `PATCH /admin/banners/{id}` |
+| what | `PATCH /admin/banners/{id}` 또는 `PATCH /admin/artist-applications/{id}` |
 | before / after | `{ "title": "…", "imageUrl": "…" }` JSON diff |
 
-추가 대상: 입점 심사 승인·반려, (Phase 2) 수동 환불·재고 조정.
+오너 예: 입점 심사 승인·반려는 표지민, F04-03 메인 배너 Admin은 정환철, 모니터링/운영성 조회는 지영재.
 
 ### 3.3 주문 상태 변경 (형성빈 · 장성재)
 
@@ -168,7 +170,7 @@ Audit 레코드는 **`audit_logs`** (append-only, 수정·삭제 API 없음). �
 | 데이터 | 최소 저장 | 마스킹 시점 |
 | --- | --- | --- |
 | 이메일 | 가입·주문·영수증 발송에 필요한 기간 | 탈퇴 유예 종료 · 주문 보관 만료 |
-| 비밀번호 (팬) | **FAN 테이블에 저장 안 함** — OAuth only | — |
+| 비밀번호 (팬) | 이메일 가입 시 **해시만 저장**. 재설정 토큰은 TTL·1회성으로 저장 | 비밀번호 재설정 완료 또는 토큰 만료 |
 | 비밀번호 (PARTNER·ARTIST_MEMBER) | 해시만 저장 | — |
 | 소셜 `providerToken` | **저장 금지** (검증 직후 폐기) | — |
 | 카드·계좌 | **PG 토큰만**, PAN 저장 금지 | — |

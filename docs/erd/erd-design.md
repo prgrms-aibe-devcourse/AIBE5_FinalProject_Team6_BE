@@ -1,7 +1,7 @@
 # ERD 설계 문서
 
 > **다이어그램:** [`erd.md`](./erd.md)<br>
-> K-Pop 팬덤 **B2B2C** 플랫폼의 테이블 관계·컬럼 설계 근거. 핫딜·결제·커뮤니티·아티스트 운영 도메인을 포함한다.
+> K-Pop 팬덤 **B2B2C** 플랫폼의 테이블 관계·컬럼 설계 근거. 드롭스·결제·커뮤니티·아티스트 운영 도메인을 포함한다.
 
 ---
 
@@ -10,16 +10,16 @@
 | 도메인 | 테이블 | 비고 |
 | --- | --- | --- |
 | **사용자·아티스트** | `FAN`, `PARTNER`, `ARTIST`, `ARTIST_MEMBER`, `FAN_ARTIST` | 팬(B2C) · 기획사(B2B) · 아티스트·멤버 |
-| **커뮤니티** | `ARTIST_SPACE`, `FEED`, `NOTICE`, `COMMENT`, `HEART` | 아티스트 공간 · 피드·공지 · 댓글·하트 |
+| **커뮤니티** | `ARTIST_SPACE`, `FEED`, `NOTICE`, `COMMENT`, `HEART`, `ATTENDANCE_EVENT`, `ATTENDANCE_CHECK` | 아티스트 공간 · 피드·공지 · 댓글·하트 · 출석 체크 |
 | **커머스** | `PRODUCT`, `INVENTORY`, `INVENTORY_HISTORY`, `CART`, `CART_ITEM`, `ORDER`, `ORDER_ITEM`, `PAYMENT`, `RESTOCK_ALERT` | 상품·재고·재고 이력·**장바구니(RDB)** ·주문·결제 — [ADR-003](../adr/ADR-003-cart-storage-rdb-phase1.md) |
-| **랭킹·일정** | `VOTE`, `IDOL_RANKING`, `SCHEDULE`, `ARTIST_SCHEDULE` | 월간 투표 · 드롭·라이브·행사 |
+| **투표·일정** | `GOODS_POLL`, `GOODS_POLL_OPTION`, `VOTE`, `SCHEDULE`, `ARTIST_SCHEDULE` | 굿즈 투표 · 드롭·라이브·행사 |
 | **운영·알림** | `BANNER`, `NOTIFICATION` | 홈 배너 · 팬 알림함 |
 
 **DB ERD에 없고 별도 저장하는 것**
 
 | 기능 | 저장 | 문서 |
 | --- | --- | --- |
-| 핫딜 대기열 (F08-01) | **Redis** (상태·토큰) | [§10](#10-핫딜-대기열--redis-db-erd-미포함) · [상태 머신 §6](../state/invariants-and-state-machines.md#6-wait_queue-상태-머신) |
+| 드롭스 대기열 | **Redis** (상태·토큰) | [§10](#10-드롭스-대기열--redis-db-erd-미포함) · [상태 머신 §6](../state/invariants-and-state-machines.md#6-wait_queue-상태-머신) |
 | 알림 발행·재시도 | **`outbox_events`** (ADR Outbox) | [§11](#11-알림--notification-vs-outbox) · [ADR-001](../adr/ADR-001-multi-module-monolith.md) |
 | PG 웹훅 원본 | `payment_webhook_events` (보관 정책) | [data-retention §2.2](./data-retention-and-audit-policy.md#22-결제웹훅-장성재) |
 | Audit | `audit_logs` | [data-retention §3](./data-retention-and-audit-policy.md#3-audit--무엇을-남길지) |
@@ -34,7 +34,7 @@
 
 ### 근거
 
-핫딜 오픈 순간 수천 명이 동시에 결제를 시도하는 환경에서, 결제 진행 중인 재고와 실제 판매 가능한 재고를 구분하지 않으면 **오버셀**이 발생한다. 또한 Phase 4 부하 테스트 등에서 오버셀이 발생하지 않았음을 증명하기 위해 모든 재고 변동 내역을 기록하는 테이블이 필요하다.
+드롭스 오픈 순간 수천 명이 동시에 결제를 시도하는 환경에서, 결제 진행 중인 재고와 실제 판매 가능한 재고를 구분하지 않으면 **오버셀**이 발생한다. 또한 Phase 4 부하 테스트 등에서 오버셀이 발생하지 않았음을 증명하기 위해 모든 재고 변동 내역을 기록하는 테이블이 필요하다.
 
 | 테이블 | 컬럼 | 의미 | 변경 시점 |
 | --- | --- | --- | --- |
@@ -108,9 +108,9 @@ ERD:    PAYMENT.payment_key (Unique Index)
 
 ### 설계 결정
 
-- **`FAN`**: `email`, `nickname`, `created_at`만 저장. **비밀번호 컬럼 없음** — MVP 인증은 소셜 OAuth ([mvp-api § Auth](../api/mvp-api-spec.md#auth--fan-계정)).
+- **`FAN`**: `email`, `nickname`, `password_hash`(이메일 가입 시), `terms_agreed_at`, `created_at` 저장. 소셜 가입만 한 팬은 `password_hash`가 null일 수 있다. 소셜 `providerToken`은 저장하지 않는다 ([mvp-api § Auth](../api/mvp-api-spec.md#auth--fan-계정)).
 - **`PARTNER`**: 기획사(B2B). `login_id`, `password`, `company_name`, `contact_email`, `status`, `invitation_token`, `token_expired_at`. `status` 예: `PENDING` \| `APPROVED` \| `REJECTED` (Admin 입점 API는 `PARTNER` 행 대상).
-- **`ARTIST`**: `partner_id` FK, `name`, `joined_at`. 굿즈·일정·랭킹의 **앵커 엔티티**.
+- **`ARTIST`**: `partner_id` FK, `name`, `joined_at`. 굿즈·일정·커뮤니티의 **앵커 엔티티**.
 - **`ARTIST_MEMBER`**: `login_id`, `password`, `member_name`, `role` 기본값 `ROLE_ARTIST`. **피드·공지 작성 주체**.
 
 ### 근거
@@ -119,7 +119,7 @@ B2B2C에서 기획사-아티스트-멤버 계층을 DB에 명시해야 커뮤니
 
 ---
 
-## 5. 커뮤니티 — `ARTIST_SPACE`, `FEED`, `NOTICE`, `COMMENT`, `HEART`
+## 5. 커뮤니티 — `ARTIST_SPACE`, `FEED`, `NOTICE`, `COMMENT`, `HEART`, `ATTENDANCE`
 
 ### 설계 결정
 
@@ -130,10 +130,12 @@ B2B2C에서 기획사-아티스트-멤버 계층을 DB에 명시해야 커뮤니
 | `NOTICE` | 공식 공지 (제목·본문·`image_urls`) |
 | `COMMENT` | 팬(`fan_id`)이 피드에 작성. `parent_id`로 **대댓글** (self FK) |
 | `HEART` | `target_type` = `FEED` \| `COMMENT`, `target_id` — **다형 좋아요** |
+| `ATTENDANCE_EVENT` | 아티스트별 프로모션 출석 이벤트. `start_at`, `end_at`, `required_days`(기본 7), `reward_description` |
+| `ATTENDANCE_CHECK` | 팬의 일자별 출석 기록. `fan_id`, `artist_id`, `attendance_event_id`, `checked_date`, `streak_days`, `reward_candidate` |
 
 ### 근거
 
-피드·댓글·반응을 `community` 모듈 단일 바운디드 컨텍스트로 구현한다. [architecture § user vs community](../architecture/architecture.md#user-vs-community--왜-나뉘는가)
+피드·댓글·반응·출석 체크를 `community` 모듈 단일 바운디드 컨텍스트로 구현한다. 출석 7일 달성은 `reward_candidate=true`로 대상자만 산정하고, 리워드 지급/배송은 운영 정책 확정 후 별도 범위로 둔다. [architecture § user vs community](../architecture/architecture.md#user-vs-community--왜-나뉘는가)
 
 ---
 
@@ -151,17 +153,18 @@ B2B2C에서 기획사-아티스트-멤버 계층을 DB에 명시해야 커뮤니
 | 저장 | 용도 |
 | --- | --- |
 | **RDB `CART` / `CART_ITEM`** | 로그인 팬 장바구니 영속 (담기·수량 변경·조회) |
-| **Redis** | 핫딜 **대기열**·Read 캐시·랭킹 등 — [§10](#10-핫딜-대기열--redis-db-erd-미포함) · **장바구니 아님** |
+| **Redis** | 드롭스 **대기열**·Read 캐시 등 — [§10](#10-드롭스-대기열--redis-db-erd-미포함) · **장바구니 아님** |
 
 ---
 
-## 7. FAN_ARTIST · VOTE · IDOL_RANKING
+## 7. FAN_ARTIST · GOODS_POLL · VOTE
 
 | 테이블 | 설계 포인트 |
 | --- | --- |
-| `FAN_ARTIST` | 팬의 아티스트 팔로우 (`followed_at`) |
-| `VOTE` | 팬·아티스트·`round`·`month` 단위 투표 기록 (중복 방지는 앱·UK로 보장) |
-| `IDOL_RANKING` | 아티스트별 `vote_count` 집계 (`round`, `month`) |
+| `FAN_ARTIST` | 팬의 아티스트 가입 관계 (`joined_at`). 커뮤니티 쓰기·굿즈 투표 권한의 선행 조건이며 가입 시 아티스트 팬 수 집계가 증가한다 |
+| `GOODS_POLL` | 아티스트 공간 내 굿즈 투표 탭의 투표 본문. `artist_id`, `title`, `status`, `start_at`, `end_at` |
+| `GOODS_POLL_OPTION` | 굿즈 디자인·콘셉트 이미지 선택지. `poll_id`, `label`, `image_url`, `sort_order` |
+| `VOTE` | 팬·아티스트·굿즈 투표 단위 투표 기록. `poll_id`, `option_id`, `fan_id`를 저장하고, 팬 가입자만 참여 가능하며 중복 방지는 앱·UK로 보장 |
 
 ---
 
@@ -182,7 +185,9 @@ B2B2C에서 기획사-아티스트-멤버 계층을 DB에 명시해야 커뮤니
 
 ### `BANNER`
 
-홈 노출용. `exposure_order`, `is_active`, `start_at` / `end_at`로 기간·순서 제어. 비노출은 **`is_active=false`** (ERD에 `deleted_at` 없음). Admin CRUD는 `user` 모듈.
+홈 노출용. `exposure_order`, `is_active`, `start_at` / `end_at`로 기간·순서 제어. 비노출은 **`is_active=false`** (ERD에 `deleted_at` 없음). 배너는 두 종류로 구분한다:
+- **메인 배너**: 아티스트 홍보·이벤트 성격 — Admin CRUD 및 팬 화면 노출 Read 모두 `community` 모듈(정환철) 담당.
+- **스토어 배너**: 상품 프로모션·기획전 성격 — Admin CRUD 및 노출 Read 모두 `order` 모듈(형성빈) 담당.
 
 ### `RESTOCK_ALERT`
 
@@ -194,11 +199,11 @@ B2B2C에서 기획사-아티스트-멤버 계층을 DB에 명시해야 커뮤니
 
 ---
 
-## 10. 핫딜 대기열 — Redis (DB ERD 미포함)
+## 10. 드롭스 대기열 — Redis (DB ERD 미포함)
 
 ### 설계 결정
 
-대기열 **행은 RDB ERD에 두지 않는다**. F08-01 핫딜 트래픽 흡수·Access Ticket은 **Redis**에 `product_id` 단일 키 기준으로 저장한다.
+대기열 **행은 RDB ERD에 두지 않는다**. 드롭스 상품 오픈 트래픽 흡수·Access Ticket은 **Redis**에 `product_id` 단일 키 기준으로 저장한다.
 
 ### 근거 (기존 §4 WAIT_QUEUE DB안 폐기)
 

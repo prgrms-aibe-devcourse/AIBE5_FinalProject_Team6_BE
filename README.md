@@ -1,6 +1,6 @@
 # FANDROPS
 
-**K-Pop 팬덤 B2B2C 커머스·이벤트 플랫폼** — 오픈런(핫딜) 스파이크에서 **재고·결제 정합성**, **대기열·Rate Limit**, **측정 가능한 성능**을 증명하는 백엔드 포트폴리오 (5인 · 2026.05–06).
+**K-Pop 팬덤 B2B2C 커머스·이벤트 플랫폼** — 오픈런(드롭스) 스파이크에서 **재고·결제 정합성**, **대기열·Rate Limit**, **측정 가능한 성능**을 증명하는 백엔드 포트폴리오 (5인 · 2026.05–06).
 
 > 중소형 기획사에 드롭·팬미팅 운영 도구, 팬에게 공정한 선착순·안정 결제.  
 > 상세 설계: [`docs/`](docs/README.md)
@@ -15,9 +15,9 @@
 | **ICP** | 중소형 기획사(Primary) · 니치 팬덤 · 10–30대 팬(B2C) |
 | **SLO** | 오버셀·중복 결제 **0** · Write P95 **&lt;300ms** · 5xx **&lt;0.1%** |
 
-**다루는 페인:** 드롭 시 서버 다운 → 대기열·Rate Limit · 핫딜 오버셀 → DB 락/재고 선점 · 중복 결제·실패 후 재고 미복구 → 멱등·Saga·Outbox · 재입고/라이브/캘린더·랭킹 알림.
+**다루는 페인:** 드롭 시 서버 다운 → 대기열·Rate Limit · 드롭스 오버셀 → DB 락/재고 선점 · 중복 결제·실패 후 재고 미복구 → 멱등·Saga·Outbox · 재입고/라이브/캘린더 알림 · 출석 체크 · 굿즈 투표.
 
-**Not Scope (MVP):** 인앱 콘서트 예매(외부 링크만) · ERP 오프라인 재고 · 팬 등급 우선권 · 해외 배송 실시간 · Kafka(알림은 **DB Outbox**).
+**Not Scope (MVP):** [03_planning §01](docs/03_planning.html) — 인앱 좌석 예매(외부 링크만) · 복수 PG · 실시간 채팅 · 영상 자체 호스팅 · 추천/Elasticsearch · Day-1 MSA · 네이티브 앱 · 오프라인 ERP 실시간 연동 · Kafka(알림은 **DB Outbox**).
 
 ---
 
@@ -26,10 +26,10 @@
 | 영역 | 기술 | 한 줄 근거 |
 | --- | --- | --- |
 | Core | **Java 21**, **Spring Boot 3.x**, **Gradle (KTS)** | Virtual Thread·SSE/웹훅 I/O, 멀티모듈 의존성 강제 |
-| API | **REST (MVC) + SSE** | 대기열 순번(F08-01). WebSocket Not Scope |
+| API | **REST (MVC) + SSE** | 대기열 순번. WebSocket Not Scope |
 | Data | **MySQL 8 (RDS)**, **JPA + QueryDSL**, **Flyway** | 트랜잭션·`FOR UPDATE`(MVP). infra 레이어에만 JPA |
-| Cache/락 | **Redis (ElastiCache)**, **Redisson**(Phase 3) | 대기열·캐시·랭킹. MVP 재고는 MySQL 비관락 |
-| Security | **Spring Security**, **JWT**, **OAuth2**(카카오·구글), **Bucket4j** | 인가·핫딜 Rate Limit |
+| Cache/락 | **Redis (ElastiCache)**, **Redisson**(Phase 3) | 대기열·캐시. MVP 재고는 MySQL 비관락 |
+| Security | **Spring Security**, **JWT**, **OAuth2**(카카오·구글), **Bucket4j** | 인가·드롭스 Rate Limit |
 | 결제 | **토스페이먼츠**, 멱등(`tossPaymentKey` → `payment_key`) | 웹훅·실패 복구 집중 |
 | 알림 | **JavaMail** (+FCM 추후), **DB Outbox** | 발행/전송 분리. Kafka Not Scope |
 | Ops | **Prometheus/Grafana**, **k6**, **GitHub Actions**, **Nginx**, **AWS** | SLO·무중단·stg/prod 분리 |
@@ -47,12 +47,12 @@
 apps/api-server          ← Boot 진입 (지영재)
 modules/
   common
-  user          표지민    Auth · 대기열 · 알림 전송
-  notification  표지민
-  order         형성빈    주문 · 상품
+  user          표지민    Auth · 회원/입점 관리
+  notification  표지민    알림 전송
+  order         형성빈    주문 · 상품 · 배너 Admin
   inventory     형성빈    재고 동시성
-  payment       장성재    PG · 웹훅 · Saga
-  community     정환철    피드 · 캘린더 · 랭킹 · 라이브
+  payment       장성재    PG · 웹훅 · 대기열 · RateLimit · Saga
+  community     정환철    피드 · 캘린더 · 출석 · 굿즈 투표 · 라이브
 ```
 
 레이어: `*-api` → `*-application` → `*-domain` ← `*-infrastructure` (domain에 Spring/JPA 금지)

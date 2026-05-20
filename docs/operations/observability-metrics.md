@@ -4,7 +4,7 @@
 > **장애 대응:** [incident-response.md](./incident-response.md) · **SLO 근거:** 서비스 소개 — Write P95 &lt; 300ms, 5xx &lt; 0.1%
 
 MVP에서 **반드시 수집·대시보드·알람**할 메트릭.  
-핫딜(오픈런) 전 **Grafana 패널 + PagerDuty/Slack 연동** 완료를 DoD로 한다.
+드롭스(오픈런) 전 **Grafana 패널 + PagerDuty/Slack 연동** 완료를 DoD로 한다.
 
 ---
 
@@ -14,7 +14,7 @@ MVP에서 **반드시 수집·대시보드·알람**할 메트릭.
 | --- | --- | --- | --- |
 | HTTP **P95 / P99** | `http_server_requests_seconds` | 팬 **체감 성능** (주문·대기열·결제) | P1 if P95 > 300ms (Write, 10m) |
 | **5xx 비율** | `rate(http_server_requests_total{status=~"5.."})` | **안정성 SLO** 0.1% | P0 if > 1% (5m) |
-| **4xx 비율** (선택) | `status=~"4.."` | Rate limit·품절 UX 트래픽 | P2 |
+| **4xx 비율** (선택) | `status=~"4.."` | RateLimit·품절 UX 트래픽 | P2 |
 | **DB active connections** | Hikari `hikaricp_connections_active` | **커넥션 고갈** 조기 경보 | P1 if > 80% pool (5m) |
 | **DB slow query** | RDS Performance Insights / log | 락·풀스캔 | P2 |
 | **Redis memory** | `redis_memory_used_bytes` | OOM·eviction | P1 |
@@ -47,7 +47,7 @@ MVP에서 **반드시 수집·대시보드·알람**할 메트릭.
 | 결제 실패 후 일관 상태 | **&lt; 60s** | [상태 머신 SLO](../state/invariants-and-state-machines.md#43-paid-정체-재처리) |
 | 오버셀 | **0건** | 비즈니스 리포트 |
 
-부하 검증: **k6** 핫딜 시나리오 — [ADR-001](../adr/ADR-001-multi-module-monolith.md).
+부하 검증: **k6** 드롭스 시나리오 — [ADR-001](../adr/ADR-001-multi-module-monolith.md).
 
 ### 2.1 k6 · 장바구니 Phase 2 전환 트리거
 
@@ -56,7 +56,7 @@ MVP에서 **반드시 수집·대시보드·알람**할 메트릭.
 | 메트릭 (custom 권장) | 용도 | Phase 2 트리거 |
 | --- | --- | --- |
 | `fandrops_cart_item_write_seconds` (histogram) | 담기·수량 변경 P95 | P95 ≥ **주문 생성 TX P95 × 0.2** (20% 이상) |
-| `hikaricp_connections_active` / `max` | 풀 점유율 | 핫딜 구간 **> 80%** 가 **5m** 지속 |
+| `hikaricp_connections_active` / `max` | 풀 점유율 | 드롭스 구간 **> 80%** 가 **5m** 지속 |
 | `hikaricp_connections_active` | 절대값 | `maximum-pool-size` **≥ 90%** 근접 |
 
 시나리오에 **장바구니 담기 burst** + **주문 생성**을 함께 넣어 `cart_item`이 실제 병목인지 검증한다. 미충족 시 RDB 유지.
@@ -109,7 +109,7 @@ MVP에서 **반드시 수집·대시보드·알람**할 메트릭.
 | --- | --- |
 | Prometheus·Grafana·알람 라우팅 | 지영재 |
 | 커스텀 메트릭 (order, outbox, queue) | 도메인 오너 PR + 지영재 리뷰 |
-| k6 · SLO 리포트 | 지영재 + 형성빈 (핫딜 시나리오) |
+| k6 · SLO 리포트 | 지영재 + 형성빈 (드롭스 시나리오) |
 
 ---
 

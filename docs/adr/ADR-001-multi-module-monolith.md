@@ -26,7 +26,7 @@ Java 21 / Spring Boot 기반으로 구성한다.
 | Language | Java 21 (LTS) | Virtual Thread(Project Loom)로 **동시 I/O 처리 비용 감소 및 Thread 생성 부담 완화**. SSE·웹훅 등 블로킹 I/O 구간에 유리. 최신 LTS로 팀 기술 증명에 적합. |
 | Framework | Spring Boot 3.x | Java 21 Virtual Thread 공식 지원. Spring Security, Data JPA, Actuator 생태계 활용. |
 | Build | Gradle (Kotlin DSL) | 멀티모듈 서브프로젝트 **의존성 방향을 빌드 레벨에서 강제**. 잘못된 모듈 참조는 컴파일 실패로 조기 차단. |
-| API Style | REST (Spring MVC) + SSE | 대기열 순번 실시간 전달(F08-01)에 SSE 사용. WebSocket 스케일·모더레이션 부담은 Not Scope. |
+| API Style | REST (Spring MVC) + SSE | 대기열 순번 실시간 전달에 SSE 사용. WebSocket 스케일·모더레이션 부담은 Not Scope. |
 
 > **WebFlux는 Not Scope.** 팀 러닝 커브와 Spring MVC·RestDocs·기존 운영 경험을 고려해 리액티브 스택 전환은 하지 않는다. SSE 병목은 스레드 수보다 **커넥션·메모리·프록시 타임아웃** 영향이 클 수 있음을 전제로 설계한다.
 
@@ -36,7 +36,7 @@ Java 21 / Spring Boot 기반으로 구성한다.
 | --- | --- | --- |
 | RDBMS | MySQL 8.x (AWS RDS) | 주문·결제·재고 상태 정합성을 트랜잭션으로 보장. |
 | ORM | Spring Data JPA + QueryDSL | 커서 페이징·N+1 제어. **JPA는 `*-infrastructure`에만** 둔다. |
-| Cache / 대기열 | Redis (AWS ElastiCache) | 핫딜 대기열 Sorted Set, 랭킹 집계, Read 캐시. **장바구니는 RDB** — [ADR-003](./ADR-003-cart-storage-rdb-phase1.md). |
+| Cache / 대기열 | Redis (AWS ElastiCache) | 드롭스 대기열 Sorted Set, Read 캐시. **장바구니는 RDB** — [ADR-003](./ADR-003-cart-storage-rdb-phase1.md). |
 | 분산락 | Redisson (Phase 3) | **MVP:** 재고 선점은 MySQL `SELECT … FOR UPDATE` 비관락. **Phase 3:** Redis `RLock` vs DB 락 **비교 실험** 및 부하 테스트 근거 수집. |
 | Migration | Flyway | 멀티모듈 환경에서 스키마 변경 이력 버전 관리. 롤백 스크립트 운영. |
 
@@ -46,7 +46,7 @@ Java 21 / Spring Boot 기반으로 구성한다.
 | --- | --- | --- |
 | 인증 | Spring Security + JWT | 이메일·소셜(카카오·구글) 로그인(F01-01~02). Access/Refresh Token 분리. |
 | 소셜 로그인 | Spring OAuth2 Client | 카카오·구글 OAuth2 표준 흐름. Spring Security와 통합. |
-| Rate Limiting | Bucket4j (Redis 연동) | 핫딜 오픈 구간 매크로·비정상 트래픽 방어(F08-01). |
+| Rate Limiting | Bucket4j (Redis 연동) | 드롭스 오픈 구간 매크로·비정상 트래픽 방어. 정책 오너는 장성재, Nginx/ALB 운영값은 지영재 리뷰. |
 | 멱등성 | Idempotency Key (custom) | `PAYMENT.payment_key` Unique Index와 연동. 웹훅 재전송 대응. |
 
 ### 결제 · 외부 연동
@@ -61,7 +61,7 @@ Java 21 / Spring Boot 기반으로 구성한다.
 | 구분 | 기술 | 선택 근거 |
 | --- | --- | --- |
 | 모니터링 | Prometheus + Grafana | Write P95 &lt; 300ms, 5xx &lt; 0.1% SLO. Actuator → Prometheus. |
-| 부하 테스트 | k6 | 핫딜 동시 ~1k 스파이크. 오버셀 0·락 전략 비교표. |
+| 부하 테스트 | k6 | 드롭스 동시 ~1k 스파이크. 오버셀 0·락 전략 비교표. |
 | Cloud | AWS (EC2 · RDS · ElastiCache) | stg/prod 분리, VPC·보안그룹. |
 | CI/CD | GitHub Actions | PR 머지 → 빌드·테스트·배포. 무중단·롤백 검증. |
 | Reverse Proxy | Nginx | SSL 종단, Blue/Green 전환. |
@@ -152,7 +152,7 @@ order-infrastructure  OrderJpaEntity + OrderMapper
 
 ArchUnit(선택): `..domain..` 패키지가 `org.springframework`, `jakarta.persistence` import 시 테스트 실패.
 
-### 모듈 간 호출 흐름 (예: 핫딜 주문·재고 선점)
+### 모듈 간 호출 흐름 (예: 드롭스 주문·재고 선점)
 
 폴더 구조만으로는 런타임 협업이 보이지 않으므로, 대표 유스케이스의 **호출 방향**을 명시한다.
 
@@ -196,9 +196,9 @@ Client
 | 담당자 | Gradle 모듈 | 핵심 책임 |
 | --- | --- | --- |
 | 지영재 | `apps/api-server` · 플랫폼 | AWS · CI/CD · Prometheus/Grafana · k6 |
-| 표지민 | `user` · `notification` | Auth · 대기열 · 알림 전송 |
-| 정환철 | `community` | 피드 · 댓글 · 랭킹 · 라이브 |
-| 형성빈 | `order` · `inventory` | 상품 · 주문 · 장바구니 · 핫딜 재고 (결제 PG는 비범위) |
+| 표지민 | `user` · `notification` | Auth · 알림 전송 |
+| 정환철 | `community` | 피드 · 댓글 · 출석 · 굿즈 투표 · 라이브 |
+| 형성빈 | `order` · `inventory` | 상품 · 주문 · 장바구니 · 드롭스 재고 (결제 PG는 비범위) |
 | 장성재 | `payment` | 토스 · 웹훅 · 멱등 · 주문-결제 E2E·보상 |
 
 ---

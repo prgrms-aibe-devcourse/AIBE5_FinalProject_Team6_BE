@@ -2,7 +2,7 @@
 
 > **관련:** [API 계약](../api/api-contract.md) · [상태 머신](../state/invariants-and-state-machines.md) · [결제 시퀀스](../sequence/payment-flow-reason.md) · [데이터 보관·Audit](../erd/data-retention-and-audit-policy.md) · [ADR-001](../adr/ADR-001-multi-module-monolith.md)
 
-K-Pop **오픈런(핫딜)** 환경에서 외부 의존성(Redis, PG, DB) 장애 시 **정합성 우선** 동작을 정의한다.  
+K-Pop **오픈런(드롭스)** 환경에서 외부 의존성(Redis, PG, DB) 장애 시 **정합성 우선** 동작을 정의한다.  
 목표: 오버셀·중복 결제 **0건** 유지, 장애 시 **fail-fast**로 피해 반경 축소.
 
 ---
@@ -11,11 +11,12 @@ K-Pop **오픈런(핫딜)** 환경에서 외부 의존성(Redis, PG, DB) 장애 
 
 | 상황 | 정책 (MVP) | 사용자 / 시스템 영향 | 담당 |
 | --- | --- | --- | --- |
-| **Redis 다운** | **Fail-fast**: 대기열·Rate Limit 비활성 + Nginx/ALB **트래픽 제한** 강화 | `503` 또는 `RATE_LIMITED` 유사 메시지 — *「일시적으로 입장이 제한됩니다」* | 표지민 · 지영재 |
+| **Redis 다운** | **Fail-fast**: 대기열·RateLimit 비활성 + Nginx/ALB **트래픽 제한** 강화 | `503` 또는 `RATE_LIMITED` 유사 메시지 — *「일시적으로 입장이 제한됩니다」* | 장성재 · 지영재 |
 | **Outbox Worker 중단** (MVP: DB Outbox, **Kafka Not Scope**) | **Outbox 적재는 지속**, consumer 재기동 시 **미발행 건 재전송** | 결제·알림 **확정 지연** 가능. `GET /orders/{id}` 등 **조회는 가능** | 표지민 · 장성재 |
 | **토스 결제 API timeout** | 주문 `ORDER.status` = **`RESERVED`** 유지 ([§2](#2-결제-대기-상태-명칭)) · **15분** 후 [만료 Job](../state/invariants-and-state-machines.md#41-reserved-결제-타임아웃-상세) | *「결제 확인 중입니다」* · 만료 시 *「결제 시간이 초과되어 주문이 취소되었습니다」* (`retryable: false`) | 장성재 |
 | **웹훅 중복** | `tossPaymentKey` (**idempotency**) 로 무해화 — [P-1](../state/invariants-and-state-machines.md#33-payment-불변조건) | 중복 결제·이중 재고 차감 **방지** | 장성재 |
-| **DB 커넥션 고갈** | 대기열 **입장 제한** 강화 · 일부 write `429` `RATE_LIMITED` | 핫딜 **공정성** 유지(선착순 붕괴 방지) | 지영재 · 형성빈 |
+| **RateLimit 오탐·과차단** | 결제/주문 진입 보호 정책은 장성재가 조정, Nginx/ALB 임계값은 지영재가 반영 | 정상 팬 주문 진입 지연 가능. `429 RATE_LIMITED` 비율로 탐지 | 장성재 · 지영재 |
+| **DB 커넥션 고갈** | 대기열 **입장 제한** 강화 · 일부 write `429` `RATE_LIMITED` | 드롭스 **공정성** 유지(선착순 붕괴 방지) | 지영재 · 형성빈 |
 | **캐시 miss 폭증** | **SingleFlight** + TTL **jitter** | DB 보호, 조회 P95 악화 완화 | 정환철 · 형성빈 |
 | **MySQL primary 불가** | **Fail-fast** — 주문·결제 write 중단, read-only(가능 시) 또는 503 | 전면 장애 — [P0](./incident-response.md#2-장애-등급) | 지영재 |
 
@@ -47,7 +48,7 @@ Notion 초안의 `PAYMENT_PENDING`은 본 프로젝트 **ORDER.status = `RESERVE
 ```
 Health: Redis UNAVAILABLE
   → 대기열 join/SSE: 즉시 503 + fail-fast (폴백으로 DB 대기열 쓰지 않음 — MVP)
-  → Rate limit: in-memory 제한적 방어 또는 Nginx limit_req
+  → RateLimit: in-memory 제한적 방어 또는 Nginx limit_req (정책 오너 장성재, 운영 오너 지영재)
   → Alert: P1 (incident-response)
 ```
 
@@ -60,7 +61,7 @@ Health: Redis UNAVAILABLE
 | 단계 | 동작 |
 | --- | --- |
 | 장애 중 | 도메인 TX 커밋 + outbox INSERT **성공**까지는 동기 |
-| 복구 후 | `OutboxPublisher`가 `pending` 건 재전송 · [30일 purge](../erd/data-retention-and-audit-policy.md#23-대기열--알림-표지민) |
+| 복구 후 | `OutboxPublisher`가 `pending` 건 재전송 · [30일 purge](../erd/data-retention-and-audit-policy.md#23-대기열--알림-장성재--표지민) |
 | 모니터링 | `outbox_pending_count` > 임계 → P1 |
 
 결제 **웹훅 처리**는 Outbox와 **별도 동기 경로**(Payment Webhook Receiver) — 웹훅 실패 시 [FAILED→CANCELLED Saga](../state/invariants-and-state-machines.md#51-결제-실패-reserved--failed--cancelled).
@@ -129,7 +130,7 @@ API 응답 예: [api-contract § PAYMENT_FAILED / retryable](../api/api-contract
 | 장애 | HTTP / `error.code` | `retryable` |
 | --- | --- | --- |
 | Redis/진입 불가 | 503 / `INTERNAL_ERROR` | true |
-| Rate limit | 429 / `RATE_LIMITED` | true |
+| RateLimit | 429 / `RATE_LIMITED` | true |
 | 재고 경쟁 패배 | 409 / `RESERVE_FAILED` | true |
 | 전체 품절 | 409 / `OUT_OF_STOCK` | false |
 | 대기열 토큰 만료 | 403 / `INVALID_QUEUE_TICKET` | false |
@@ -147,7 +148,7 @@ API 응답 예: [api-contract § PAYMENT_FAILED / retryable](../api/api-contract
 - [ ] `ORDER` in `FAILED` > 5분 건 0건
 - [ ] `reserved_qty` vs 주문 합계 리컨실
 - [ ] 5xx < 0.1%, Write P95 < 300ms ([SLO](./observability-metrics.md#2-slo-목표-mvp))
-- [ ] 핫딜 smoke: queue join → order → (test PG) → COMPLETED
+- [ ] 드롭스 smoke: queue join → order → (test PG) → COMPLETED
 
 ---
 

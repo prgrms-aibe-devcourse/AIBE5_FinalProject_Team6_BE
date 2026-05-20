@@ -199,7 +199,7 @@ ORDER.status = RESERVED AND reserved_at + payment-timeout < now()
 
 ## 6. WAIT_QUEUE 상태 머신
 
-저장: **Redis** (`product_id` 단일 키). DB ERD 미포함 — [erd-design §10](../erd/erd-design.md#10-핫딜-대기열--redis-db-erd-미포함)
+저장: **Redis** (`product_id` 단일 키). DB ERD 미포함 — [erd-design §10](../erd/erd-design.md#10-드롭스-대기열--redis-db-erd-미포함)
 
 ### 6.1 허용 전이
 
@@ -216,10 +216,10 @@ ORDER.status = RESERVED AND reserved_at + payment-timeout < now()
 | ID | 불변조건 |
 | --- | --- |
 | **W-1** | `DONE` / `EXPIRED` 는 **Terminal** (재활성화는 신규 join) |
-| **W-2** | `DONE` ⟹ 주문 성공 여부는 **`ORDER.status`만** 본다 ([ERD §10 허용값](../erd/erd-design.md#10-핫딜-대기열--redis-db-erd-미포함)) |
+| **W-2** | `DONE` ⟹ 주문 성공 여부는 **`ORDER.status`만** 본다 ([ERD §10 허용값](../erd/erd-design.md#10-드롭스-대기열--redis-db-erd-미포함)) |
 | **W-3** | `PROCESSING` ⟹ 유효한 Access Ticket 1개 (fan × product) |
 
-담당: **표지민** (`user`)
+담당: **장성재** (`payment` Traffic Gate)
 
 ---
 
@@ -272,7 +272,7 @@ ORDER.status = RESERVED AND reserved_at + payment-timeout < now()
 
 | ID | 설명 | 관련 문서 |
 | --- | --- | --- |
-| **X-1** | 핫딜 주문은 유효 `accessTicket` 없이 생성 불가 | [API 대기열](../api/mvp-api-spec.md#wait-queue-대기열) |
+| **X-1** | **대기열 대상 상품** 주문은 유효 `accessTicket` 없이 생성 불가 | [API 대기열](../api/mvp-api-spec.md#wait-queue-대기열) |
 | **X-2** | `orderPaymentKey` ↔ `orderId` 1:1 (미결 `PENDING` 결제 세션) | [API 결제 식별자](../api/mvp-api-spec.md#결제-식별자-orderpaymentkey--tosspaymentkey) |
 | **X-3** | 웹훅·confirm은 **클라이언트가 상태를 바꿀 수 없음** | [API confirm 비노출](../api/mvp-api-spec.md#confirm--fail-api-비노출) |
 | **X-4** | `OUT_OF_STOCK` vs `RESERVE_FAILED` 혼용 금지 | [API ERR_4004/4005](../api/mvp-api-spec.md#err_4004-vs-err_4005) |
@@ -287,7 +287,7 @@ ORDER.status = RESERVED AND reserved_at + payment-timeout < now()
 | `order` | 형성빈 | 상태 전이 가드, `POST /orders` 원자 reserve, 취소·타임아웃 |
 | `payment` | 장성재 | 웹훅 멱등, `PAID`/`FAILED` 전이, Saga orchestration |
 | `inventory` | 형성빈 | reserve / confirm / restore 포트, I-1~I-3 |
-| `user` | 표지민 | 대기열·Access Ticket TTL, W-1~W-3 |
+| `payment` | 장성재 | 대기열·Access Ticket TTL, W-1~W-3 |
 | `notification` | 표지민 | 이벤트 재시도·DLQ |
 | `api-server` / SRE | 지영재 | `FAILED`·`PAID` 정체 알람, `/admin/monitoring` |
 

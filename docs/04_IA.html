@@ -1,0 +1,979 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FANDROPS — 정보 구조도 (IA)</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --text-primary: #111111;
+  --text-secondary: #555555;
+  --text-muted: #999999;
+  --border: #e5e5e5;
+  --bg: #ffffff;
+  --bg-subtle: #f8f8f6;
+  --bg-dark: #111111;
+  --max: 1000px;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: 'Noto Sans KR', sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+.page {
+  max-width: var(--max);
+  margin: 0 auto;
+  padding: 0 2rem 5rem;
+}
+
+.topbar {
+  border-bottom: 1px solid var(--border);
+  padding: 1.25rem 0;
+  margin-bottom: 3rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.topbar-left {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.toc {
+  display: flex;
+  gap: 8px;
+}
+.toc a {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-decoration: none;
+  padding: 3px 8px;
+  border-radius: 3px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+}
+
+/* ── Doc series nav ── */
+.topbar-right { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.doc-nav { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.doc-nav a {
+  font-family: 'DM Sans', sans-serif; font-size: 11px; font-weight: 500;
+  color: var(--text-secondary); text-decoration: none; padding: 4px 10px;
+  border-radius: 3px; border: 1px solid var(--border); background: var(--bg-subtle);
+}
+.doc-nav a:hover { background: var(--bg-dark); color: #fff; border-color: var(--bg-dark); }
+.doc-nav a.current { background: var(--bg-dark); color: #fff; border-color: var(--bg-dark); cursor: default; }
+.related-docs {
+  margin: 2.5rem 0 0; padding: 1rem 1.25rem; border: 1px solid var(--border);
+  border-radius: 4px; background: var(--bg-subtle); font-size: 13px; line-height: 1.8;
+}
+.related-docs .related-label {
+  font-family: 'DM Sans', sans-serif; font-size: 10px; font-weight: 600;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted);
+  display: block; margin-bottom: 0.35rem;
+}
+.related-docs a { color: var(--text-secondary); text-decoration: none; font-weight: 500; margin-right: 1rem; }
+.related-docs a:hover { color: var(--text-primary); text-decoration: underline; }
+.body-text a.doc-link, .req-text a.doc-link, .why-text a.doc-link,
+.diff-content-desc a.doc-link, .notscope-intro a.doc-link {
+  color: var(--text-primary); font-weight: 500;
+}
+
+.topbar-right{display:flex;flex-direction:column;align-items:flex-end;gap:8px;}
+.toc a:hover {
+  background: var(--bg-dark);
+  color: #fff;
+  border-color: var(--bg-dark);
+}
+
+.page-title {
+  margin-bottom: 3rem;
+}
+.page-title-eyebrow {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+}
+.page-title h1 {
+  font-family: 'DM Sans', sans-serif;
+  font-size: clamp(1.6rem, 4vw, 2.2rem);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  color: var(--text-primary);
+}
+.page-title h1 span {
+  color: var(--text-muted);
+  font-weight: 300;
+}
+
+.section { margin-bottom: 3.5rem; }
+
+.section-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+.section-num {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+}
+.section-title {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+.section-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+.legend {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 2rem;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.legend i {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.callout {
+  background: var(--bg-subtle);
+  border-left: 3px solid var(--text-primary);
+  border-radius: 0 4px 4px 0;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+.callout strong { color: var(--text-primary); font-weight: 500; }
+.callout.warn {
+  border-left-color: #d97706;
+}
+
+.connector-down {
+  display: flex;
+  justify-content: center;
+  margin: 1rem 0 2rem;
+}
+.connector-down .line {
+  width: 1px;
+  height: 30px;
+  background: var(--border);
+  position: relative;
+}
+.connector-down .line::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 4px solid transparent;
+  border-top-color: var(--border);
+}
+
+.hdr {
+  background: var(--bg-dark);
+  color: #fff;
+  font-weight: 600;
+  text-align: center;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.hdr.secondary {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+}
+.hdr.outline {
+  background: #fff;
+  color: var(--text-primary);
+  border: 1px solid var(--text-primary);
+}
+
+.node {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 10px 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.node strong {
+  display: block;
+  font-size: 13px;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+.node ol {
+  margin: 6px 0 0 1.2em;
+  color: var(--text-secondary);
+}
+.node ol li { margin: 2px 0; }
+
+.fid {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: Consolas, monospace;
+}
+
+.badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 5px;
+  border-radius: 2px;
+  margin-bottom: 4px;
+  vertical-align: middle;
+}
+.badge.link { background: var(--bg-subtle); border: 1px solid var(--border); color: var(--text-secondary); }
+.badge.core { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
+.badge.out { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+
+.onboarding {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.auth-branch {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+  width: 100%;
+  margin-top: 1rem;
+  position: relative;
+  padding-top: 1rem;
+}
+.auth-branch::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 15%;
+  right: 15%;
+  height: 1px;
+  background: var(--border);
+}
+.auth-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.auth-col .h-connector {
+  width: 1px;
+  height: 12px;
+  background: var(--border);
+  margin: 0 auto;
+}
+.v-arrow {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+  position: relative;
+  margin: 0 auto;
+}
+.v-arrow::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 4px solid transparent;
+  border-top-color: var(--border);
+}
+
+.post-login {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+.side-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+}
+.promo-box {
+  border: 1px dashed var(--border);
+  background: var(--bg-subtle);
+  border-radius: 4px;
+  padding: 12px;
+  text-align: center;
+  width: 100%;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.tabs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+.tab-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.tab-col .node.nested {
+  margin-left: 8px;
+  border-left: 2px solid var(--text-primary);
+  background: var(--bg-subtle);
+}
+.sub-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+  margin: 4px 0 0 8px;
+}
+
+.artist-space {
+  border: 1px solid var(--text-primary);
+  border-radius: 6px;
+  padding: 1.5rem;
+  background: var(--bg);
+}
+.artist-tabs {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 10px;
+}
+.artist-tabs .hdr { font-size: 11px; padding: 6px 4px; }
+.artist-extra {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px dashed var(--border);
+}
+
+.commerce-flow {
+  display: grid;
+  grid-template-columns: 1fr 24px 1fr 24px 1fr 24px 1fr;
+  align-items: stretch;
+  gap: 0;
+}
+.flow-box {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 12px;
+  background: var(--bg-subtle);
+}
+.flow-box h3 {
+  font-size: 12px;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+.flow-box.step-1 { border-color: var(--border); background: var(--bg-subtle); }
+.flow-box.step-2 { border-color: var(--border); background: #fff; }
+.flow-box.step-3 { border-color: var(--text-primary); background: var(--bg-subtle); }
+.flow-box.step-4 { border-color: var(--border); background: #fff; }
+.flow-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.admin-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.map-wrap { overflow-x: auto; margin-top: 1rem; }
+table.map {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+table.map th {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--text-primary);
+  padding: 10px;
+  text-align: left;
+}
+table.map td {
+  border-bottom: 1px solid var(--border);
+  padding: 10px;
+  vertical-align: top;
+  color: var(--text-secondary);
+}
+table.map tr:nth-child(even) td { background: var(--bg-subtle); }
+
+.arch-diagram {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 16px;
+  font-size: 13px;
+}
+.arch-box {
+  border-radius: 4px;
+  padding: 12px;
+  text-align: center;
+  border: 1px solid var(--border);
+}
+.arch-box.gnb {
+  background: var(--bg-subtle);
+  border-color: var(--text-primary);
+}
+.arch-box.artist {
+  background: #fff;
+  border-color: var(--text-primary);
+}
+.arch-arrow {
+  font-size: 16px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+@media (max-width: 900px) {
+  .artist-tabs { grid-template-columns: repeat(4, 1fr); }
+  .tabs { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 700px) {
+  .post-login { grid-template-columns: 1fr; }
+  .arch-diagram { grid-template-columns: 1fr; }
+  .commerce-flow { grid-template-columns: 1fr; gap: 8px; }
+  .flow-arrow { transform: rotate(90deg); margin: 4px auto; }
+}
+@media (max-width: 600px) {
+  .page { padding: 0 1.25rem 4rem; }
+  .artist-tabs { grid-template-columns: repeat(2, 1fr); }
+  .tabs { grid-template-columns: 1fr; }
+  .admin-grid { grid-template-columns: 1fr; }
+}
+
+.footer {
+  border-top: 1px solid var(--border); padding-top: 2rem; margin-top: 3rem;
+  display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;
+}
+.footer-project { font-family: 'DM Sans', sans-serif; font-size: 12px; color: var(--text-muted); }
+.footer-nav { font-size: 12px; color: var(--text-muted); }
+.footer-nav a { color: var(--text-secondary); text-decoration: none; font-weight: 500; }
+
+</style>
+</head>
+<body>
+<div class="page">
+
+  <nav class="topbar" aria-label="문서 탐색">
+    <div class="topbar-left">FANDROPS · 정보 구조도 (IA)</div>
+    <div class="topbar-right">
+      <nav class="doc-nav" aria-label="문서 시리즈">
+        <a href="01_service_intro.html">01 서비스</a>
+        <a href="02_research.html">02 리서치</a>
+        <a href="03_planning.html">03 기획</a>
+        <a href="04_IA.html" class="current">04 IA</a>
+      </nav>
+      <div class="toc" aria-label="페이지 목차">
+      <a href="#s1">① 온보딩</a>
+      <a href="#s2">② 진입</a>
+      <a href="#s3">③ GNB</a>
+      <a href="#s4">④ 아티스트 홈</a>
+      <a href="#s5">⑤ 결제</a>
+      <a href="#s6">⑥ Admin</a>
+      <a href="#s7">⑦ 매핑표</a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="page-title">
+    <div class="page-title-eyebrow">FANDROPS · Information Architecture</div>
+    <h1>Information Architecture <span>/ 정보 구조도</span></h1>
+  </div>
+
+  <aside class="related-docs" style="margin-bottom:2rem;">
+    <span class="related-label">관련 문서</span>
+    <a href="01_service_intro.html">01 서비스</a>
+    <a href="02_research.html">02 리서치</a>
+    <a href="03_planning.html">03 Not Scope · KPI</a>
+    <a href="requirements/mvp-functional-requirements.md">§3 기능 요구사항</a>
+    <a href="api/mvp-api-spec.md">MVP API</a>
+    <a href="erd/erd-design.md">ERD</a>
+    <a href="architecture/architecture.md">아키텍처</a>
+  </aside>
+
+  <div class="legend">
+    <span><i style="background:var(--bg-dark)"></i> 팬 앱 / GNB / 공통</span>
+    <span><i style="background:var(--bg-subtle); border:1px solid var(--border)"></i> 아티스트 홈 / 운영</span>
+    <span><i style="background:var(--bg-subtle); border:1px dashed var(--border)"></i> Admin 백오피스</span>
+    <span><span class="badge link">바로가기</span> GNB 요약·탐색</span>
+    <span><span class="badge core">핵심</span> 실제 팬 경험 화면</span>
+    <span class="fid">Fxx-xx = 기능 ID (§3 기준)</span>
+  </div>
+
+  <!-- ARCHITECTURE OVERVIEW -->
+  <section class="section" id="arch">
+    <div class="section-header">
+      <span class="section-num">구조</span>
+      <span class="section-title">앱 구조 한눈에 보기</span>
+    </div>
+    <div class="arch-diagram">
+      <div class="arch-box gnb">
+        <strong>GNB 4탭</strong><br />
+        홈 · 커뮤니티 · 스토어 · 더보기<br />
+        <span style="color:var(--text-muted); font-size:12px;">플랫폼 탐색 · 알림 · 바로가기</span>
+      </div>
+      <div class="arch-arrow">→<br /><small style="font-size:11px; color:var(--text-muted);">아티스트 선택</small></div>
+      <div class="arch-box artist">
+        <strong>아티스트 홈 (F03-01)</strong><br />
+        피드 · 프로필 · 투표 · 미디어 · 공지 · 일정 · 출석<br />
+        <span style="color:var(--text-muted); font-size:12px;">위버스형 아티스트 전용 공간 · F03-01</span>
+      </div>
+    </div>
+    <div class="callout">
+      <strong>중복 구조가 아닙니다.</strong> GNB 「커뮤니티·스토어」는 <em>전역 탐색</em>이고, 글쓰기·투표·출석 등은 <strong>④ 아티스트 홈 7탭(F03-01)</strong>에서만 동작합니다.
+      <strong>상품 구매(F04)</strong>는 GNB <strong>③ 스토어</strong> 독립 공간 — 아티스트 홈에 「상점」탭 없음. (<a href="requirements/mvp-functional-requirements.md">§3 기능 요구사항</a>)
+    </div>
+  </section>
+
+  <!-- S1 ONBOARDING -->
+  <section class="section" id="s1">
+    <div class="section-header">
+      <span class="section-num">①</span>
+      <span class="section-title">온보딩 · 인증</span>
+      <span class="section-sub">F01 · Fan</span>
+    </div>
+
+    <div class="onboarding">
+      <div class="node" style="text-align:center; max-width:200px"><strong>스플래시</strong></div>
+      <div class="v-arrow"></div>
+      <div class="node" style="text-align:center; max-width:200px"><strong>튜토리얼</strong>서비스 소개</div>
+      <div class="v-arrow"></div>
+
+      <div class="auth-branch">
+        <div class="auth-col">
+          <div class="h-connector"></div>
+          <div class="hdr">회원가입</div>
+          <div class="node">
+            <strong>정보 입력 · 약관 동의</strong>
+            <ol>
+              <li>이메일 · 비밀번호 · 닉네임</li>
+              <li>이용약관 · 개인정보 수집</li>
+            </ol>
+            <span class="fid">F01-01</span>
+          </div>
+          <div class="node"><strong>이메일 인증</strong><span class="fid">F01-01</span></div>
+        </div>
+
+        <div class="auth-col">
+          <div class="h-connector"></div>
+          <div class="hdr">로그인</div>
+          <div class="node"><strong>이메일 로그인</strong><span class="fid">F01-01</span></div>
+          <div class="node"><strong>소셜 로그인</strong>카카오 · 구글<span class="fid">F01-02</span></div>
+        </div>
+
+        <div class="auth-col">
+          <div class="h-connector"></div>
+          <div class="hdr secondary">비밀번호 찾기</div>
+          <div class="node">
+            <strong>임시 링크 / 메일 발송</strong>
+            이메일 인증 후 새 비밀번호 설정
+            <span class="fid">F01-03</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="connector-down"><div class="line"></div></div>
+
+  <!-- S2 POST LOGIN -->
+  <section class="section" id="s2">
+    <div class="section-header">
+      <span class="section-num">②</span>
+      <span class="section-title">로그인 후 진입</span>
+    </div>
+
+    <div class="post-login">
+      <div class="side-flow">
+        <div class="hdr outline">운영자/파트너 (Partner)</div>
+        <div class="node">
+          <strong>입점 신청서 작성</strong>
+          회사명, 사업자번호, 아티스트 정보 등
+          <span class="fid">F02-01</span>
+        </div>
+        <div class="v-arrow"></div>
+        <div class="node">
+          <strong>심사 통과 시 공간 생성 (F03-01)</strong>
+          7탭(피드·프로필·투표·미디어·공지·일정·출석) + 메일 알림
+        </div>
+      </div>
+
+      <div class="side-flow">
+        <div class="hdr">일반 사용자 (Fan)</div>
+        <div class="node">
+          <strong>GNB 메인 홈 진입</strong>
+          통합 홈 화면 노출
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="connector-down"><div class="line"></div></div>
+
+  <!-- S3 GNB -->
+  <section class="section" id="s3">
+    <div class="section-header">
+      <span class="section-num">③</span>
+      <span class="section-title">메인 네비게이션 (GNB 4탭)</span>
+      <span class="section-sub">탐색 · 바로가기</span>
+    </div>
+
+    <div class="tabs">
+      <div class="tab-col">
+        <div class="hdr">홈</div>
+        <div class="node">
+          <span class="badge core">핵심</span>
+          <strong>알림센터</strong>
+          새 글 · 댓글답글 · 구매 성공 등
+          <span class="fid">F03-04</span>
+        </div>
+        <div class="node">
+          <span class="badge core">핵심</span>
+          <strong>메인 배너</strong>
+          아티스트 홍보·기획전 (환철 담당)
+          <span class="fid">F04-03</span>
+        </div>
+        <div class="node">
+          <span class="badge link">바로가기</span>
+          <strong>아티스트 검색/탐색</strong>
+          공간 목록 노출
+          <span class="fid">F03-01</span>
+        </div>
+        <div class="node">
+          <span class="badge link">바로가기</span>
+          <strong>가입 아티스트 목록</strong>
+          내 활동 공간 리스트
+          <span class="fid">F07-01</span>
+        </div>
+        <p class="sub-label">▼ 아티스트 홈으로</p>
+        <div class="node nested">
+          <strong>프로필 · 외부링크</strong>
+          일정 정보 및 링크 노출
+          <span class="fid">F02-03</span>
+        </div>
+        <div class="node nested">
+          <strong>팬 가입 모달</strong>
+          글작성/투표 전 선행 가입
+          <span class="fid">F01-04</span>
+        </div>
+      </div>
+
+      <div class="tab-col">
+        <div class="hdr">커뮤니티 · 일정</div>
+        <div class="node">
+          <span class="badge link">바로가기</span>
+          <strong>가입 아티스트 피드</strong>
+          → ④ 아티스트 홈
+        </div>
+        <div class="node">
+          <span class="badge link">바로가기</span>
+          <strong>행사 · 티켓 안내</strong>
+          팬미팅, 외부 예매 링크 연동
+          <span class="fid">F05-01, 03</span>
+        </div>
+      </div>
+
+      <div class="tab-col">
+        <div class="hdr">스토어</div>
+        <div class="node">
+          <strong>스토어 탐색</strong>
+          아티스트·상품 (팬가입 수 정렬)
+          <span class="fid">F04-01</span>
+        </div>
+        <div class="node">
+          <span class="badge link">바로가기</span>
+          <strong>상시 · 드롭스 목록</strong>
+          전체 상품 브라우징
+          <span class="fid">F04-01,02</span>
+        </div>
+        <div class="node">
+          <span class="badge core">핵심</span>
+          <strong>상품 상세 · 주문서</strong>
+          RDB 장바구니 기반 주문서
+          <span class="fid">F04-04</span>
+        </div>
+        <div class="node">
+          <strong>재입고 알림 신청</strong>
+          SMS/알림톡 발송 예약
+          <span class="fid">F04-05</span>
+        </div>
+      </div>
+
+      <div class="tab-col">
+        <div class="hdr">더보기</div>
+        <div class="node"><strong>내 정보 수정</strong>이메일 · 비밀번호 변경</div>
+        <div class="node"><strong>가입/활동 내역</strong>마이페이지 히스토리<span class="fid">F07-01</span></div>
+        <div class="node"><strong>주문·결제 내역</strong>영수증 확인 및 결제 복구<span class="fid">F07-02</span></div>
+        <div class="node"><strong>알림 설정</strong>푸시 온/오프<span class="fid">F03-04</span></div>
+        <div class="node"><strong>공지사항 / 서비스 정책</strong></div>
+        <div class="node" style="border-color:var(--bg-dark)">
+          <strong>입점 신청서 제출</strong>
+          <span class="fid">F02-01</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- S4 ARTIST HOME -->
+  <section class="section artist-space" id="s4">
+    <div class="section-header">
+      <span class="section-num">④</span>
+      <span class="section-title" style="color:var(--text-primary)">아티스트 홈 (F03-01) — Store 제외</span>
+      <span class="section-sub">F03-01</span>
+    </div>
+
+    <p class="sub-label" style="margin:0 0 10px; color:var(--text-muted); font-size:12px;">
+      §3 F03-01 탭 순서: 피드 · 프로필 · 투표 · 미디어 · 공지 · 일정 · 출석
+    </p>
+    <div class="artist-tabs">
+      <div>
+        <div class="hdr">피드</div>
+        <div class="node" style="margin-top:6px">
+          <span class="badge core">핵심</span>
+          <ol>
+            <li>게시글 작성·조회 (텍스트+이미지)</li>
+            <li>댓글 · 좋아요 · 아티스트 답글</li>
+          </ol>
+          <span class="fid">F03-02, 03</span>
+        </div>
+      </div>
+      <div>
+        <div class="hdr">프로필</div>
+        <div class="node" style="margin-top:6px">
+          아티스트 소개 · 외부 링크(홈/유튜브/인스타)
+          <span class="fid">F02-03</span>
+        </div>
+      </div>
+      <div>
+        <div class="hdr">투표</div>
+        <div class="node" style="margin-top:6px">
+          굿즈 디자인·콘셉트 투표 (팬 가입자 전용)
+          <span class="fid">F03-08</span>
+        </div>
+      </div>
+      <div>
+        <div class="hdr">미디어</div>
+        <div class="node" style="margin-top:6px">
+          라이브 시작 알림 · 유튜브/방송 링크 임베드
+          <span class="fid">F03-06</span>
+        </div>
+      </div>
+      <div>
+        <div class="hdr">공지</div>
+        <div class="node" style="margin-top:6px">
+          아티스트 공지 목록 · 상세
+          <span class="fid">F03-01</span>
+        </div>
+      </div>
+      <div>
+        <div class="hdr">일정</div>
+        <div class="node" style="margin-top:6px">
+          공지·라이브·행사·오픈 일정 (아티스트별)
+          <span class="fid">F03-05, F05-01</span>
+        </div>
+      </div>
+      <div>
+        <div class="hdr">출석</div>
+        <div class="node" style="margin-top:6px">
+          출석 체크 · 7일 달성 리워드 대상자 산정
+          <span class="fid">F03-07</span>
+        </div>
+      </div>
+    </div>
+    <div class="artist-extra callout" style="margin-top:1rem; font-size:13px;">
+      <strong>Store(F04)는 본 화면에 없음.</strong> 상시·드롭스·장바구니·주문은 GNB <strong>③ 스토어</strong> (F04-01~05).
+    </div>
+  </section>
+
+  <!-- S5 PAYMENT -->
+  <section class="section" id="s5">
+    <div class="section-header">
+      <span class="section-num">⑤</span>
+      <span class="section-title">드롭스 · 결제 흐름 (시간순)</span>
+    </div>
+
+    <div class="commerce-flow">
+      <div class="flow-box step-1">
+        <h3>① 오픈 · 대기열</h3>
+        <div class="node" style="border:none; padding:0; background:transparent">
+          대기열 진입제어 및 RateLimit 정책 (Access Ticket 발급 및 Nginx 보호)
+        </div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box step-2">
+        <h3>② 주문 · 결제창</h3>
+        <ol style="margin-left:1.2em; font-size:0.76rem; color:var(--text-secondary)">
+          <li>주문서 생성 (`RDB 장바구니` 데이터 정리)</li>
+          <li><strong>결제창 노출 (토스 PG)</strong></li>
+          <li>결제 상태 임시 저장 및 멱등성 검증</li>
+        </ol>
+        <span class="fid">F04-04, F06-01~03</span>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box step-3">
+        <h3>③ 웹훅 · 정합성</h3>
+        <ol style="margin-left:1.2em; font-size:0.76rem; color:var(--text-secondary)">
+          <li>토스 웹훅 수신 (PG ➡ 서버)</li>
+          <li>주문 완료 승인 및 재고 차감</li>
+          <li>실패/취소 시 주문 복구 (Saga)</li>
+        </ol>
+        <span class="fid">F06-02, 03</span>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box step-4">
+        <h3>④ 완료</h3>
+        <div class="node" style="border:none; padding:0; background:transparent">
+          마이페이지 주문/결제 내역 업데이트 및 배송 대기
+          <span class="fid">F07-02</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- S6 ADMIN -->
+  <section class="section" id="s6">
+    <div class="section-header">
+      <span class="section-num">⑥</span>
+      <span class="section-title">관리자 (Admin)</span>
+      <span class="section-sub">백오피스 · Fan 앱과 분리</span>
+    </div>
+    <div class="admin-grid">
+      <div>
+        <div class="hdr secondary">입점 심사</div>
+        <div class="node" style="margin-top:6px">
+          파트너 입점 신청서 검토 · 승인/반려
+          <span class="fid">F02-02</span>
+        </div>
+      </div>
+      <div>
+        <div class="hdr secondary">모니터링</div>
+        <div class="node" style="margin-top:6px">
+          주문/결제/재고 현황 대시보드 모니터링
+          <span class="fid">F08-02</span>
+        </div>
+      </div>
+      <div>
+        <div class="hdr secondary">운영 설정</div>
+        <div class="node" style="margin-top:6px">
+          메인 배너 CRUD (F04-03) · 행사·외부 티켓 링크 (F05-01~03)
+          <span class="fid">F04-03, F05-01~03</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- S7 MAPPING -->
+  <section class="section" id="s7">
+    <div class="section-header">
+      <span class="section-num">⑦</span>
+      <span class="section-title">화면–기능 매핑표</span>
+      <span class="section-sub">명세 §5</span>
+    </div>
+
+    <div class="callout warn">
+      <strong>F-ID 가이드:</strong> 기능 ID·탭 구성의 SSOT는 <a href="requirements/mvp-functional-requirements.md">mvp-functional-requirements.md (§3)</a>입니다. 본 IA는 해당 표와 동기화합니다.
+    </div>
+
+    <div class="map-wrap">
+      <table class="map">
+        <thead>
+          <tr>
+            <th>No.</th>
+            <th>화면명</th>
+            <th>IA 위치</th>
+            <th>기능 ID</th>
+            <th>Actor</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>1</td><td>메인 홈</td><td>③ GNB 홈</td><td>F04-03</td><td>Fan</td></tr>
+          <tr><td>2</td><td>온보딩</td><td>① 온보딩</td><td>F01-01~03</td><td>Fan</td></tr>
+          <tr><td>3</td><td>아티스트 홈</td><td>④ 7탭 (F03-01)</td><td>F03-01</td><td>Fan</td></tr>
+          <tr><td>4</td><td>피드</td><td>④ 피드</td><td>F03-02, 03</td><td>Fan/Artist</td></tr>
+          <tr><td>5</td><td>프로필</td><td>④ 프로필</td><td>F02-03</td><td>Fan</td></tr>
+          <tr><td>6</td><td>굿즈 투표</td><td>④ 투표</td><td>F03-08</td><td>Fan</td></tr>
+          <tr><td>7</td><td>미디어(라이브)</td><td>④ 미디어</td><td>F03-06</td><td>Fan</td></tr>
+          <tr><td>8</td><td>공지</td><td>④ 공지</td><td>F03-01</td><td>Fan</td></tr>
+          <tr><td>9</td><td>일정</td><td>④ 일정</td><td>F03-05, F05-01</td><td>Fan/Artist</td></tr>
+          <tr><td>10</td><td>출석 체크</td><td>④ 출석</td><td>F03-07</td><td>Fan</td></tr>
+          <tr><td>11</td><td>가입 모달</td><td>③ 홈 → 아티스트</td><td>F01-04</td><td>Fan</td></tr>
+          <tr><td>12</td><td>스토어 목록</td><td>③ 스토어 (GNB)</td><td>F04-01, 02</td><td>Fan</td></tr>
+          <tr><td>13</td><td>상품/주문서</td><td>③ 스토어 상세</td><td>F04-02, 04</td><td>Fan</td></tr>
+          <tr><td>14</td><td>행사 상세</td><td>③ 커뮤니티 · ④ 일정</td><td>F05-01~03</td><td>Fan</td></tr>
+          <tr><td>15</td><td>결제창</td><td>⑤ 결제</td><td>F06-01~03</td><td>Fan</td></tr>
+          <tr><td>16</td><td>마이페이지</td><td>③ 더보기</td><td>F07-01, 02</td><td>Fan</td></tr>
+          <tr><td>17</td><td>알림센터</td><td>③ 홈</td><td>F03-04</td><td>Fan</td></tr>
+          <tr><td>18</td><td>운영자 신청</td><td>②·③ 입점</td><td>F02-01</td><td>Artist</td></tr>
+          <tr><td>19</td><td>Admin</td><td>⑥ Admin</td><td>F02-02, F04-03, F05, F08-02</td><td>Admin</td></tr>
+          <tr><td>20</td><td>재입고 알림</td><td>③ 스토어</td><td>F04-05</td><td>Fan</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="footer">
+    <div class="footer-project">FANDROPS · Backend Portfolio</div>
+    <div class="footer-nav">← <a href="03_planning.html">03 · Not Scope / KPI</a></div>
+  </div>
+</div>
+</body>
+</html>

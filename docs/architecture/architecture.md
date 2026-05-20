@@ -1,5 +1,8 @@
 # FANDROPS 아키텍처 개요
 
+> **포트폴리오:** [01](../01_service_intro.html) · [02](../02_research.html) · [03](../03_planning.html) · [04 IA](../04_IA.html)  
+> **기능 SSOT:** [mvp-functional-requirements.md](../requirements/mvp-functional-requirements.md) (§3 F-ID)  
+> 보조: [03_planning.html](../03_planning.html) (Not Scope · KPI · 로드맵) · [04_IA.html](../04_IA.html) (화면 흐름)
 > 상세 결정·기술 스택·호출 흐름: [ADR-001](../adr/ADR-001-multi-module-monolith.md) · 레이어별 Gradle: [ADR-002](../adr/ADR-002-per-layer-gradle-modules.md) · 장바구니 RDB: [ADR-003](../adr/ADR-003-cart-storage-rdb-phase1.md) · HTTP: [API 명세](../api/mvp-api-spec.md) · [계약](../api/api-contract.md) · 상태: [상태 머신](../state/invariants-and-state-machines.md) · 운영: [장애](../operations/failure-policy.md) · [메트릭](../operations/observability-metrics.md)
 
 **멀티모듈 모놀리스** — 하나의 Spring Boot 프로세스로 배포하되, 코드 경계는 Gradle 서브프로젝트로 분리하여 **의존성 방향을 컴파일 단계에서 강제**한다.
@@ -19,7 +22,7 @@ fandrops/
 │       └── build.gradle.kts
 ├── modules/
 │   ├── common/                     # 공통 유틸·에러코드·응답 포맷 (최소화)
-│   ├── user/                       # Auth·회원·인가·대기열 (표지민)
+│   ├── user/                       # Auth·회원·인가·입점 (표지민)
 │   │   ├── user-domain/
 │   │   ├── user-application/
 │   │   ├── user-api/
@@ -34,7 +37,7 @@ fandrops/
 │   │   ├── payment-application/
 │   │   ├── payment-api/
 │   │   └── payment-infrastructure/
-│   ├── inventory/                  # 재고·핫딜 동시성 (형성빈)
+│   ├── inventory/                  # 재고·드롭스 동시성 (형성빈)
 │   │   ├── inventory-domain/
 │   │   ├── inventory-application/
 │   │   ├── inventory-api/
@@ -43,7 +46,7 @@ fandrops/
 │   │   ├── notification-domain/
 │   │   ├── notification-application/
 │   │   └── notification-infrastructure/
-│   └── community/                  # 피드·댓글·일정·랭킹·라이브·행사 (정환철)
+│   └── community/                  # 피드·공지·댓글·일정·출석·투표·라이브·행사 (정환철)
 │       ├── community-domain/
 │       ├── community-application/
 │       ├── community-api/
@@ -92,15 +95,15 @@ ArchUnit(선택): `domain` 패키지가 `org.springframework`, `jakarta.persiste
 
 ## 도메인 오너십 → 모듈 매핑
 
-> 상세 범위·F코드·로드맵: 팀 Not Scope / KPI 문서 §03 Domain Ownership 기준.
+> F-scope: [requirements § 오너십](../requirements/mvp-functional-requirements.md#도메인-오너십-f-scope)
 
-| 담당자 | Gradle 모듈 | 도메인 영역 | 핵심 책임 |
+| 담당자 | Gradle 모듈 | 도메인 영역 | F-scope (요약) |
 | --- | --- | --- | --- |
-| 지영재 | `apps/api-server` + 플랫폼 | Platform / SRE / Observability | AWS · Nginx · GitHub Actions · Prometheus/Grafana · k6 · 무중단 배포 |
-| 표지민 | `user` · `notification` | Identity / Security / Communication | Auth · JWT · Rate Limit · **핫딜 대기열** · 알림 **전송** · Admin 심사·배너 CRUD |
-| 정환철 | `community` | Community / Content | 피드 · 댓글 · 일정 · 랭킹 · 라이브 · 행사·외부 티켓 링크 노출 |
-| **형성빈** | **`order` · `inventory`** | **Commerce / Order / Inventory** | 상품 CRUD · 목록·상세 Read · 장바구니 · **주문** · 핫딜 재고·동시성 · 재입고 이벤트 **발행** |
-| **장성재** | **`payment`** | **Payment / Integration** | 토스 PG · 웹훅 · 멱등 · **결제 후 주문·재고 정합성(E2E)** · Saga 보상 |
+| 지영재 | `apps/api-server` + 플랫폼 | Platform / SRE | F08-02, 인프라·k6·Grafana |
+| 표지민 | `user` · `notification` | Identity / Notification | F01-01~03, F02-01~02, 알림 **전송**, F03-04(채널) |
+| 정환철 | `community` | Community / Content | F01-04, F02-03, F03-01~08, F05-01~03, F04-03, F07-01 |
+| **형성빈** | **`order` · `inventory`** | **Commerce** | **F04-01~02**, F04-04~05, F07-02(주문) |
+| **장성재** | **`payment`** | **Payment / Traffic Gate** | F04-02(대기열), **F06-01~03**, F07-02(결제) |
 
 ### order / payment 경계 (협업)
 
@@ -108,6 +111,7 @@ ArchUnit(선택): `domain` 패키지가 `org.springframework`, `jakarta.persiste
 | --- | --- | --- |
 | 주문 생성·상태·장바구니·재고 선점 | **형성빈** (`order`, `inventory`) | 장바구니 = **RDB** `CART`/`CART_ITEM` ([ADR-003](../adr/ADR-003-cart-storage-rdb-phase1.md)). PG 승인 **이후** 상태 수렴은 장성재와 스키마·시퀀스 합의 |
 | 결제 승인·웹훅·멱등·실패 복구 | **장성재** (`payment`) | [상태 머신·Saga](../state/invariants-and-state-machines.md) · [시퀀스](../sequence/payment-flow-reason.md) |
+| 대기열·RateLimit 정책·애플리케이션 제한 | **장성재** (`payment`) | 드롭스 상품 주문/결제 진입 보호 목적의 정책·키·에러 계약. Nginx/ALB 제한값은 지영재와 동시 리뷰 |
 | 알림 전송 | **표지민** (`notification`) | 결제 완료·재입고 등 **이벤트 발행**은 형성빈·장성재·정환철이 각자 담당 |
 
 PR 머지 전 **해당 도메인 오너 리뷰** · API·이벤트 페이로드 변경 시 문서 동시 수정.
@@ -116,28 +120,29 @@ PR 머지 전 **해당 도메인 오너 리뷰** · API·이벤트 페이로드 
 
 ## `user` vs `community` — 왜 나뉘는가
 
-팀 명세(§03 Domain Ownership) 기준으로 **Gradle 모듈 이름 = 바운디드 컨텍스트**이지, 화면 메뉴 1:1이 아니다.
+[mvp-functional-requirements.md](../requirements/mvp-functional-requirements.md) 기준 — **Gradle 모듈 = 바운디드 컨텍스트**이지, 화면 탭 1:1이 아니다.
 
 | Gradle 모듈 | 담당 | 들어가는 기능 (예시) | 들어가지 **않는** 것 |
 | --- | --- | --- | --- |
-| **`user`** | 표지민 | 이메일·소셜 가입, JWT·인가, Rate Limit, **핫딜 대기열(F08-01)**, 입점 Admin 심사, 배너 Admin CRUD | 피드·댓글 본문, 랭킹 집계, 라이브 임베드 |
-| **`community`** | 정환철 | **피드·댓글·하트**, 일정, **랭킹**, **라이브** URL·임베드, 행사·외부 티켓 링크 노출, 공간(탭) 생성 소비, 배너 **노출 Read**, 피드 캐시·커서 | 로그인·JWT 발급, 결제·주문 |
+| **`user`** | 표지민 | F01-01~03 Auth, F02-01~02 입점 Admin | 피드·댓글, F01-04 팬 가입 구현, 대기열, F04 상품 |
+| **`community`** | 정환철 | F03 전부, F05, F02-03, F01-04, F04-03 메인 배너, F07-01 | Auth 발급, 주문·결제·상시/드롭스 상품 CRUD |
 | **`notification`** | 표지민 (전송) | 이메일/푸시 **발송** 어댑터 | 이벤트 **발행**(페이로드) — 발행은 각 도메인 오너 |
 
-### 피드·댓글·랭킹·라이브가 전부 `community`인 이유
+### 피드·댓글·출석·투표·라이브가 전부 `community`인 이유
 
 명세상 이 기능들은 **F03(커뮤니티)·F05(행사/콘텐츠)** 묶음이고, 오너는 **정환철(Community / Content)** 한 명이다.  
 별도 `feed` / `comment` Gradle 모듈로 쪼개지 **않는다** — ADR-002 원칙(레이어×바운디드 컨텍스트까지만 분리).
 
-패키지 예: `com.fandrops.community.api` · `…application.feed` · `…domain.ranking` 처럼 **하위 패키지**로 나누고, 빌드 모듈은 `community-*` 하나로 유지한다.
+패키지 예: `com.fandrops.community.api` · `…application.feed` · `…domain.poll` · `…domain.attendance` 처럼 **하위 패키지**로 나누고, 빌드 모듈은 `community-*` 하나로 유지한다.
 
 ### 경계가 헷갈리는 협업 (명세 기준)
 
 | 기능 | 오너 | 모듈 |
 | --- | --- | --- |
-| 팬 가입 (+1) | 형성빈 | `order` 등 Commerce 쪽 API와 연동 (F01-04) |
-| 아티스트 프로필 **편집** | 형성빈 | Commerce/프로필 Write |
+| 팬 가입 (+1) | 정환철 | `community`의 `FAN_ARTIST` 관계. 커뮤니티 쓰기 권한의 선행 조건 |
+| 아티스트 프로필 **편집/공개** | 정환철 | 승인된 입점 건을 받아 프로필·외부 링크·공간을 공개 |
 | 팬·SNS 프로필 **Read**, 마이페이지 활동 **집계/BFF** | 정환철 | `community` (Read·BFF) |
-| 대기열·Access Ticket | 표지민 | `user` (또는 user 하위 대기열 패키지) |
+| 대기열·Access Ticket | 장성재 | `payment`의 Traffic Gate 책임. 주문 검증은 형성빈, Redis/Nginx 운영값은 지영재 리뷰 |
+| RateLimit | 장성재 | `payment` 중심 정책. `apps/api-server` 필터·Nginx 값은 지영재 리뷰 |
 
 헷갈리면 **F코드·명세 표**를 보고, PR은 **해당 오너**에게 리뷰 요청한다.

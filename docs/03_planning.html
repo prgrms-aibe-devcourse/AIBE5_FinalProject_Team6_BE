@@ -1,0 +1,1036 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FANDROPS — Not Scope / KPI·SLO</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --text-primary: #111111;
+  --text-secondary: #555555;
+  --text-muted: #999999;
+  --border: #e5e5e5;
+  --bg: #ffffff;
+  --bg-subtle: #f8f8f6;
+  --bg-dark: #111111;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: 'Noto Sans KR', sans-serif;
+  font-size: 15px;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+
+.page {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 0 2.5rem 6rem;
+}
+
+.topbar {
+  border-bottom: 1px solid var(--border);
+  padding: 1.5rem 0;
+  margin-bottom: 4rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.topbar-left {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.doc-tag {
+  display: inline-block;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: var(--bg-dark);
+  color: #fff;
+  padding: 3px 10px;
+  border-radius: 3px;
+}
+
+.page-title {
+  margin-bottom: 4rem;
+}
+.page-title-eyebrow {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 1rem;
+}
+.page-title h1 {
+  font-family: 'DM Sans', sans-serif;
+  font-size: clamp(1.8rem, 5vw, 2.6rem);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  color: var(--text-primary);
+}
+.page-title h1 span {
+  color: var(--text-muted);
+  font-weight: 300;
+}
+
+.section { margin-bottom: 4rem; }
+
+.section-header {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  margin-bottom: 1.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+.section-num {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+}
+.section-title {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+
+.body-text {
+  color: var(--text-secondary);
+  line-height: 1.85;
+  margin-bottom: 1rem;
+  font-size: 14.5px;
+}
+.body-text strong { color: var(--text-primary); font-weight: 500; }
+
+.notscope-intro {
+  background: var(--bg-subtle);
+  border-left: 3px solid var(--text-primary);
+  border-radius: 0 6px 6px 0;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.75rem;
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.8;
+}
+.notscope-intro strong { color: var(--text-primary); font-weight: 500; }
+
+.notscope-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 1.75rem;
+}
+.notscope-item {
+  background: var(--bg);
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+.notscope-x {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  min-width: 16px;
+  padding-top: 1px;
+  flex-shrink: 0;
+}
+.notscope-content-title {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 3px;
+}
+.notscope-content-why {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.inscope-note {
+  background: #f0f7f4;
+  border: 1px solid #c5e0d3;
+  border-radius: 6px;
+  padding: 1rem 1.5rem;
+  margin-bottom: 1.75rem;
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  line-height: 1.75;
+}
+.inscope-note strong { color: var(--text-primary); }
+
+.tradeoff-box {
+  background: var(--bg-dark);
+  color: #fff;
+  border-radius: 6px;
+  padding: 1.75rem 2rem;
+}
+.tradeoff-box-label {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #888;
+  margin-bottom: 1rem;
+}
+.tradeoff-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.tradeoff-list li {
+  font-size: 14px;
+  color: #e0e0e0;
+  line-height: 1.6;
+  padding-left: 1.25rem;
+  position: relative;
+}
+.tradeoff-list li::before {
+  content: '→';
+  position: absolute;
+  left: 0;
+  color: #666;
+}
+.tradeoff-list li strong { color: #fff; font-weight: 500; }
+
+.kpi-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+  margin: 1.25rem 0;
+}
+.kpi-table th {
+  text-align: left;
+  padding: 9px 14px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+}
+.kpi-table td {
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+  vertical-align: top;
+  line-height: 1.6;
+}
+.kpi-table tr:last-child td { border-bottom: none; }
+.kpi-table td:first-child {
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+.kpi-table td code {
+  font-family: 'DM Mono', 'Courier New', monospace;
+  font-size: 12.5px;
+  background: var(--bg-subtle);
+  padding: 2px 6px;
+  border-radius: 3px;
+  color: var(--text-primary);
+}
+
+.kpi-rule {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1rem 1.5rem;
+  margin-top: 1.25rem;
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+.kpi-rule strong { color: var(--text-primary); font-weight: 500; }
+
+.team-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+  margin: 1.25rem 0;
+}
+.team-table th {
+  text-align: left;
+  padding: 9px 14px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+}
+.team-table td {
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+  vertical-align: top;
+  line-height: 1.65;
+}
+.team-table tr:last-child td { border-bottom: none; }
+.team-table td:first-child {
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+.domain-badge {
+  display: inline-block;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 3px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  margin-bottom: 4px;
+  letter-spacing: 0.03em;
+}
+.team-detail {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+.team-scope {
+  display: block;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-bottom: 0.35rem;
+}
+.team-tagline {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+}
+.team-bullets {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.team-bullets li {
+  position: relative;
+  padding-left: 0.85rem;
+  margin-bottom: 0.3rem;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+.team-bullets li::before {
+  content: '•';
+  position: absolute;
+  left: 0;
+  color: var(--text-muted);
+}
+.team-bullets li:last-child { margin-bottom: 0; }
+.team-note {
+  display: block;
+  margin-top: 0.5rem;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.collab-box {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1rem 1.5rem;
+  margin-top: 1.25rem;
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+.collab-box strong { color: var(--text-primary); font-weight: 500; }
+
+.roadmap-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+  margin: 1.25rem 0;
+}
+.roadmap-table th {
+  text-align: left;
+  padding: 9px 14px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+}
+.roadmap-table td {
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+  vertical-align: top;
+  line-height: 1.65;
+}
+.roadmap-table tr:last-child td { border-bottom: none; }
+.roadmap-table td:first-child {
+  white-space: nowrap;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.roadmap-table td:nth-child(2) {
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.principles-list {
+  list-style: none;
+  margin: 1.25rem 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.principles-list li {
+  display: flex;
+  gap: 1rem;
+  padding: 0.9rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  align-items: flex-start;
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+.principles-list li:last-child { border-bottom: none; }
+.principles-list li strong { color: var(--text-primary); font-weight: 500; }
+.p-num {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  min-width: 20px;
+  padding-top: 2px;
+}
+
+.footer {
+  border-top: 1px solid var(--border);
+  padding-top: 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.footer-project {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.footer-nav {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.footer-nav a {
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+@media (max-width: 600px) {
+  .page { padding: 0 1.25rem 4rem; }
+  .notscope-grid { grid-template-columns: 1fr; }
+  .page-title h1 { font-size: 1.8rem; }
+}
+
+/* ── Doc series nav ── */
+.topbar-right { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.doc-nav { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.doc-nav a {
+  font-family: 'DM Sans', sans-serif; font-size: 11px; font-weight: 500;
+  color: var(--text-secondary); text-decoration: none; padding: 4px 10px;
+  border-radius: 3px; border: 1px solid var(--border); background: var(--bg-subtle);
+}
+.doc-nav a:hover { background: var(--bg-dark); color: #fff; border-color: var(--bg-dark); }
+.doc-nav a.current { background: var(--bg-dark); color: #fff; border-color: var(--bg-dark); cursor: default; }
+.related-docs {
+  margin: 2.5rem 0 0; padding: 1rem 1.25rem; border: 1px solid var(--border);
+  border-radius: 4px; background: var(--bg-subtle); font-size: 13px; line-height: 1.8;
+}
+.related-docs .related-label {
+  font-family: 'DM Sans', sans-serif; font-size: 10px; font-weight: 600;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted);
+  display: block; margin-bottom: 0.35rem;
+}
+.related-docs a { color: var(--text-secondary); text-decoration: none; font-weight: 500; margin-right: 1rem; }
+.related-docs a:hover { color: var(--text-primary); text-decoration: underline; }
+.body-text a.doc-link, .req-text a.doc-link, .why-text a.doc-link,
+.diff-content-desc a.doc-link, .notscope-intro a.doc-link {
+  color: var(--text-primary); font-weight: 500;
+}
+
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="topbar">
+    <div class="topbar-left">FANDROPS · Backend Portfolio</div>
+    <div class="topbar-right">
+      <nav class="doc-nav" aria-label="문서 시리즈">
+        <a href="01_service_intro.html">01 서비스</a>
+        <a href="02_research.html">02 리서치</a>
+        <a href="03_planning.html" class="current">03 기획</a>
+        <a href="04_IA.html">04 IA</a>
+      </nav>
+    </div>
+  </div>
+
+  <div class="page-title">
+    <h1>Not Scope <span>/ KPI·SLO / Milestone</span></h1>
+  </div>
+
+  <!-- ── 01 · Not Scope ── -->
+  <div class="section" id="notscope">
+    <div class="section-header">
+      <span class="section-num">01</span>
+      <span class="section-title">Not Scope</span>
+    </div>
+
+    <div class="notscope-intro">
+      <a href="requirements/mvp-functional-requirements.md" class="doc-link">§3</a>·<a href="02_research.html" class="doc-link">02</a> 기준으로, MVP에서 <strong>하지 않는 것</strong>과 <strong>외부로 위임하는 것</strong>을 분리해 둡니다.
+      범위를 줄인 이유는 “기능 나열”이 아니라 <strong>굿즈·드롭스·결제·커뮤니티</strong>에서
+      <strong>정합성·성능·운영 가능성</strong>을 수치로 증명하는 데 집중하기 위함입니다.
+    </div>
+
+    <div class="notscope-grid">
+      <div class="notscope-item">
+        <span class="notscope-x">✕</span>
+        <div>
+          <div class="notscope-content-title">자체 콘서트·팬미팅 좌석 예매(선점·좌석도·인앱 결제)</div>
+          <div class="notscope-content-why">티켓 실물 좌석·PG 연동은 외부 플랫폼(인터파크 등) 책임. <strong>공지·외부 링크 검증·노출</strong>만 제공.</div>
+        </div>
+      </div>
+      <div class="notscope-item">
+        <span class="notscope-x">✕</span>
+        <div>
+          <div class="notscope-content-title">복수 PG · 인앱 티켓 결제</div>
+          <div class="notscope-content-why"><strong>토스페이먼츠 단일</strong>. 멱등·웹훅·상태 복구에 리소스 집중.</div>
+        </div>
+      </div>
+      <div class="notscope-item">
+        <span class="notscope-x">✕</span>
+        <div>
+          <div class="notscope-content-title">실시간 채팅</div>
+          <div class="notscope-content-why">WebSocket 스케일·모더레이션 부담. 댓글·알림 중심.</div>
+        </div>
+      </div>
+      <div class="notscope-item">
+        <span class="notscope-x">✕</span>
+        <div>
+          <div class="notscope-content-title">영상 업로드(자체 호스팅)</div>
+          <div class="notscope-content-why">게시글은 이미지만. 라이브는 유튜브 등 <strong>임베드</strong>로 처리.</div>
+        </div>
+      </div>
+      <div class="notscope-item">
+        <span class="notscope-x">✕</span>
+        <div>
+          <div class="notscope-content-title">추천 시스템 · Elasticsearch 전문 검색</div>
+          <div class="notscope-content-why">ML·검색 인프라는 별도 도메인. MVP 조회는 캐시·인덱스·커서로 충분.</div>
+        </div>
+      </div>
+      <div class="notscope-item">
+        <span class="notscope-x">✕</span>
+        <div>
+          <div class="notscope-content-title">Day-1 완전한 MSA</div>
+          <div class="notscope-content-why">모듈러(멀티모듈) 모놀리스로 경계·의존성 증명 후, 필요 시 점진 분리.</div>
+        </div>
+      </div>
+      <div class="notscope-item">
+        <span class="notscope-x">✕</span>
+        <div>
+          <div class="notscope-content-title">네이티브 모바일 앱</div>
+          <div class="notscope-content-why">백엔드·API·관측·부하 검증이 목표. 클라이언트는 웹 FE 연동 수준.</div>
+        </div>
+      </div>
+      <div class="notscope-item">
+        <span class="notscope-x">✕</span>
+        <div>
+          <div class="notscope-content-title">오프라인 재고 ERP 급 실시간 연동</div>
+          <div class="notscope-content-why">명세상 Phase2·운영 복잡도 높음. MVP는 온라인 재고·품절·알림 중심.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tradeoff-box">	
+      <ul class="tradeoff-list">
+        <li><strong>티켓은 팔지 않고 연결한다</strong> — 정합성 범위를 명확히, 현실적인 타협.</li>
+        <li><strong>결제는 단일 PG로 깊게</strong> — 멱등·웹훅·실패 복구에 집중.</li>
+        <li><strong>드롭스·재고·주문</strong>이 동시성 스토리의 중심축.</li>
+        <li>문서·수치·장애 대응이 “기능 개수”보다 우선.</li>
+      </ul>
+  </div>
+
+<br>
+<br>
+  <!-- ── 02 · KPI / SLO ── -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">02</span>
+      <span class="section-title" id="kpi">KPI / SLO — 목표 기준</span>
+    </div>
+
+    <table class="kpi-table">
+      <thead>
+        <tr>
+          <th style="width: 140px;">부하 가정 (MVP 합의)</th>
+          <th>목표</th>
+          <th>비고</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>드롭스 오픈 순간</td>
+          <td>동시 <strong>~1,000/~10,000</strong> 요청 급증 시나리오 (k6 스파이크)</td>
+          <td>대기열 + 오버셀 0 검증</td>
+        </tr>
+        <tr>
+          <td>상품·상점 Read</td>
+          <td><strong>~300 RPS</strong> 구간에서 Read SLO 유지</td>
+          <td>목록·상세·캐시 히트 전제 명시</td>
+        </tr>
+        <tr>
+          <td>주문 생성</td>
+          <td><strong>~100 TPS</strong> 구간에서 Write P95 목표</td>
+          <td>합의치 조정 시 문서 버전 갱신</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <table class="kpi-table">
+      <thead>
+        <tr>
+          <th style="width: 110px;">구분</th>
+          <th>SLO (목표 기준)</th>
+          <th>측정 방법</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>정합성</td>
+          <td>드롭스·상시 상품 <strong>오버셀</strong>·<strong>중복 주문 확정</strong>·<strong>중복 결제</strong> <code>0건</code></td>
+          <td>부하 후 DB·주문·결제 로그 교차 검증</td>
+        </tr>
+        <tr>
+          <td>결제 복구</td>
+          <td>결제 실패·웹훅 지연 시나리오에서 주문/재고 상태가 <code>60초 내</code> 일관 상태로 수렴 (팀 합의 기준: 자동 또는 수동 복구 절차 문서화)</td>
+          <td>웹훅 재전송·멱등키·수동 리컨실리에이션 로그</td>
+        </tr>
+        <tr>
+          <td>Write 성능</td>
+          <td><strong>주문·결제·드롭스 쓰기</strong> <code>P95 &lt; 300ms</code><br></td>
+          <td>k6 + Grafana</td>
+        </tr>
+        <tr>
+          <td>Read 성능</td>
+          <td>피드·행사 등 Read <code>P95 &lt; 80~120ms</code>, <strong>상품 조회</strong>는 <code>~300 RPS</code> 전제와 함께 기록<br></td>
+          <td>k6 + Grafana</td>
+        </tr>
+        <tr>
+          <td>안정성</td>
+          <td><code>5xx &lt; 0.1%</code>, 타임아웃 임계 이하</td>
+          <td>로그 / APM</td>
+        </tr>
+        <tr>
+          <td>공정성·방어</td>
+          <td>Rate limit 위반 <code>429</code> / 드롭스·오픈 구간 <strong>대기열·Depth</strong> 목표</td>
+          <td>차단 로그·큐 depth·대기 시간 분포</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="kpi-rule">
+      <strong>팀 규칙:</strong> 핵심 SLO 미달 시 기능 추가보다 원인·튜닝·계약 수정을 우선한다.
+      “동작”이 아니라 <strong>측정·재현·개선 수치</strong>를 남긴다.
+    </div>
+  </div>
+
+  <!-- ── 03 · 팀 구성 ── -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">03</span>
+      <span class="section-title">팀 구성 — Domain Ownership</span>
+    </div>
+
+    <p class="body-text">
+      각 오너는 코드 + 테스트 + 지표 + STAR를 한 덩어리로 관리합니다.<br>
+    </p>
+
+    <table class="team-table">
+      <thead>
+        <tr>
+          <th style="width: 76px;">담당자</th>
+          <th style="width: 200px;">도메인</th>
+          <th>핵심 책임</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>지영재</td>
+          <td><div class="domain-badge">Platform / SRE / Observability</div></td>
+          <td>
+            <div class="team-detail">
+              <span class="team-scope">[F08-02]</span>
+              <span class="team-tagline">플랫폼·관측·부하</span>
+              <ul class="team-bullets">
+                <li>AWS · Nginx · GitHub Actions · Prometheus/Grafana</li>
+                <li>k6 부하 테스트 · 무중단 배포·롤백</li>
+                <li>공용 Redis 운영 · 관리자 모니터링 대시보드</li>
+              </ul>		
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td>표지민</td>
+          <td><div class="domain-badge">Identity / Security / Communication</div></td>
+          <td>
+            <div class="team-detail">
+              <span class="team-scope">[F01-01~03, F02-01~02, F03-04]</span>
+              <span class="team-tagline">신뢰·인증·알림 채널</span>
+              <ul class="team-bullets">
+                <li>이메일·소셜 가입 · JWT·인가</li>
+                <li>알림 <strong>전송</strong> — 발행·페이로드는 <strong>알림 이벤트 표</strong></li>
+                <li>입점 신청 · Admin 심사·승인 · <strong>승인 시 이벤트 발행</strong> (공간 생성 소비는 정환철)</li>
+              </ul>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td>정환철</td>
+          <td><div class="domain-badge">Community / Content</div></td>
+          <td>
+            <div class="team-detail">
+              <span class="team-scope">[F01-04, F02-03, F03-01~08, F04-03, F05-01~03, F07-01]</span>
+              <span class="team-tagline">커뮤니티·행사·콘텐츠 — 아티스트 홈 7탭(F03-01): 피드·프로필·투표·미디어·공지·일정·출석</span>
+              <ul class="team-bullets">
+                <li>승인 이벤트 소비 → F03-01 공간·7탭 생성 (실패 시 재시도·DLQ/failed_row·리컨실)</li>
+                <li>팬 가입(아티스트별) + 팬 수 증가</li>
+                <li>F02-03 프로필 탭 · F03-02~03 피드(게시·댓글·좋아요) · F03-08 투표 · F03-06 미디어(라이브 임베드) · 공지 · F03-05 일정 · F03-07 출석</li>
+                <li><strong>상점(Store)은 GNB 스토어(F04)</strong> — 아티스트 홈 탭 아님</li>
+                <li>출석 체크(7일 달성 리워드 대상자 산정) · 굿즈 투표(이미지 선택지, 팬 가입자 전용)</li>
+                <li>행사·외부 티켓 링크(F05) — 일정 탭·GNB 커뮤니티에서 노출</li>
+                <li>프로필·SNS 팬 Read · <strong>메인 배너(F04-03)</strong> Admin CRUD 및 GNB 홈 노출</li>
+                <li>마이페이지 활동 <strong>집계/BFF 오너</strong> (형성빈·장성재 내부 API 조립)</li>
+                <li>피드·행사 캐시 · 커서 페이징 · N+1</li>
+              </ul>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td>형성빈</td>
+          <td><div class="domain-badge">Commerce / Order / Inventory</div></td>
+          <td>
+            <div class="team-detail">
+              <span class="team-scope">[F04-01~05, F07-02 주문]</span>
+              <span class="team-tagline">상품·스토어·주문 축 — DTO·Read·Write 동일 오너</span>
+              <ul class="team-bullets">
+                <li>상품 CRUD / 목록·상세·스토어 Read</li>
+                <li>드롭스 재고·선착순 동시성</li>
+                <li>장바구니·주문 (저장소 RDB 사용 확정 — ADR-003)</li>
+                <li>재입고 이벤트 발행</li>
+                <li>주문 내역 (결제·PG 상태는 장성재)</li>
+              </ul>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td>장성재</td>
+          <td><div class="domain-badge">Payment / Traffic Gate / Integration</div></td>
+          <td>
+            <div class="team-detail">
+              <span class="team-scope">[F06-01~03, F07-02 결제, 대기열·RateLimit]</span>
+              <span class="team-tagline">결제·PG · Traffic Gate — 웹훅 이후 정합성 및 진입 제한 정책 오너</span>
+              <ul class="team-bullets">
+                <li>토스페이먼츠 · 웹훅 · 멱등 · 상태/재시도</li>
+                <li>드롭스 대기열(Access Ticket) 발급 및 RateLimit 정책 수립</li>
+                <li>E2E(주문~결제~알림) · 웹훅 후 주문·재고·보상</li>
+                <li>마이페이지 결제·PG 상태 조회</li>
+                <li><strong>E2E Sync 오너</strong> — 장바구니→결제→이벤트 발행→표지민 전송</li>
+              </ul>
+              <span class="team-note">형성빈(주문/대기열 검증)·표지민(채널)·지영재(Nginx/ALB 설정)와 계약 동기화.</span>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+
+    <p class="body-text" style="font-size: 13.5px; margin-bottom: 0.5rem;"><strong>알림 이벤트</strong> — 이벤트 타입별 <strong>페이로드(발행)</strong> 소유자와 <strong>전송</strong> 담당.</p>
+    <table class="team-table" style="margin-top: 0; margin-bottom: 1.5rem;">
+      <thead>
+        <tr>
+          <th>이벤트(예시)</th>
+          <th style="width: 88px;">발행·페이로드</th>
+          <th style="width: 72px;">전송</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>재입고 (F04-05)</td>
+          <td><strong>형성빈</strong></td>
+          <td><strong>표지민</strong></td>
+        </tr>
+        <tr>
+          <td>결제 완료 (F06 → F03-04)</td>
+          <td><strong>장성재</strong></td>
+          <td><strong>표지민</strong></td>
+        </tr>
+        <tr>
+          <td>라이브 시작 알림 (F03-06)</td>
+          <td><strong>정환철</strong></td>
+          <td><strong>표지민</strong></td>
+        </tr>
+        <tr>
+          <td>새 글·댓글 답글 등 (F03-04)</td>
+          <td><strong>정환철</strong></td>
+          <td><strong>표지민</strong></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="collab-box">
+      <strong>협업 원칙</strong> — PR 머지 전 도메인 오너 리뷰 / API·에러코드·이벤트 페이로드 변경은 문서 동시 수정 /
+      장애 1차: 해당 오너 + 지영재 / KPI 미달 시 오너가 원인 분석 리포트
+    </div>
+  </div>
+
+  <!-- ── 04 · 로드맵 (명세·Not Scope에 맞게 정리) ── -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">04</span>
+      <span class="section-title">개발 로드맵 — 5.19 – 6.25</span>
+    </div>
+
+    <div style="margin: 2rem 0 0.5rem;">
+      <div style="font-family: 'DM Sans', sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 0.75rem;">
+        Phase 1 · 5.19 – 5.20 · 설계·환경
+      </div>
+      <table class="roadmap-table" style="margin: 0;">
+        <thead><tr><th style="width: 120px;">담당자</th><th>목표</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>지영재</td>
+            <td>AWS(VPC·EC2·RDS·ElastiCache) · GitHub Actions · Prometheus/Grafana · 스테이징 분리 · 공용 Redis</td>
+          </tr>
+          <tr>
+            <td>표지민</td>
+            <td>JWT·소셜·인가 · 약관 동의 · 계정 복구 설계 · Admin 심사 플로 · 승인 <strong>도메인 이벤트</strong> 스키마</td>
+          </tr>
+          <tr>
+            <td>정환철</td>
+            <td>7탭(피드·프로필·투표·미디어·공지·일정·출석) ERD · 공간 생성 <strong>실패·리컨실</strong> 초안 · 메인 배너(F04-03) 모델·노출 · 행사·외부 링크 · 캐시·커서 · 팬 가입 · 프로필 공개</td>
+          </tr>
+          <tr>	
+            <td>형성빈</td>
+            <td>상품 ERD · 목록·상세·DTO · 장바구니 <strong>RDB 사용 확정 (ADR-003)</strong> · 주문·드롭스 재고</td>
+          </tr>
+          <tr>
+            <td>장성재</td>
+            <td>결제·주문 상태 ERD · 토스 웹훅·멱등 · 결제·보상 시퀀스(형성빈과 스키마 합의) · 대기열·RateLimit 설계</td>
+          </tr>
+          <tr>
+            <td>전원</td>
+            <td>Bounded Context 확정 · API 공통 응답·에러코드·traceId · OpenAPI 틀 · API Mock 계약 동결 · 브랜치/PR 규칙</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div style="margin: 2rem 0 0.5rem;">
+      <div style="font-family: 'DM Sans', sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 0.75rem;">
+        Phase 2 · 5.20 – 6.02 · 코어 API
+      </div>
+      <table class="roadmap-table" style="margin: 0;">
+        <thead><tr><th style="width: 120px;">담당자</th><th>목표</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>지영재</td>
+            <td>Nginx·SSL · FE 배포 파이프라인(선택) · k6 스크립트 초안 · 로그 수집 구조 · TraceId · Grafana 대시보드 초안 · Prometheus exporter 연결</td>
+          </tr>
+          <tr>
+            <td>표지민</td>
+            <td>Auth 전체 · 계정 복구 · Admin 심사 API · 알림 발송 어댑터 1차</td>
+          </tr>
+          <tr>
+            <td>정환철</td>
+            <td>공간·7탭 생성 소비 · 메인 배너 API · 피드·프로필·투표·미디어·공지·일정·출석·행사 API · Redis 캐시 · N+1 1차 · 팬 가입 API</td>
+          </tr>
+          <tr>
+            <td>형성빈</td>
+            <td>상품 CRUD·목록·상세 Read · 장바구니(RDB)·주문 · 드롭스 동시성 1차 · 재입고·이벤트 발행</td>
+          </tr>
+          <tr>
+            <td>장성재</td>
+            <td>토스 결제·웹훅 · 멱등 · 주문-결제 연동 · 대기열·RateLimit Filter/Config 적용</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div style="margin: 2rem 0 0.5rem;">
+      <div style="font-family: 'DM Sans', sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 0.75rem;">
+        Phase 3 · 6.02 – 6.12 · 고도화 &amp; FE 연동
+      </div>
+      <table class="roadmap-table" style="margin: 0;">
+        <thead><tr><th style="width: 120px;">담당자</th><th>목표</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>지영재</td>
+            <td>통합 환경 점검 · Grafana 패널( P95·5xx·Redis·DB ) · Baseline k6 1회</td>
+          </tr>
+          <tr>
+            <td>표지민</td>
+            <td>수신 이벤트→알림 전송 연동(표 참조)</td>
+          </tr>
+          <tr>
+            <td>정환철</td>
+            <td>스탬피드 방어 · EXPLAIN/인덱스 · FE 아티스트 홈 7탭(피드·프로필·투표·미디어·공지·일정·출석) · 마이페이지 활동 <strong>집계/BFF</strong></td>
+          </tr>
+          <tr>
+            <td>형성빈</td>
+            <td>Redisson 락 비교 · 주문-재고 경계 · FE GNB 스토어·장바구니(RDB)·주문서</td>
+          </tr>
+          <tr>
+            <td>장성재</td>
+            <td>대기열(Sorted Set)·Access Ticket 발급 및 검증 · RateLimit 고도화 · 결제 실패·취소 시 주문/재고 복구 · 웹훅·멱등 재현 · FE 결제 연동 · Outbox/내부 큐</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div style="margin: 2rem 0 0.5rem;">
+      <div style="font-family: 'DM Sans', sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 0.75rem;">
+        Phase 4 · 6.12 – 6.22 · 부하·튜닝 (핵심 검증)
+      </div>
+      <table class="roadmap-table" style="margin: 0;">
+        <thead><tr><th style="width: 120px;">담당자</th><th>검증 목표</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>지영재</td>
+            <td>Baseline→Stress→Spike · 병목 리포트 · 커넥션 풀·Redis·CPU</td>
+          </tr>
+          <tr>
+            <td>표지민</td>
+            <td>알림 전송 처리량 검증</td>
+          </tr>
+          <tr>
+            <td>정환철</td>
+            <td>Read P95 목표 · 캐시 OFF 스탬피드 전후 비교 · <strong>댓글 도배 방어</strong> 검증</td>
+          </tr>
+          <tr>
+            <td>형성빈</td>
+            <td>드롭스 동시 ~1k 급증 시 <strong>오버셀 0</strong> · 락 전략 비교표 · 상품 Read <strong>~300 RPS</strong> 구간 재현</td>
+          </tr>
+          <tr>
+            <td>장성재</td>
+            <td>429·대기열 depth·매크로 차단율 검증 · 결제 실패 복구 SLA · 웹훅·재고·주문 수렴 · 멱등·중복 웹훅 · Write P95 <strong>(주문 ~100 TPS)</strong></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div style="margin: 2rem 0 0.5rem;">
+      <div style="font-family: 'DM Sans', sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 0.75rem;">
+        Phase 5 · 6.22 – 6.25 · 마감
+      </div>
+      <table class="roadmap-table" style="margin: 0;">
+        <thead><tr><th style="width: 120px;">담당자</th><th>마감</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>전원</td>
+            <td>STAR 리포트 · README/Notion · 데모(온보딩→드롭스→결제·외부 티켓·알림) · OpenAPI 확정</td>
+          </tr>
+          <tr>
+            <td>지영재</td>
+            <td>대시보드 스크린샷 · 부하 결과 종합 · 롤백 검증</td>
+          </tr>
+          <tr>
+            <td>표지민</td>
+            <td>Auth·알림 OpenAPI · Admin 입점 심사 문서</td>
+          </tr>
+          <tr>
+            <td>정환철</td>
+            <td>커뮤니티·캐시 STAR · 커뮤니티·행사·일정·출석·투표 · 메인 배너 API 문서</td>
+          </tr>
+          <tr>
+            <td>형성빈</td>
+            <td>드롭스·락 전략 보고서 · 상품·주문 API 문서</td>
+          </tr>
+          <tr>
+            <td>장성재</td>
+            <td>결제·대기열·RateLimit·E2E 멱등 STAR · 결제/대기열 시퀀스 다이어그램</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+
+  <!-- ── 05 · 원칙 ── -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">05</span>
+      <span class="section-title">아키텍처 원칙</span>
+    </div>
+    <ul class="principles-list">
+      <li><span class="p-num">01</span><span>명세에 있는 것만 마일스톤에 넣는다.</li>
+      <li><span class="p-num">02</span><span><strong>정합성 &gt; 기능 개수.</strong> 오버셀·중복 결제를 먼저 막는다.</span></li>
+      <li><span class="p-num">03</span><span><strong>측정 후 튜닝.</strong> k6·Grafana 없는 주장은 쓰지 않는다.</span></li>
+      <li><span class="p-num">04</span><span><strong>운영 가능</strong>해야 완료다. 장애 시나리오·복구는 문서화.</span></li>
+    </ul>
+  </div>
+
+  <aside class="related-docs">
+    <span class="related-label">관련 문서</span>
+    <a href="01_service_intro.html">01</a><a href="02_research.html">02</a><a href="04_IA.html">04</a>
+    <a href="requirements/mvp-functional-requirements.md">§3</a>
+    <a href="operations/observability-metrics.md">관측</a><a href="architecture/architecture.md">아키텍처</a>
+  </aside>
+  <div class="footer">
+    <div class="footer-project">FANDROPS · 5인 팀 · 2026.05.19 – 06.25</div>
+    <div class="footer-nav">
+      ← <a href="02_research.html">02 · 리서치</a> &nbsp;&nbsp; → <a href="04_IA.html">04 · IA</a>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

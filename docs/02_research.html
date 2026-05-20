@@ -1,0 +1,688 @@
+﻿<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FANDROPS — 리서치 / 페인포인트</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --text-primary: #111111;
+  --text-secondary: #555555;
+  --text-muted: #999999;
+  --border: #e5e5e5;
+  --bg: #ffffff;
+  --bg-subtle: #f8f8f6;
+  --bg-dark: #111111;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: 'Noto Sans KR', sans-serif;
+  font-size: 15px;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+
+.page {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 0 2.5rem 6rem;
+}
+
+/* ── Top bar ── */
+.topbar {
+  border-bottom: 1px solid var(--border);
+  padding: 1.5rem 0;
+  margin-bottom: 4rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.topbar-left {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.doc-tag {
+  display: inline-block;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: var(--bg-dark);
+  color: #fff;
+  padding: 3px 10px;
+  border-radius: 3px;
+}
+
+/* ── Page title ── */
+.page-title { margin-bottom: 3.5rem; }
+.page-title-eyebrow {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 1rem;
+}
+.page-title h1 {
+  font-family: 'DM Sans', sans-serif;
+  font-size: clamp(1.8rem, 5vw, 2.6rem);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+.page-title h1 span { color: var(--text-muted); font-weight: 300; }
+
+/* ── Section ── */
+.section { margin-bottom: 4rem; }
+.section-header {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  margin-bottom: 1.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+.section-num {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+}
+.section-title {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+
+.body-text {
+  color: var(--text-secondary);
+  line-height: 1.85;
+  margin-bottom: 1rem;
+  font-size: 14.5px;
+}
+.body-text strong { color: var(--text-primary); font-weight: 500; }
+
+/* ── Callout ── */
+.callout {
+  background: var(--bg-subtle);
+  border-left: 2px solid var(--text-primary);
+  border-radius: 0 6px 6px 0;
+  padding: 1.1rem 1.4rem;
+  margin: 1.5rem 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.8;
+}
+.callout strong { color: var(--text-primary); font-weight: 500; }
+
+/* ── Pain point cards ── */
+.pain-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  margin: 1.5rem 0;
+}
+
+.pain-item {
+  background: var(--bg);
+  padding: 1.4rem 1.5rem;
+  display: grid;
+  grid-template-columns: 2rem 1fr;
+  gap: 1rem;
+  align-items: flex-start;
+}
+.pain-item:hover { background: var(--bg-subtle); }
+
+.pain-icon {
+  font-size: 1.1rem;
+  padding-top: 2px;
+  text-align: center;
+}
+.pain-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+.pain-desc {
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  margin-bottom: 6px;
+}
+.pain-desc strong { color: var(--text-primary); font-weight: 500; }
+
+.pain-tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+/* tag types */
+.ptag {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  padding: 2px 9px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+}
+.ptag-scope { background: var(--bg-dark); color: #fff; border-color: var(--bg-dark); }
+.ptag-partial { background: #f0f0f0; color: #555; }
+.ptag-limit { background: #fff; color: #999; }
+
+/* ── Insight box (dark) ── */
+.insight-box {
+  background: var(--bg-dark);
+  color: #fff;
+  border-radius: 6px;
+  padding: 1.75rem 2rem;
+  margin: 1.5rem 0;
+}
+.insight-label {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #888;
+  margin-bottom: 1rem;
+}
+.insight-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+.insight-list li {
+  font-size: 13.5px;
+  color: #e0e0e0;
+  line-height: 1.7;
+  padding-left: 1.25rem;
+  position: relative;
+}
+.insight-list li::before { content: '→'; position: absolute; left: 0; color: #666; }
+.insight-list li strong { color: #fff; font-weight: 500; }
+
+/* ── 2-col grid ── */
+.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  margin: 1.5rem 0;
+}
+.two-col-item {
+  background: var(--bg);
+  padding: 1.25rem 1.4rem;
+}
+.two-col-label {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+.two-col-text {
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+.two-col-text strong { color: var(--text-primary); font-weight: 500; }
+
+/* ── Derived requirements ── */
+.req-derive {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  margin: 1.5rem 0;
+}
+.req-derive-header {
+  background: var(--bg-subtle);
+  padding: 0.75rem 1.25rem;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+}
+.req-derive-item {
+  display: flex;
+  gap: 1rem;
+  padding: 0.9rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  align-items: flex-start;
+  font-size: 13.5px;
+}
+.req-derive-item:last-child { border-bottom: none; }
+.req-dot {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--bg-dark);
+  padding: 1px 7px;
+  border-radius: 3px;
+  white-space: nowrap;
+  margin-top: 1px;
+  flex-shrink: 0;
+}
+.req-text { color: var(--text-secondary); line-height: 1.6; }
+.req-text strong { color: var(--text-primary); font-weight: 500; }
+
+
+/* ── Doc series nav ── */
+.topbar-right { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.doc-nav { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.doc-nav a {
+  font-family: 'DM Sans', sans-serif; font-size: 11px; font-weight: 500;
+  color: var(--text-secondary); text-decoration: none; padding: 4px 10px;
+  border-radius: 3px; border: 1px solid var(--border); background: var(--bg-subtle);
+}
+.doc-nav a:hover { background: var(--bg-dark); color: #fff; border-color: var(--bg-dark); }
+.doc-nav a.current { background: var(--bg-dark); color: #fff; border-color: var(--bg-dark); cursor: default; }
+.related-docs {
+  margin: 2.5rem 0 0; padding: 1rem 1.25rem; border: 1px solid var(--border);
+  border-radius: 4px; background: var(--bg-subtle); font-size: 13px; line-height: 1.8;
+}
+.related-docs .related-label {
+  font-family: 'DM Sans', sans-serif; font-size: 10px; font-weight: 600;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted);
+  display: block; margin-bottom: 0.35rem;
+}
+.related-docs a { color: var(--text-secondary); text-decoration: none; font-weight: 500; margin-right: 1rem; }
+.related-docs a:hover { color: var(--text-primary); text-decoration: underline; }
+.body-text a.doc-link, .req-text a.doc-link, .why-text a.doc-link,
+.diff-content-desc a.doc-link, .notscope-intro a.doc-link {
+  color: var(--text-primary); font-weight: 500;
+}
+
+/* ── Footer ── */
+.footer {
+  border-top: 1px solid var(--border);
+  padding-top: 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.footer-project { font-family: 'DM Sans', sans-serif; font-size: 12px; color: var(--text-muted); }
+.footer-nav { font-size: 12px; color: var(--text-muted); }
+.footer-nav a { color: var(--text-secondary); text-decoration: none; font-weight: 500; }
+
+@media (max-width: 600px) {
+  .page { padding: 0 1.25rem 4rem; }
+  .two-col { grid-template-columns: 1fr; }
+  .pain-item { grid-template-columns: 1.5rem 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="topbar">
+    <div class="topbar-left">FANDROPS · Backend Portfolio</div>
+    <div class="topbar-right">
+      <nav class="doc-nav" aria-label="문서 시리즈">
+        <a href="01_service_intro.html">01 서비스</a>
+        <a href="02_research.html" class="current">02 리서치</a>
+        <a href="03_planning.html">03 기획</a>
+        <a href="04_IA.html">04 IA</a>
+      </nav>
+    </div>
+  </div>
+
+  <div class="page-title">
+    <h1>리서치 <span>/ 페인포인트</span></h1>
+  </div>
+
+  <!-- ── 01. 배경 ── -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">01</span>
+      <span class="section-title">왜 지금, 왜 이 문제인가</span>
+    </div>
+
+    <p class="body-text">
+      K-Pop 팬덤 시장은 이미 수조 원 규모로 성장했지만, 팬들이 실제로 사용하는 플랫폼 경험은
+      시장 규모를 전혀 따라가지 못하고 있습니다.
+      위버스·멜론티켓·네이버 쇼핑 등 기존 플랫폼들은 팬덤의 <strong>극단적인 트래픽 스파이크</strong>와
+      <strong>굿즈·결제 정합성</strong>이라는 특수성을 동시에 다루기 어렵습니다.
+    </p>
+    <p class="body-text">
+      우리는 실제 팬 커뮤니티와 기획사 운영 사례를 분석하여,
+      기술적으로 해결 가능한 페인포인트와 그렇지 않은 것을 <strong>솔직하게 구분</strong>했습니다.
+      이 문서는 FANDROPS의 기능 범위가 어떤 현실 문제에서 출발했는지를 담습니다.
+    </p>
+
+    <div class="two-col">
+      <div class="two-col-item">
+        <div class="two-col-label">기존 플랫폼</div>
+        <div class="two-col-text">위버스 · 멜론티켓 · 네이버 쇼핑 · 인터파크<br>대형 기획사 중심, 범용 이커머스 구조</div>
+      </div>
+      <div class="two-col-item">
+        <div class="two-col-label">우리가 보는 기회</div>
+        <div class="two-col-text"><strong>중소형 기획사 + 오픈런 특화</strong><br>팬덤 특수성을 설계 1순위로 둔 플랫폼</div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ── 02. 페인포인트 ── -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">02</span>
+      <span class="section-title">발견한 페인포인트</span>
+    </div>
+
+    <p class="body-text">
+      각 항목에는 <strong>기술적으로 구현 범위에 포함되는지</strong> 여부를 함께 표시했습니다.
+      현실적 한계를 인정하는 것도 설계의 일부입니다.
+    </p>
+
+    <div class="pain-list">
+
+      <div class="pain-item">
+        <div class="pain-icon">💥</div>
+        <div>
+          <div class="pain-title">드롭 오픈 순간 서버 다운</div>
+          <div class="pain-desc">
+            위버스·멜론 등 기존 플랫폼은 굿즈·콘서트 오픈 순간 반복적으로 다운됩니다.
+            팬들은 새로고침을 반복하다 연결이 끊기고, 기획사는 기회를 날립니다.
+            평소의 <strong>100×–1,000×에 달하는 스파이크</strong>를 앞단에서 흡수하지 못하는 구조적 문제입니다.
+          </div>
+          <div class="pain-tag-row">
+            <span class="ptag ptag-scope">구현 — Rate Limiting + Redis 대기열</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="pain-item">
+        <div class="pain-icon">🤖</div>
+        <div>
+          <div class="pain-title">매크로·비정상 트래픽 (굿즈·오픈 구간)</div>
+          <div class="pain-desc">
+            드롭스·상품 API에 비정상 호출이 몰리면 정상 팬이 불리해집니다.
+            <strong>완전 차단은 불가능</strong>하므로, Rate Limiting·대기열·429로 <strong>피해 최소화</strong>가 목표입니다.
+            <br><span style="font-size:12.5px;color:var(--text-muted);">콘서트·팬미팅은 <a href="requirements/mvp-functional-requirements.md" class="doc-link">외부 예매(F05)</a>만.</span>
+          </div>
+          <div class="pain-tag-row">
+            <span class="ptag ptag-scope">구현 — Bucket4j · 대기열 depth</span>
+            <span class="ptag ptag-limit">한계 — 100% 차단 불가</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="pain-item">
+        <div class="pain-icon">📦</div>
+        <div>
+          <div class="pain-title">드롭스·선착순 재고 오버셀</div>
+          <div class="pain-desc">
+            동시 요청 시 재고가 음수로 내려가거나, 품절인데 주문이 확정되는 사고가 납니다.
+            MVP에서는 <strong>오버셀 0</strong>을 합격선으로 두고, 락·동시성 전략을 부하로 검증합니다.
+          </div>
+          <div class="pain-tag-row">
+            <span class="ptag ptag-scope">구현 — 재고 동시성 · 부하 ~1k 동시</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="pain-item">
+        <div class="pain-icon">🔄</div>
+        <div>
+          <div class="pain-title">중복 결제 · 결제 실패 후 재고 미복구</div>
+          <div class="pain-desc">
+            결제 API 응답이 지연될 때 팬이 버튼을 여러 번 누르면 중복 결제가 발생합니다.
+            또한 결제 실패 후 선점된 재고가 복구되지 않아 품절로 표시되는 현상이 반복됩니다.
+            <strong>멱등 키</strong>로 중복 결제를 막고, <strong>Saga 보상 트랜잭션</strong>으로 실패 시 재고를 자동 복구합니다.
+          </div>
+          <div class="pain-tag-row">
+            <span class="ptag ptag-scope">구현 — <a href="state/invariants-and-state-machines.md" class="doc-link">Saga</a> · <a href="operations/failure-policy.md" class="doc-link">Outbox</a></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="pain-item">
+        <div class="pain-icon">🔔</div>
+        <div>
+          <div class="pain-title">품절 상품 재입고 알림 미작동</div>
+          <div class="pain-desc">
+            품절 후 재입고돼도 팬이 모르면 다시 놓칩니다.
+            <strong>재입고 관심 등록</strong> → 도메인 <strong>이벤트 발행</strong> → 알림 <strong>전송</strong> 파이프라인으로 해결합니다.
+          </div>
+          <div class="pain-tag-row">
+            <span class="ptag ptag-scope">구현 — 발행/전송 분리</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="pain-item">
+        <div class="pain-icon">🏪</div>
+        <div>
+          <div class="pain-title">오프라인·ERP급 재고와 온라인 실시간 불일치</div>
+          <div class="pain-desc">
+            현장 판매·ERP와 온라인 재고를 실시간 단일화하는 요구는 현실적으로 무겁습니다.
+            MVP는 <strong>온라인 재고·품절·재입고 알림</strong>에 집중하고, 오프라인 ERP 연동은 하지 않습니다.
+          </div>
+          <div class="pain-tag-row">
+            <span class="ptag ptag-limit">Not Scope — <a href="03_planning.html#notscope" class="doc-link">03</a></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="pain-item">
+        <div class="pain-icon">🏆</div>
+        <div>
+          <div class="pain-title">팬 충성도·출석 점수 기반 드롭 우선권</div>
+          <div class="pain-desc">
+            리서치에서 “구매·출석 이력으로 선착순 우선권” 아이디어가 나왔으나,
+            확정 MVP 명세에는 <strong>팬 등급·포인트·드롭 우선 접근권</strong>이 없습니다.
+            대신 <strong>대기열</strong>·<strong>공정한 레이트리밋</strong>으로 오픈 구간을 다룹니다.
+          </div>
+          <div class="pain-tag-row">
+            <span class="ptag ptag-limit">Not Scope — 팬 등급·우선권 시스템</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 7 -->
+      <div class="pain-item">
+        <div class="pain-icon">📅</div>
+        <div>
+          <div class="pain-title">아티스트 스케줄을 한눈에 볼 수 없음</div>
+          <div class="pain-desc">
+            팬들은 트위터·공식 홈페이지·위버스를 번갈아 보며 일정을 직접 취합해야 합니다.
+            아티스트 단위 캘린더로 드롭·팬미팅·라이브 일정을 통합 제공하고,
+            라이브 시작 시 푸시 알림을 발송합니다.
+          </div>
+          <div class="pain-tag-row">
+            <span class="ptag ptag-scope">구현 — <a href="04_IA.html#s4" class="doc-link">일정·미디어</a></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 8 -->
+      <div class="pain-item">
+        <div class="pain-icon">✨</div>
+        <div>
+          <div class="pain-title">팬 유입을 유도할 인터랙티브 요소 부재</div>
+          <div class="pain-desc">
+            플랫폼에 처음 들어온 팬이 서비스에 머물 이유가 없습니다.
+            메인 화면 진입 시 <strong>'이달의 아이돌 뽑기'</strong> 알럿을 노출하고,
+            투표 결과를 실시간 랭킹으로 보여줍니다.
+            몇 강 토너먼트 형식으로 운영할지는 추후 결정하며, 우선 랭킹 집계 구조를 설계합니다.
+          </div>
+          <div class="pain-tag-row">
+            <span class="ptag ptag-limit">Not Scope — <a href="requirements/mvp-functional-requirements.md#mvp에-없는-기능-본-표-미등재" class="doc-link">§3</a></span>
+            <span class="ptag ptag-partial">토너먼트 단계 수 — 추후 결정</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="pain-item">
+        <div class="pain-icon">💬</div>
+        <div>
+          <div class="pain-title">댓글 도배·커뮤니티 품질</div>
+          <div class="pain-desc">
+            댓글·하트에서 스팸·도배가 발생할 수 있습니다.
+            MVP는 <strong>기본 정책·레이트·도배 방어</strong> 수준으로 다루고,
+            아티스트가 직접 운영하는 <strong>금칙어 사전·신고 누적 영구 차단</strong> 같은 무거운 모더레이션 제품은 범위에서 뺍니다.
+          </div>
+          <div class="pain-tag-row">
+            <span class="ptag ptag-scope">구현 — 댓글·정책·도배</span>
+            <span class="ptag ptag-limit">Not Scope — 아티스트별 금칙어·신고 제재 시스템</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 10 -->
+      <div class="pain-item">
+        <div class="pain-icon">✈️</div>
+        <div>
+          <div class="pain-title">해외 배송 현황을 실시간으로 확인할 수 없음</div>
+          <div class="pain-desc">
+            글로벌 팬들이 국제 배송 상태를 플랫폼 내에서 실시간으로 확인하고 싶어 합니다.
+            외부 배송 API 연동으로 타임라인 형태의 배송 추적을 제공하자는 아이디어가 있습니다.
+            단, <strong>국제 배송 API는 캐리어마다 규격이 다르고 안정성이 낮아 현실적으로 구현이 매우 어렵습니다.</strong>
+            MVP 범위에서 제외하고, 국내 배송 기본 상태 조회에 집중합니다.
+          </div>
+          <div class="pain-tag-row">
+            <span class="ptag ptag-limit">MVP 제외 — 구현 복잡도 과다</span>
+            <span class="ptag ptag-partial">국내 배송 기본 조회만 포함</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+
+  <!-- ── 03. 현실적 한계 ── -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">03</span>
+      <span class="section-title">기술적 한계 — 솔직한 정리</span>
+    </div>
+
+    <p class="body-text">
+      좋은 설계는 할 수 있는 것만큼, <strong>할 수 없는 것을 명확히 아는 것</strong>에서 나옵니다.
+    </p>
+
+    <div class="insight-box">
+      <ul class="insight-list">
+        <li>
+          <strong>티켓은 팔지 않고 연결한다.</strong>
+          행사 안내 + 외부 링크 검증·노출만.
+        </li>
+        <li>
+          <strong>매크로 완전 차단은 불가능하다.</strong>
+          충분히 정교한 봇은 사람과 구분이 어렵다. Rate Limiting·본인인증·팬 등급 우선권으로
+          봇의 수익성을 낮추는 것이 현실적인 목표다.
+        </li>
+        <li>
+          <strong>오프라인 ERP급 재고 연동은 MVP 제외.</strong>
+          온라인 재고·오버셀 0·재입고 알림에 집중.
+        </li>
+        <li>
+          <strong>팬 등급·출석 포인트 우선권은 복잡도가 높아질 우려가 있다.</strong>
+          리서치 아이디어로 남긴다.
+        </li>
+        <li>
+          <strong>해외 배송 실시간 타임라인은 MVP에서 제외한다.</strong>
+          국제 물류 API는 캐리어별 규격 통일이 안 되어 있고 신뢰도가 낮다.
+          이 문제에 리소스를 쓰는 것보다 정합성·동시성 핵심 과제에 집중하는 것이 포트폴리오 가치가 높다.
+        </li>
+      </ul>
+    </div>
+  </div>
+
+
+  <!-- ── 04. 도출된 핵심 기능 ── -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">04</span>
+      <span class="section-title">페인포인트 → MVP 기능 도출</span>
+    </div>
+
+    <p class="body-text">
+      위 페인포인트를 해결하기 위해 도출된 핵심 기능 요구사항입니다.
+      SSOT: <a href="requirements/mvp-functional-requirements.md" class="doc-link">§3</a> · <a href="04_IA.html" class="doc-link">04 IA</a> · <a href="03_planning.html" class="doc-link">03 기획</a>.
+    </p>
+
+    <div class="req-derive">
+      <div class="req-derive-header">페인포인트 → 기능 매핑</div>
+
+<div class="req-derive-item">
+        <span class="req-dot">인프라</span>
+        <div class="req-text">서버 다운 → <strong>Redis 대기열 (Sorted Set) + Rate Limiting (Bucket4j)</strong>으로 트래픽 흡수. 대기 순번 SSE 실시간 안내.</div>
+      </div>
+      <div class="req-derive-item">
+        <span class="req-dot">재고</span>
+        <div class="req-text">재입고 알림 미작동 → <strong>재입고 구독 + Kafka 이벤트 발행</strong>. <a href="03_planning.html#notscope" class="doc-link">ERP Not Scope</a>.</div>
+      </div>
+      <div class="req-derive-item">
+        <span class="req-dot">결제</span>
+        <div class="req-text">중복 결제·재고 미복구 → <strong>멱등 키 + Saga 보상 트랜잭션 + Outbox 패턴</strong>. 실패 60초 내 자동 복구.</div>
+      </div>
+      <div class="req-derive-item">
+        <span class="req-dot">캘린더</span>
+        <div class="req-text">스케줄 파편화 → <strong>아티스트 단위 통합 캘린더</strong>. 드롭·팬미팅·라이브 일정 통합 표시. 라이브 시작 알림 발송.</div>
+      </div>
+      <div class="req-derive-item">
+        <span class="req-dot">랭킹</span>
+        <div class="req-text">유입 유도 → 메인 화면 <strong>'이달의 아이돌 뽑기'</strong> 알럿 + 실시간 랭킹. (§3 미등재).</div>
+      </div>
+      <div class="req-derive-item">
+        <span class="req-dot">알림</span>
+        <div class="req-text">재입고·결제완료·라이브·커뮤니티 → <strong>발행(도메인 오너)</strong> / <strong>전송(표지민)</strong> 표로 고정. Kafka 필수 아님.</div>
+      </div>
+    </div>
+  </div>
+
+
+  <aside class="related-docs">
+    <span class="related-label">관련 문서</span>
+    <a href="01_service_intro.html">01</a><a href="03_planning.html">03</a><a href="04_IA.html">04</a>
+    <a href="requirements/mvp-functional-requirements.md">§3</a><a href="api/mvp-api-spec.md">API</a>
+    <a href="sequence/payment-flow-reason.md">결제 시퀀스</a>
+  </aside>
+  <div class="footer">
+    <div class="footer-project">FANDROPS · Backend Portfolio · 5인 팀 · 2026.05.19 – 06.25</div>
+    <div class="footer-nav">
+      ← <a href="01_service_intro.html">01 · 서비스 소개</a> &nbsp;&nbsp; → <a href="03_planning.html">03 · Not Scope / KPI·SLO</a>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
