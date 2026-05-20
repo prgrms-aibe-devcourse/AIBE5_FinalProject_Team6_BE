@@ -36,6 +36,15 @@ out/
 ### VS Code ###
 .vscode/
 
+### Claude Code ###
+.claude/settings.local.json
+.claude/skills/
+
+### AI Tools (로컬 전용) ###
+.agents/
+.omc/
+skills-lock.json
+
 ### Secrets (로컬 .env 금지 — application-local.example.yml 참고) ###
 .env
 .env.*
