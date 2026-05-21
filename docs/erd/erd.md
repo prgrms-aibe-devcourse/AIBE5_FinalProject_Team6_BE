@@ -12,6 +12,7 @@ erDiagram
     FAN ||--o{ ATTENDANCE_LOG : "출석"
     FAN ||--o{ GOODS_VOTE_RECORD : "투표"
 
+    AGENCY_APPLICATION ||--o| AGENCY_ACCOUNT : "승인시 계정생성"
     AGENCY_ACCOUNT ||--o{ ARTIST_PROFILE : "소속"
     ARTIST_PROFILE ||--o{ ARTIST_MEMBER : "멤버"
     ARTIST_PROFILE ||--o{ PRODUCT : owns
@@ -64,7 +65,23 @@ erDiagram
         varchar auth_provider "LOCAL | KAKAO | GOOGLE"
         varchar provider_id
         varchar password_hash
+        boolean is_allow_notification "알림 수신 동의 (기본값: true)"
         datetime created_at
+    }
+
+    AGENCY_APPLICATION {
+        bigint id PK
+        string company_name "기획사 회사명"
+        string business_registration_number "사업자등록번호"
+        string representative_name "대표자명"
+        string contact_email "담당자 연락 이메일"
+        string contact_phone "담당자 연락 전화번호"
+        string introduction "입점 신청 소개글"
+        string target_artist_name "신청 대상 아티스트명"
+        varchar status "PENDING | APPROVED | REJECTED"
+        varchar reject_reason "반려 사유"
+        datetime applied_at "신청 일시"
+        datetime reviewed_at "심사 완료 일시"
     }
 
     AGENCY_ACCOUNT {
@@ -101,6 +118,7 @@ erDiagram
         varchar password_hash
         string member_name
         varchar role "ROLE_ARTIST"
+        varchar profile_image_url "개별 멤버 프로필 이미지"
         datetime created_at
     }
 

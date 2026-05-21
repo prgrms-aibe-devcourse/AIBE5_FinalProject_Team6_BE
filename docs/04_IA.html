@@ -430,6 +430,13 @@ body {
   gap: 12px;
 }
 
+.agency-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+.agency-tabs .hdr { font-size: 11px; padding: 6px 4px; }
+
 .map-wrap { overflow-x: auto; margin-top: 1rem; }
 table.map {
   width: 100%;
@@ -486,6 +493,7 @@ table.map tr:nth-child(even) td { background: var(--bg-subtle); }
 @media (max-width: 900px) {
   .artist-tabs { grid-template-columns: repeat(4, 1fr); }
   .tabs { grid-template-columns: repeat(2, 1fr); }
+  .agency-tabs { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 700px) {
   .post-login { grid-template-columns: 1fr; }
@@ -498,6 +506,7 @@ table.map tr:nth-child(even) td { background: var(--bg-subtle); }
   .artist-tabs { grid-template-columns: repeat(2, 1fr); }
   .tabs { grid-template-columns: 1fr; }
   .admin-grid { grid-template-columns: 1fr; }
+  .agency-tabs { grid-template-columns: 1fr; }
 }
 
 .footer {
@@ -528,8 +537,9 @@ table.map tr:nth-child(even) td { background: var(--bg-subtle); }
       <a href="#s3">③ GNB</a>
       <a href="#s4">④ 아티스트 홈</a>
       <a href="#s5">⑤ 결제</a>
-      <a href="#s6">⑥ Admin</a>
-      <a href="#s7">⑦ 매핑표</a>
+      <a href="#s6_agency">⑥ 파트너 오피스</a>
+      <a href="#s6">⑦ Admin</a>
+      <a href="#s7">⑧ 매핑표</a>
       </div>
     </div>
   </nav>
@@ -640,16 +650,20 @@ table.map tr:nth-child(even) td { background: var(--bg-subtle); }
 
     <div class="post-login">
       <div class="side-flow">
-        <div class="hdr outline">운영자/Agency</div>
+        <div class="hdr outline">기획사 (Agency)</div>
         <div class="node">
-          <strong>입점 신청서 작성</strong>
-          회사명, 사업자번호, 아티스트 정보 등
+          <strong>입점 신청서 작성 (폼)</strong>
+          * 사업자등록번호(business_registration_number) 및 대표자명(ceo_name) 필수 입력.<br />
+          * 양식 유효성 검증 적용 및 갱신.<br />
+          * 비동기 펜딩 상태(isSubmitting) 로딩 스피너 및 버튼 비활성화 상태 인터랙션.<br />
+          * 제출 완료 시: "검토 후 이메일로 결과를 안내드립니다" 안내 노출.
           <span class="fid">F02-01</span>
         </div>
         <div class="v-arrow"></div>
         <div class="node">
-          <strong>심사 통과 시 공간 생성 (F03-01)</strong>
-          6탭(피드·아티스트·굿즈투표·미디어·공지사항·스케줄) 생성 + 메일 알림
+          <strong>승인 완료 시 기획사 계정 생성</strong>
+          기획사 파트너 오피스 권한 부여 및 메일 알림
+          <span class="fid">F02-02</span>
         </div>
       </div>
 
@@ -657,7 +671,7 @@ table.map tr:nth-child(even) td { background: var(--bg-subtle); }
         <div class="hdr">일반 사용자 (Fan)</div>
         <div class="node">
           <strong>GNB 메인 홈 진입</strong>
-          통합 홈 화면 노출
+          통합 홈 화면 노출 및 커뮤니티/스토어 서비스 이용
         </div>
       </div>
     </div>
@@ -752,9 +766,15 @@ table.map tr:nth-child(even) td { background: var(--bg-subtle); }
       <div class="tab-col">
         <div class="hdr">MY PAGE</div>
         <div class="node"><strong>내 정보 수정</strong>이메일 · 비밀번호 변경</div>
+        <div class="node">
+          <span class="badge core">핵심</span>
+          <strong>알림 설정 (글로벌)</strong>
+          최상단 글로벌 알림 수신 동의 토글 스위치(isAllowNotification) 추가.<br />
+          * 통신 딜레이(Disabled 처리) 및 변경 시 토스트 메시지 안내 인터랙션.
+          <span class="fid">F03-04</span>
+        </div>
         <div class="node"><strong>가입/활동 내역</strong>마이페이지 히스토리<span class="fid">F07-01</span></div>
         <div class="node"><strong>주문·결제 내역</strong>영수증 확인 및 결제 복구<span class="fid">F07-02</span></div>
-        <div class="node"><strong>알림 설정</strong>푸시 온/오프<span class="fid">F03-04</span></div>
         <div class="node"><strong>공지사항 / 서비스 정책</strong></div>
         <div class="node" style="border-color:var(--bg-dark)">
           <strong>입점 신청서 제출</strong>
@@ -815,6 +835,11 @@ table.map tr:nth-child(even) td { background: var(--bg-subtle); }
           아티스트 공지 목록 · 상세
           <span class="fid">F03-01</span>
         </div>
+        <div class="node nested" style="margin-top:4px">
+          <strong>공지사항 작성 (모달)</strong>
+          Markdown 본문 작성 + 이미지 첨부 영역(즉각 썸네일 미리보기, 삭제 및 변경 인터랙션).
+          <span class="fid">F03-01</span>
+        </div>
       </div>
       <div>
         <div class="hdr">스케줄</div>
@@ -871,10 +896,125 @@ table.map tr:nth-child(even) td { background: var(--bg-subtle); }
     </div>
   </section>
 
+  <!-- S6_AGENCY PARTNER OFFICE -->
+  <section class="section artist-space" id="s6_agency">
+    <div class="section-header">
+      <span class="section-num">⑥</span>
+      <span class="section-title" style="color:var(--text-primary)">기획사 파트너 오피스 (B2B)</span>
+      <span class="section-sub">B2B 파트너 관리 시스템</span>
+    </div>
+    
+    <div class="callout" style="margin-bottom: 1.5rem;">
+      <strong>기획사 오피스 인터랙션:</strong> 아티스트 프로필 원형 미리보기(FileReader), 공지-캘린더 연동 슬라이드 토글, 옵션 동적 추가(최대 6개), 다중 드래그앤드롭 상품 이미지 업로드 등 최신 모던 어드민 UI 요소가 적용되었습니다.
+    </div>
+
+    <div class="agency-tabs">
+      <div>
+        <div class="hdr">1. 통합 대시보드</div>
+        <div class="node" style="margin-top:6px; min-height: 220px;">
+          <span class="badge core">핵심</span>
+          <strong style="display:block; margin-bottom:6px;">Agency Dashboard</strong>
+          <ol>
+            <li><strong>핵심 지표 요약 (OverviewStats):</strong> 구독 팬 수, 누적 글로벌 티켓/굿즈 매출, 진행 중인 활성 이벤트/투표 수 등 전체 현황 모니터링.</li>
+            <li><strong>최근 활동 로그:</strong> 최근 발생한 주요 시스템 로그 및 팬덤 활동 타임라인 확인.</li>
+          </ol>
+          <span class="fid">F08-02</span>
+        </div>
+      </div>
+
+      <div>
+        <div class="hdr">2. 아티스트 & 멤버 관리</div>
+        <div class="node" style="margin-top:6px; min-height: 220px;">
+          <span class="badge core">핵심</span>
+          <strong style="display:block; margin-bottom:6px;">Artist & Members</strong>
+          <ol>
+            <li><strong>아티스트 프로필 관리:</strong> 아티스트명, 소개글(Bio) 수정. 프로필 대표 이미지 업로드 시 FileReader를 이용해 <u>원형 썸네일 미리보기(Base64)</u>를 즉시 제공. 소셜 아웃링크(공식홈/유튜브/인스타) 연동 관리.</li>
+            <li><strong>개별 멤버 관리:</strong> 멤버 추가, 이름 및 포지션/역할 관리. 개별 멤버 전용 프로필 이미지 별도 업로드 및 변경 인터랙션 지원.</li>
+          </ol>
+          <span class="fid">F02-03</span>
+        </div>
+      </div>
+
+      <div>
+        <div class="hdr">3. 아티스트 일정 캘린더</div>
+        <div class="node" style="margin-top:6px; min-height: 220px;">
+          <span class="badge core">핵심</span>
+          <strong style="display:block; margin-bottom:6px;">Artist Schedule</strong>
+          <ol>
+            <li><strong>일정 등록/관리:</strong> CONCERT, FAN MEETING, RELEASE, LIVE STREAM 카테고별 일정 등록 폼 제공.</li>
+            <li><strong>공지사항 연동 (토글):</strong> 새 일정 추가 시, '기존 공지사항 불러오기' 토글 스위치 제공. 활성화 시 이미 작성된 공지사항을 선택하여 일정에 연결 및 연동 처리.</li>
+          </ol>
+          <span class="fid">F03-05, F05-01</span>
+        </div>
+      </div>
+
+      <div>
+        <div class="hdr">4. 커뮤니티 공지사항 운영</div>
+        <div class="node" style="margin-top:6px; min-height: 250px;">
+          <span class="badge core">핵심</span>
+          <strong style="display:block; margin-bottom:6px;">Notice Management</strong>
+          <ol>
+            <li><strong>공지사항 작성 에디터:</strong> NOTICE, LIVE, EVENT, DROP 분류 선택 및 Markdown 본문 작성. 추가 상세 내용 필드 상단에 <u>이미지 첨부 영역</u> 추가 (즉각 썸네일 미리보기, 변경/삭제 가능).</li>
+            <li><strong>캘린더 자동 연동 (Auto-sync):</strong> 이벤트나 라이브 공지 작성 시 하단 토글 ON 설정 시, 공지 작성과 동시에 아티스트 캘린더에 일정 세부 정보(제목, 일시, 타입 등)가 슬라이드 다운 형식으로 노출 및 자동 연동/등록.</li>
+          </ol>
+          <span class="fid">F03-01, 04, 05</span>
+        </div>
+      </div>
+
+      <div>
+        <div class="hdr">5. 굿즈 디자인 투표 관리</div>
+        <div class="node" style="margin-top:6px; min-height: 250px;">
+          <span class="badge core">핵심</span>
+          <strong style="display:block; margin-bottom:6px;">Goods Voting</strong>
+          <ol>
+            <li><strong>신규 투표 개설:</strong> 투표 제목 및 종료 시한 설정. 투표 옵션 동적 행 추가 제어 (<u>최대 6개</u> 옵션 생성, 옵션 인라인 텍스트 및 라벨 이미지 개별 업로드 지원).</li>
+            <li><strong>투표 제어 및 통계:</strong> 투표 결과 실시간 통계 열람. 진행 중인 투표의 즉시 마감을 위한 <u>'투표 강제 종료'</u> 기능 제공 (Confirm 다이얼로그 확인 후 is_active: false 처리하는 빨간 버튼 노출).</li>
+          </ol>
+          <span class="fid">F03-08</span>
+        </div>
+      </div>
+
+      <div>
+        <div class="hdr">6. 상품 & 드롭스 커머스 관리</div>
+        <div class="node" style="margin-top:6px; min-height: 250px;">
+          <span class="badge core">핵심</span>
+          <strong style="display:block; margin-bottom:6px;">Products & Drops</strong>
+          <ol>
+            <li><strong>상품/드롭스 등록:</strong> 상품명, 가격, 초기 재고 입력. 한정판 드롭스는 시작/종료일시 지정.</li>
+            <li><strong>다중 이미지 업로드 컴포넌트:</strong> 드래그앤드롭 박스 및 multiple 파일 업로드 박스 제공. 업로드된 이미지는 <u>가로 스크롤 썸네일 리스트(최대 5장)</u>로 확인 및 개별 삭제 지원 (첫 번째 사진에 '대표 이미지' 뱃지 자동 획득).</li>
+          </ol>
+          <span class="fid">F04-01, 02</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="artist-extra" style="margin-top: 1.5rem; padding-top: 1.5rem;">
+      <div class="agency-tabs" style="grid-template-columns: 1fr; gap: 0;">
+        <div>
+          <div class="hdr" style="background: var(--text-primary); color: var(--bg); font-weight: 600;">7. 홈 화면 메인 배너 제어 (Home Banner Control)</div>
+          <div class="node" style="margin-top:6px; border-color: var(--text-primary)">
+            <span class="badge core">핵심 설정</span>
+            <ol style="margin-top: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+              <li>
+                <strong>배너 정보 및 노출 제어:</strong>
+                <p style="margin: 4px 0 0 0; font-size: 13px; color: var(--text-secondary); line-height: 1.5;">배너 제목, 노출 기간 설정. 노출 상태(ACTIVE, WAITING, INACTIVE) 즉각 변경 제어 지원.</p>
+              </li>
+              <li>
+                <strong>배너 이미지 업로드 영역:</strong>
+                <p style="margin: 4px 0 0 0; font-size: 13px; color: var(--text-secondary); line-height: 1.5;">모달 내 제목 필드 상단에 <u>이미지 업로드 영역</u> 추가. 첨부된 덮개 이미지 파일 가로 비율에 최적화된 썸네일 실시간 렌더링, 변경 및 삭제 인터랙션 지원.</p>
+              </li>
+            </ol>
+            <div style="margin-top: 8px;"><span class="fid">F04-03</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- S6 ADMIN -->
   <section class="section" id="s6">
     <div class="section-header">
-      <span class="section-num">⑥</span>
+      <span class="section-num">⑦</span>
       <span class="section-title">관리자 (Admin)</span>
       <span class="section-sub">백오피스 · Fan 앱과 분리</span>
     </div>
@@ -882,7 +1022,7 @@ table.map tr:nth-child(even) td { background: var(--bg-subtle); }
       <div>
         <div class="hdr secondary">입점 심사</div>
         <div class="node" style="margin-top:6px">
-          Agency 입점 신청서 검토 · 승인/반려
+          Agency 입점 신청서 검토 · 승인/반려 (business_registration_number, ceo_name 등 검증)
           <span class="fid">F02-02</span>
         </div>
       </div>
@@ -906,7 +1046,7 @@ table.map tr:nth-child(even) td { background: var(--bg-subtle); }
   <!-- S7 MAPPING -->
   <section class="section" id="s7">
     <div class="section-header">
-      <span class="section-num">⑦</span>
+      <span class="section-num">⑧</span>
       <span class="section-title">화면–기능 매핑표</span>
       <span class="section-sub">명세 §5</span>
     </div>
@@ -944,9 +1084,16 @@ table.map tr:nth-child(even) td { background: var(--bg-subtle); }
           <tr><td>15</td><td>결제창</td><td>⑤ 결제</td><td>F06-01~03</td><td>Fan</td></tr>
           <tr><td>16</td><td>마이페이지</td><td>③ MY PAGE</td><td>F07-01, 02</td><td>Fan</td></tr>
           <tr><td>17</td><td>알림센터</td><td>③ HOME</td><td>F03-04</td><td>Fan</td></tr>
-          <tr><td>18</td><td>운영자 신청</td><td>②·③ 입점</td><td>F02-01</td><td>Artist</td></tr>
-          <tr><td>19</td><td>Admin</td><td>⑥ Admin</td><td>F02-02, F04-03, F05, F08-02</td><td>Admin</td></tr>
-          <tr><td>20</td><td>재입고 알림</td><td>③ STORE</td><td>F04-05</td><td>Fan</td></tr>
+          <tr><td>18</td><td>기획사 입점 신청</td><td>② 로그인 후 진입</td><td>F02-01</td><td>Agency</td></tr>
+          <tr><td>19</td><td>Admin 백오피스</td><td>⑦ Admin</td><td>F02-02, F04-03, F05, F08-02</td><td>Admin</td></tr>
+          <tr><td>20</td><td>재입고 알림 신청</td><td>③ STORE</td><td>F04-05</td><td>Fan</td></tr>
+          <tr><td>21</td><td>기획사 통합 대시보드</td><td>⑥ 파트너 오피스</td><td>F08-02</td><td>Agency</td></tr>
+          <tr><td>22</td><td>아티스트 & 멤버 관리</td><td>⑥ 파트너 오피스</td><td>F02-03</td><td>Agency</td></tr>
+          <tr><td>23</td><td>아티스트 일정 관리</td><td>⑥ 파트너 오피스</td><td>F03-05, F05-01</td><td>Agency</td></tr>
+          <tr><td>24</td><td>공지사항 운영 & 자동 연동</td><td>⑥ 파트너 오피스</td><td>F03-01, 04, 05</td><td>Agency</td></tr>
+          <tr><td>25</td><td>굿즈 투표 관리 & 강제 종료</td><td>⑥ 파트너 오피스</td><td>F03-08</td><td>Agency</td></tr>
+          <tr><td>26</td><td>상품 & 드롭스 다중 등록</td><td>⑥ 파트너 오피스</td><td>F04-01, 02</td><td>Agency</td></tr>
+          <tr><td>27</td><td>홈 배너 제어 & 이미지 관리</td><td>⑥ 파트너 오피스</td><td>F04-03</td><td>Agency</td></tr>
         </tbody>
       </table>
     </div>

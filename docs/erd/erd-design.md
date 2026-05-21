@@ -9,7 +9,7 @@
 
 | 도메인 | 테이블 | 비고 |
 | --- | --- | --- |
-| **사용자·아티스트** | `FAN`, `AGENCY_ACCOUNT`, `ARTIST_PROFILE`, `ARTIST_MEMBER`, `USER_FOLLOW` | 팬(B2C) · 기획사(B2B) · 아티스트 프로필·멤버 · 팔로우(팬 가입) |
+| **사용자·아티스트** | `FAN`, `AGENCY_APPLICATION`, `AGENCY_ACCOUNT`, `ARTIST_PROFILE`, `ARTIST_MEMBER`, `USER_FOLLOW` | 팬(B2C) · 입점신청(B2B) · 기획사(B2B) · 아티스트 프로필·멤버 · 팔로우(팬 가입) |
 | **커뮤니티** | `ARTIST_FEED`, `FEED_IMAGE`, `ARTIST_NOTICE`, `COMMENT`, `FEED_LIKE`, `COMMENT_LIKE` | 피드 · 피드 다중 이미지 · 공지 · 댓글(대댓글) · 피드/댓글 좋아요 |
 | **커머스** | `PRODUCT`, `INVENTORY`, `INVENTORY_HISTORY`, `CART`, `CART_ITEM`, `ORDER`, `ORDER_ITEM`, `PAYMENT`, `RESTOCK_ALERT` | 상품·재고·재고 이력·**장바구니(RDB)** ·주문·결제 — [ADR-003](../adr/ADR-003-cart-storage-rdb-phase1.md) |
 | **투표·일정** | `VOTE`, `ARTIST_SCHEDULE` | 이달의 아이돌 투표 · 아티스트 스케줄(일정) 및 공지 연동 캘린더 |
@@ -102,7 +102,11 @@ ERD:    PAYMENT.payment_key (Unique Index)
 ### 설계 결정
 
 * **`FAN`**: `email`, `nickname`, `auth_provider`(`LOCAL` \| `KAKAO` \| `GOOGLE`), `provider_id`(소셜 시), `password_hash`(로컬 가입 시), `created_at`. 소셜 `providerToken`은 저장하지 않는다 ([mvp-api § Auth](../api/mvp-api-spec.md#auth--fan-계정)).
-* **`AGENCY_ACCOUNT`**: 기획사(B2B). `login_id`, `password_hash`, `company_name`, `contact_email`, `status`, `invitation_token`, `token_expired_at`, `role` 기본 `ROLE_PARTNER`. 입점 심사 API는 `AGENCY_ACCOUNT` 행 대상. `status` 운영값: `PENDING` \| `APPROVED` \| `REJECTED` (ERD 예시는 승인 완료 행 기준).
+  * **`is_allow_notification` (신규 컬럼)**: 마이페이지 글로벌 알림(푸시 온/오프) 수신 설정을 저장하는 BOOLEAN 타입 컬럼.
+* **`AGENCY_APPLICATION` (신규 테이블)**: 기획사의 플랫폼 입점 신청 정보를 영속화하기 위한 심사용 테이블.
+  * `company_name`, `business_registration_number`, `representative_name`, `contact_email`, `contact_phone`, `introduction`, `target_artist_name`을 저장.
+  * `status` 기본값 `PENDING` 이며, 최종 승인(`APPROVED`) 시점에 `AGENCY_ACCOUNT` 로그인 계정과 `ARTIST_PROFILE`이 자동으로 개설됨. 반려 시 `reject_reason`을 필수로 기록.
+* **`AGENCY_ACCOUNT`**: 기획사(B2B). `login_id`, `password_hash`, `company_name`, `contact_email`, `status`, `invitation_token`, `token_expired_at`, `role` 기본 `ROLE_PARTNER`. 입점 심사 완료 후 생성되는 로그인/권한 계정.
 * **`ARTIST_PROFILE`**: 아티스트 공간을 구성하는 앵커 엔티티 (`artist_id`).
   * `partner_id` FK → `AGENCY_ACCOUNT`.
   * `name`, `joined_at`.
@@ -110,6 +114,7 @@ ERD:    PAYMENT.payment_key (Unique Index)
   * **`homepage_url`, `youtube_url`, `instagram_url`**: 프로필 탭의 외부 아웃링크를 저장하기 위한 컬럼.
   * **`profile_image_url`, `cover_image_url`, `bio`**: 프로필 탭에 노출할 소개 이미지와 소개글을 저장하기 위한 컬럼.
 * **`ARTIST_MEMBER`**: `artist_id` FK, `login_id`, `password_hash`, `member_name`, `role` 기본 `ROLE_ARTIST`. **피드 작성 주체** (`artist_member_id`).
+  * **`profile_image_url` (신규 컬럼)**: 개별 멤버(하니, 민지 등)의 프로필 이미지를 렌더링하기 위한 VARCHAR 타입 컬럼.
 
 ### 근거
 
