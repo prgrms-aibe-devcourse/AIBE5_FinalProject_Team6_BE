@@ -723,12 +723,13 @@ body {
           <td><div class="domain-badge">Identity / Security / Communication</div></td>
           <td>
             <div class="team-detail">
-              <span class="team-scope">[F01-01~03, F02-01~02, F03-04]</span>
-              <span class="team-tagline">신뢰·인증·알림 채널</span>
+              <span class="team-scope">[F01-01~03, F02-01~02, F03-04(전송), F04-03]</span>
+              <span class="team-tagline">신뢰·인증·알림 채널 & 메인 배너 Admin</span>
               <ul class="team-bullets">
                 <li>이메일·소셜 가입 · JWT·인가</li>
                 <li>알림 <strong>전송</strong> — 발행·페이로드는 <strong>알림 이벤트 표</strong></li>
                 <li>입점 신청 · Admin 심사·승인 · <strong>승인 시 이벤트 발행</strong> (공간 생성 소비는 정환철)</li>
+                <li><strong>메인 배너 Admin 및 노출 (F04-03)</strong></li>
               </ul>
             </div>
           </td>
@@ -738,16 +739,15 @@ body {
           <td><div class="domain-badge">Community / Content</div></td>
           <td>
             <div class="team-detail">
-              <span class="team-scope">[F01-04, F02-03, F03-01~08, F04-03, F05-01~03, F07-01]</span>
-              <span class="team-tagline">커뮤니티·행사·콘텐츠 — 아티스트 홈 7탭(F03-01): 피드·프로필·투표·미디어·공지·일정·출석</span>
+              <span class="team-scope">[F01-04, F02-03, F03-01~08(발행), F05-01~03, F07-01]</span>
+              <span class="team-tagline">커뮤니티·행사·콘텐츠 — 아티스트 홈 6탭(F03-01): 피드·아티스트·굿즈투표·미디어·공지사항·스케줄 (출석체크는 피드 내 배너 연동)</span>
               <ul class="team-bullets">
-                <li>승인 이벤트 소비 → F03-01 공간·7탭 생성 (실패 시 재시도·DLQ/failed_row·리컨실)</li>
+                <li>승인 이벤트 소비 → F03-01 공간·6탭 생성 (실패 시 재시도·DLQ/failed_row·리컨실)</li>
                 <li>팬 가입(아티스트별) + 팬 수 증가</li>
-                <li>F02-03 프로필 탭 · F03-02~03 피드(게시·댓글·좋아요) · F03-08 투표 · F03-06 미디어(라이브 임베드) · 공지 · F03-05 일정 · F03-07 출석</li>
-                <li><strong>상점(Store)은 GNB 스토어(F04)</strong> — 아티스트 홈 탭 아님</li>
-                <li>출석 체크(7일 달성 리워드 대상자 산정) · 굿즈 투표(이미지 선택지, 팬 가입자 전용)</li>
-                <li>행사·외부 티켓 링크(F05) — 일정 탭·GNB 커뮤니티에서 노출</li>
-                <li>프로필·SNS 팬 Read · <strong>메인 배너(F04-03)</strong> Admin CRUD 및 GNB 홈 노출</li>
+                <li>F02-03 아티스트 탭(프로필) · F03-02~03 피드(게시·댓글·좋아요·출석 배너) · F03-08 굿즈투표 · F03-06 미디어(라이브 임베드) · 공지사항 · F03-05 스케줄 · F03-07 출석체크</li>
+                <li>출석 체크(피드 내 배너 진입, 7일 달성 리워드 대상자 산정) · 굿즈투표(이미지 선택지, 팬 가입자 전용)</li>
+                <li>행사·외부 티켓 링크(F05) — 스케줄 탭·GNB ARTISTS에서 노출</li>
+                <li>프로필·SNS 팬 Read</li>
                 <li>마이페이지 활동 <strong>집계/BFF 오너</strong> (형성빈·장성재 내부 API 조립)</li>
                 <li>피드·행사 캐시 · 커서 페이징 · N+1</li>
               </ul>
@@ -852,11 +852,11 @@ body {
           </tr>
           <tr>
             <td>표지민</td>
-            <td>JWT·소셜·인가 · 약관 동의 · 계정 복구 설계 · Admin 심사 플로 · 승인 <strong>도메인 이벤트</strong> 스키마</td>
+            <td>JWT·소셜·인가 · 약관 동의 · 계정 복구 설계 · Admin 심사 플로 · 승인 <strong>도메인 이벤트</strong> 스키마 · 메인 배너(F04-03) 모델 설계</td>
           </tr>
           <tr>
             <td>정환철</td>
-            <td>7탭(피드·프로필·투표·미디어·공지·일정·출석) ERD · 공간 생성 <strong>실패·리컨실</strong> 초안 · 메인 배너(F04-03) 모델·노출 · 행사·외부 링크 · 캐시·커서 · 팬 가입 · 프로필 공개</td>
+            <td>6탭(피드·아티스트·굿즈투표·미디어·공지사항·스케줄) ERD · 공간 생성 <strong>실패·리컨실</strong> 초안 · 행사·외부 링크 · 캐시·커서 · 팬 가입 · 프로필 공개</td>
           </tr>
           <tr>	
             <td>형성빈</td>
@@ -887,11 +887,11 @@ body {
           </tr>
           <tr>
             <td>표지민</td>
-            <td>Auth 전체 · 계정 복구 · Admin 심사 API · 알림 발송 어댑터 1차</td>
+            <td>Auth 전체 · 계정 복구 · Admin 심사 API · 알림 발송 어댑터 1차 · 메인 배너 API</td>
           </tr>
           <tr>
             <td>정환철</td>
-            <td>공간·7탭 생성 소비 · 메인 배너 API · 피드·프로필·투표·미디어·공지·일정·출석·행사 API · Redis 캐시 · N+1 1차 · 팬 가입 API</td>
+            <td>공간·6탭 생성 소비 · 피드·아티스트·굿즈투표·미디어·공지사항·스케줄·출석·행사 API · Redis 캐시 · N+1 1차 · 팬 가입 API</td>
           </tr>
           <tr>
             <td>형성빈</td>
@@ -922,7 +922,7 @@ body {
           </tr>
           <tr>
             <td>정환철</td>
-            <td>스탬피드 방어 · EXPLAIN/인덱스 · FE 아티스트 홈 7탭(피드·프로필·투표·미디어·공지·일정·출석) · 마이페이지 활동 <strong>집계/BFF</strong></td>
+            <td>스탬피드 방어 · EXPLAIN/인덱스 · FE 아티스트 홈 6탭(피드·아티스트·굿즈투표·미디어·공지사항·스케줄) · 마이페이지 활동 <strong>집계/BFF</strong></td>
           </tr>
           <tr>
             <td>형성빈</td>
@@ -984,11 +984,11 @@ body {
           </tr>
           <tr>
             <td>표지민</td>
-            <td>Auth·알림 OpenAPI · Admin 입점 심사 문서</td>
+            <td>Auth·알림 OpenAPI · Admin 입점 심사 문서 · 메인 배너 API 문서</td>
           </tr>
           <tr>
             <td>정환철</td>
-            <td>커뮤니티·캐시 STAR · 커뮤니티·행사·일정·출석·투표 · 메인 배너 API 문서</td>
+            <td>커뮤니티·행사·스케줄·출석·투표 API 문서</td>
           </tr>
           <tr>
             <td>형성빈</td>

@@ -1,6 +1,6 @@
 ---
 agent_name: junghwancheol
-description: 아티스트 공간, 팬 가입, 피드, 댓글, 일정, 출석 체크, 굿즈 투표, 라이브 임베드, 행사 노출 및 메인 배너 Admin/노출을 담당하는 커뮤니티 전문가
+description: 아티스트 공간(6탭), 팬 가입, 피드·댓글(출석 배너 연동), 일정, 출석 체크, 굿즈 투표, 라이브 임베드 및 행사 노출을 담당하는 커뮤니티 전문가
 paths:
   - "modules/community/**"
 team: FANDROPS_Backend
@@ -14,7 +14,7 @@ team: FANDROPS_Backend
 
 ## 역할 한 줄
 
-`community` — 아티스트 공간, 팬 가입(+1), 피드·댓글·하트, 일정, 출석 체크, 굿즈 투표, 라이브·행사 링크 노출, 메인 배너 Admin/노출, 피드 캐시.
+`community` — 아티스트 공간(6탭), 팬 가입(+1), 피드·댓글·하트·출석체크 배너, 일정, 굿즈 투표, 라이브·행사 링크 노출, 피드 캐시.
 
 ## 수정 가능 경로
 
@@ -36,8 +36,8 @@ Auth는 Security + `user-api` 호출 또는 공통 Principal만 사용.
 | 문서 | 언제 |
 | --- | --- |
 | `docs/architecture/architecture.md` | § user vs community |
-| `docs/erd/erd-design.md` | §5 커뮤니티 · §7·§8 팬 가입·굿즈 투표·일정 (해당 테이블 작업 시) |
-| `docs/api/mvp-api-spec.md` | § Artist / Event, § Notification `LIVE_START`·`NEW_POST_COMMENT` **발행** |
+| `docs/erd/erd-design.md` | §5 커뮤니티 · §7 `USER_FOLLOW` · §8 `ARTIST_SCHEDULE` · §12 출석 · §13 굿즈 투표 (해당 작업 시) |
+| `docs/api/mvp-api-spec.md` | § Artist / Event / Community, § Notification `ARTIST_SCHEDULE`·`NEW_FEED`·`NEW_COMMENT` **발행** |
 | `docs/erd/data-lifecycle.md` | §3.5 커뮤니티·콘텐츠 (DELETE · purge) |
 | `docs/operations/failure-policy.md` | §3.6 캐시 miss · SingleFlight |
 
@@ -67,14 +67,14 @@ Auth는 Security + `user-api` 호출 또는 공통 Principal만 사용.
 
 ## 김최고 체크리스트 (정환철)
 
-- [ ] F03-01 아티스트 홈 **7탭**: 피드·프로필·투표·미디어·공지·일정·출석 (상점 탭 없음)
-- [ ] 피드·댓글·출석·굿즈 투표·라이브 = **한 모듈** `community`
-- [ ] 팬 가입(`FAN_ARTIST`)은 커뮤니티 쓰기·굿즈 투표 권한의 선행 조건
+- [ ] F03-01 아티스트 홈 **6탭**: 피드·아티스트(프로필)·굿즈투표·미디어·공지사항·스케줄 (출석체크는 피드 내 이벤트 배너로 연동)
+- [ ] 피드·댓글(출석체크 배너 포함)·굿즈투표·라이브 = **한 모듈** `community`
+- [ ] 팬 가입(`USER_FOLLOW`)은 커뮤니티 쓰기·이달의 아이돌 투표(`VOTE`) 권한의 선행 조건
 - [ ] MVP: 인앱 티켓 예매 **없음** — `externalTicketUrl`만
-- [ ] `PATCH /lives/{id}/start` 시 `LIVE_START` 이벤트 발행 (전송은 notification)
-- [ ] 출석 체크 7일 달성은 리워드 대상자 산정까지만. 실물 지급/배송은 운영 정책 또는 Commerce Phase로 넘긴다
+- [ ] `PATCH /lives/{id}/start` 시 `ARTIST_SCHEDULE` 알림 이벤트 발행 (전송은 notification)
+- [ ] 출석 체크는 피드 내 이벤트 배너를 통해 진입하며, 7일 달성은 리워드 대상자 산정까지만. 실물 지급/배송은 운영 정책 또는 Commerce Phase로 넘긴다
 - [ ] 굿즈 투표는 팬 가입자만 가능하고 이미지 선택지를 지원한다
-- [ ] F04-03 메인 배너 Admin/노출은 community. 스토어 상품·노출 정렬(F04-01)은 order
+- [ ] 스토어 상품·노출 정렬(F04-01)은 order. 메인 배너(F04-03)는 표지민 담당.
 - [ ] 목록 API: `cursor` + `hasMore` — `api-contract.md`
 - [ ] 캐시: TTL jitter + SingleFlight (핫 피드)
 

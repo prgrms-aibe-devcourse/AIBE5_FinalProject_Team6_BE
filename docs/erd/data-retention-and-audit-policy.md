@@ -111,10 +111,10 @@ Audit 레코드는 **`audit_logs`** (append-only, 수정·삭제 API 없음). �
 | --- | --- |
 | who | `admin_id`, role |
 | when | `occurred_at` |
-| what | `PATCH /admin/banners/{id}` 또는 `PATCH /admin/artist-applications/{id}` |
+| what | `PATCH /admin/main-banners/{id}` 또는 `PATCH /admin/artist-applications/{id}` |
 | before / after | `{ "title": "…", "imageUrl": "…" }` JSON diff |
 
-오너 예: 입점 심사 승인·반려는 표지민, F04-03 메인 배너 Admin은 정환철, 모니터링/운영성 조회는 지영재.
+오너 예: 입점 심사 승인·반려는 표지민, F04-03 메인 배너 Admin은 표지민 (`user`), 모니터링/운영성 조회는 지영재.
 
 ### 3.3 주문 상태 변경 (형성빈 · 장성재)
 
@@ -171,7 +171,7 @@ Audit 레코드는 **`audit_logs`** (append-only, 수정·삭제 API 없음). �
 | --- | --- | --- |
 | 이메일 | 가입·주문·영수증 발송에 필요한 기간 | 탈퇴 유예 종료 · 주문 보관 만료 |
 | 비밀번호 (팬) | 이메일 가입 시 **해시만 저장**. 재설정 토큰은 TTL·1회성으로 저장 | 비밀번호 재설정 완료 또는 토큰 만료 |
-| 비밀번호 (PARTNER·ARTIST_MEMBER) | 해시만 저장 | — |
+| 비밀번호 (AGENCY_ACCOUNT·ARTIST_MEMBER) | `password_hash`만 저장 | — |
 | 소셜 `providerToken` | **저장 금지** (검증 직후 폐기) | — |
 | 카드·계좌 | **PG 토큰만**, PAN 저장 금지 | — |
 | IP (로그·audit) | 90일 원문 → 이후 null | 배치 |

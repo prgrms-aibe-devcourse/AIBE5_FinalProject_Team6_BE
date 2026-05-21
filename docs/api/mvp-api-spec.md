@@ -27,13 +27,13 @@ Gradle 모듈·담당자: [architecture.md § 도메인 오너십](../architectu
 | F02-01~02 | `/admin/artist-applications` | `user` |
 | F02-03 | `GET /artists/{id}` (프로필·SNS) | `community` |
 | F03-01 | `POST /artists/{id}/spaces` | `community` |
-| F03-02~03 | `/feeds`, `/comments`, `/hearts` | `community` |
+| F03-02~03 | `/feeds`, `/comments`, `.../likes` (`FEED_LIKE`/`COMMENT_LIKE`) | `community` |
 | F03-04 | `/fans/me/notifications`, 이벤트 발행 | `notification` / 각 도메인 |
 | F03-05~06 | `/calendar`, `/lives`, `PATCH .../start` | `community` |
-| F03-07~08 | `/attendance-events/.../check-in`, `/polls`, `/votes` | `community` |
+| F03-07~08 | `/attendance-events/.../check-in` (피드 배너), `/goods-votes`, `/ranking/votes` | `community` |
 | F04-01 | `POST /products` (상시), `?type=regular` | `order` |
 | F04-02 | `POST /products` (드롭스 기간), `?type=drops`, `/queue/*` | `order` · `payment` |
-| F04-03 | `/banners/main`, `/admin/main-banners` | `community` |
+| F04-03 | `/banners/main`, `/admin/main-banners` | `user` |
 | F04-04~05 | `/cart`, `/orders`, `.../restock-subscribe` | `order` |
 | F05-01~03 | `POST /artists/{id}/events` (+ 외부 URL) | `community` |
 | F06-01~03 | `/payments/*`, webhook | `payment` |
@@ -61,9 +61,9 @@ Gradle 모듈·담당자: [architecture.md § 도메인 오너십](../architectu
 | --- | --- | --- |
 | `/auth/*`, `/fans/me` (계정), `/admin/artist-applications` | `user` | 표지민 |
 | `/queue/*` | `payment` | 장성재 |
-| `/artists/*`, `/spaces/*`, `/feeds/*`, `/comments/*`, `/lives/*`, 행사·일정·출석·투표 | `community` | 정환철 |
+| `/artists/*`, `/spaces/*`, `/feeds/*`, `/comments/*`, `/lives/*`, 행사·스케줄·출석·투표 | `community` | 정환철 |
 | `/products/*`, `/cart/*`, `/orders/*`, `/fans/me/orders` | `order` · `inventory` | 형성빈 |
-| `/banners/main`, `/admin/main-banners` | `community` | 정환철 (F04-03) |
+| `/banners/main`, `/admin/main-banners` | `user` | 표지민 (F04-03) |
 | `/payments/*`, `/fans/me/payments/*` | `payment` | 장성재 |
 | `/internal/inventory/*` | `inventory` (포트) | 형성빈 |
 | `/internal/notifications/publish`, `/fans/me/notifications`, `/notifications/*` | `notification` | 표지민 (전송) |
@@ -98,15 +98,15 @@ Gradle 모듈·담당자: [architecture.md § 도메인 오너십](../architectu
 | Method | Endpoint | 설명 | Request Body / Param | Response |
 | --- | --- | --- | --- | --- |
 | GET | `/artists` | 아티스트 목록 (스토어 탐색) | `?cursor`, `size`, `sort=fanCount` (F04-01) | `{ items: [{ id, name, fanCount, ... }], nextCursor }` |
-| GET | `/artists/{id}` | 아티스트 상세 · 프로필·외부 링크 (F02-03) | — | `{ id, partnerId, name, joinedAt, profileImageUrl, snsLinks[], scheduleSummary[] }` |
-| POST | `/artists/{id}/join` | 팬 가입(아티스트별) + 팬 수 증가 | — | `201` `{ artistId, fanId, joinedAt }` |
-| DELETE | `/artists/{id}/join` | 팬 가입 해지 | — | `204 No Content` |
+| GET | `/artists/{id}` | 아티스트 상세 · 프로필·외부 링크 (F02-03) | — | `{ id, agencyAccountId, name, joinedAt, profileImageUrl, snsLinks[], scheduleSummary[] }` |
+| POST | `/artists/{id}/follow` | 팬 가입(팔로우, `USER_FOLLOW`) + 팬 수 증가 | — | `201` `{ artistId, fanId, followedAt }` |
+| DELETE | `/artists/{id}/follow` | 팔로우 해지 | — | `204 No Content` |
 | POST | `/artists` | 아티스트 등록 (Admin) | `partnerId`, `name` | `201` `{ artistId }` |
-| GET | `/artists/{id}/calendar` | 드롭·팬미팅·라이브 통합 일정 | `?from`, `to` | `{ events: [{ type, title, startTime }] }` |
+| GET | `/artists/{id}/calendar` | 드롭·팬미팅·라이브 통합 스케줄 | `?from`, `to` | `{ events: [{ type, title, startTime }] }` |
 | POST | `/artists/{id}/events` | 행사 안내·외부 예매 링크 (F05-01~03) | `title`, `type`, `venue`, `startTime`, `ticketOpenAt` (참고), `externalTicketUrls[]` (F05-02), `externalTicketUrlExpiresAt` (optional) | `201` `{ eventId }` |
 | PATCH | `/lives/{id}/start` | 라이브 시작 (상태 갱신 + 알림 이벤트 발행) | — | `{ liveId, isLive: true }` |
 
-`PATCH /lives/{id}/start` 성공 시 `notification`에 `LIVE_START` 이벤트 발행 → 표지민 모듈이 전송.
+`PATCH /lives/{id}/start` 성공 시 `notification`에 `ARTIST_SCHEDULE` 타입 이벤트 발행 → 표지민 모듈이 전송.
 
 ---
 
@@ -116,26 +116,32 @@ Gradle 모듈·담당자: [architecture.md § 도메인 오너십](../architectu
 
 | Method | Endpoint | 설명 | Request Body / Param | Response |
 | --- | --- | --- | --- | --- |
-| POST | `/artists/{id}/spaces` | 승인된 아티스트 공간 생성 | `tabs` (optional) | `201` `{ spaceId }` |
-| GET | `/artists/{id}/notices` | 공지 목록 (④ 공지 탭) | `?cursor`, `size` | `{ items: [...], nextCursor }` |
+| GET | `/artists/{id}/notices` | 공지사항 목록 (④ 공지사항 탭) | `?cursor`, `size` | `{ items: [...], nextCursor }` |
 | GET | `/artists/{id}/notices/{noticeId}` | 공지 상세 | — | `{ id, title, content, imageUrls[], createdAt }` |
 | POST | `/artists/{id}/notices` | 공지 작성 (아티스트 멤버) | `title`, `content`, `imageUrls[]` | `201` `{ noticeId }` |
 | POST | `/artists/{id}/feeds` | 아티스트 게시글 작성(텍스트+이미지) | `content`, `imageUrls[]` | `201` `{ feedId }` |
 | GET | `/artists/{id}/feeds` | 피드 목록 | `?cursor`, `size` | `{ items: [...], nextCursor }` |
 | POST | `/feeds/{id}/comments` | 댓글/답글 작성 | `content`, `parentId` (optional) | `201` `{ commentId }` |
-| POST | `/feeds/{id}/hearts` | 피드 좋아요 | — | `201` |
-| DELETE | `/feeds/{id}/hearts` | 피드 좋아요 취소 | — | `204 No Content` |
-| POST | `/artists/{id}/attendance-events/{eventId}/check-in` | 출석 체크 | — | `{ checkedAt, streakDays, rewardCandidate }` |
-| POST | `/artists/{id}/polls` | 굿즈 투표 생성(운영자/아티스트) | `title`, `options: [{ imageUrl, label }]` | `201` `{ pollId }` |
-| POST | `/polls/{id}/votes` | 굿즈 투표 참여 | `optionId` | `201` |
-| GET | `/fans/me/activities` | 내가 남긴 댓글/하트 히스토리 | `?cursor`, `size` | `{ items: [...], nextCursor }` |
+| POST | `/feeds/{id}/likes` | 피드 좋아요 (`FEED_LIKE`) | — | `201` |
+| DELETE | `/feeds/{id}/likes` | 피드 좋아요 취소 | — | `204 No Content` |
+| POST | `/comments/{id}/likes` | 댓글 좋아요 (`COMMENT_LIKE`) | — | `201` |
+| DELETE | `/comments/{id}/likes` | 댓글 좋아요 취소 | — | `204 No Content` |
+| POST | `/ranking/votes` | 이달의 아이돌 투표 (`VOTE`) | `artistId`, `round`, `month` | `201` `{ voteId }` |
+| GET | `/artists/{id}/attendance-events` | 진행 중 출석 이벤트 (피드 배너 연동, F03-07) | — | `{ items: [{ id, startDate, endDate, rewardDesc }] }` |
+| POST | `/attendance-events/{id}/check-in` | 출석 체크 (`ATTENDANCE_LOG`) | — | `201` `{ eventId, checkedDate, streakDays }` |
+| GET | `/artists/{id}/goods-votes` | 굿즈 투표 목록 (F03-08) | `?cursor`, `size` | `{ items: [...], nextCursor }` |
+| POST | `/artists/{id}/goods-votes` | 굿즈 투표 생성 (아티스트 멤버) | `title`, `endsAt`, `options: [{ label, imageUrl }]` | `201` `{ voteId }` |
+| POST | `/goods-votes/{id}/ballots` | 굿즈 투표 참여 (`GOODS_VOTE_RECORD`, 1인 1표) | `optionId` | `201` `{ recordId }` |
+| GET | `/fans/me/activities` | 내가 남긴 댓글/좋아요 히스토리 | `?cursor`, `size` | `{ items: [...], nextCursor }` |
 | GET | `/fans/me/artists` | 가입 아티스트 목록 | `?cursor`, `size` | `{ items: [...], nextCursor }` |
 
 - 피드 작성은 이미지 업로드 URL만 받는다. 동영상 업로드는 MVP 제외.
-- 댓글/하트/출석/투표는 해당 아티스트 **팬 가입(F01-04)** 후 write 가능. 미가입 시 일부 읽기만 허용.
-- 출석 7일 달성(F03-07)은 `rewardCandidate=true`로 **대상자만** 산정. 리워드 지급/배송 자동화는 Not Scope.
+- 댓글/좋아요/투표는 해당 아티스트 **팬 가입(F01-04 → `USER_FOLLOW`)** 후 write 가능. 미가입 시 일부 읽기만 허용.
+- F03-01 아티스트 공간: `ARTIST_PROFILE` 승인 시 **앱 6탭(피드·아티스트·굿즈투표·미디어·공지사항·스케줄)** 으로 구성(출석은 피드 내 배너). 별도 `ARTIST_SPACE` 테이블 없음.
+- 출석 체크(`ATTENDANCE_EVENT`/`ATTENDANCE_LOG`)·굿즈 투표(`GOODS_VOTE`/`GOODS_VOTE_OPTION`/`GOODS_VOTE_RECORD`) API·ERD 반영. 출석은 피드 내 이벤트 배너 진입.
+- **이달의 아이돌**(`VOTE`)과 **굿즈 투표**(`GOODS_VOTE`)는 별도 기능·테이블.
 - 외부 티켓(F05-02~03): `http`/`https`만 허용, 만료 후 비노출.
-- `POST /artists/{id}/spaces`(F03-01): 기본 탭 `feed`, `profile`, `poll`, `media`, `notice`, `schedule`. **상점(Store)은 GNB 스토어 탭(F04)** — 아티스트 홈 탭 아님.
+- **상점(Store)은 GNB 스토어 탭(F04)** — 아티스트 홈 탭 아님.
 
 ---
 
@@ -280,7 +286,8 @@ PG  → POST .../webhook      → payload 내 키 → tossPaymentKey로 매핑 �
 | Method | Endpoint | 설명 | Request Body | Response |
 | --- | --- | --- | --- | --- |
 | POST | `/internal/notifications/publish` | 알림 이벤트 발행 | `eventType`, `resourceId`, `payload` | `201` `{ eventId }` |
-| GET | `/fans/me/notifications` | 내 알림 목록 | `?cursor`, `size` | `{ items: [{ id, type, title, message, sentAt }] }` — [ERD `NOTIFICATION`](../erd/erd-design.md#9-banner--restock_alert--notification-팬-알림함) (`read` 컬럼 없음) |
+| GET | `/fans/me/notifications` | 내 알림 목록 | `?cursor`, `size` | `{ items: [{ id, type, message, isRead, sentAt, targetId }] }` — [ERD `NOTIFICATION`](../erd/erd-design.md#9-banner--restock_alert--notification-팬-알림함) |
+| PATCH | `/fans/me/notifications/{id}/read` | 알림 읽음 처리 | — | `200` |
 
 ### 이벤트 타입별 발행 오너
 
@@ -288,8 +295,9 @@ PG  → POST .../webhook      → payload 내 키 → tossPaymentKey로 매핑 �
 | --- | --- | --- |
 | `PAYMENT_SUCCESS` | 장성재 (`payment`) | 표지민 (`notification`) |
 | `RESTOCK_ALERT` | 형성빈 (`inventory`) | 표지민 |
-| `LIVE_START` | 정환철 (`community`) | 표지민 |
-| `NEW_POST_COMMENT` | 정환철 (`community`) | 표지민 |
+| `NEW_FEED` | 정환철 (`community`) | 표지민 |
+| `NEW_COMMENT` | 정환철 (`community`) | 표지민 |
+| `ARTIST_SCHEDULE` | 정환철 (`community`) — 라이브·일정 (F03-05~06) | 표지민 |
 | `ARTIST_APPLICATION_APPROVED` | 표지민 (`user`) | 표지민 |
 
 `POST /internal/notifications/publish`도 런타임에서는 **포트 호출**; HTTP 경로는 계약·테스트 더블용으로만 사용 가능.
@@ -300,14 +308,14 @@ PG  → POST .../webhook      → payload 내 키 → tossPaymentKey로 매핑 �
 
 | Method | Endpoint | 모듈 | 담당 | 설명 |
 | --- | --- | --- | --- | --- |
-| GET | `/admin/artist-applications` | `user` | 표지민 | 입점 신청 목록 `?status=PENDING` — DB `PARTNER` ([ERD §4](../erd/erd-design.md#4-partner--artist--artist_member)) |
+| GET | `/admin/artist-applications` | `user` | 표지민 | 입점 신청 목록 `?status=PENDING` — DB `AGENCY_ACCOUNT` ([ERD §4](../erd/erd-design.md#4-agency_account--artist_profile--artist_member--fan)) |
 | PATCH | `/admin/artist-applications/{id}` | `user` | 표지민 | 승인·반려 `status`, `reason` |
 | GET | `/admin/monitoring` | platform | 지영재 | 주문·결제·재고 모니터링 `?from`, `to` |
-| GET | `/admin/main-banners` | `community` | 정환철 | 메인 배너 목록 (F04-03) |
-| POST | `/admin/main-banners` | `community` | 정환철 | 메인 배너 등록 |
-| PATCH | `/admin/main-banners/{id}` | `community` | 정환철 | 메인 배너 수정 |
-| DELETE | `/admin/main-banners/{id}` | `community` | 정환철 | 메인 배너 삭제 |
-| GET | `/banners/main` | `community` | 정환철 | GNB 홈 메인 배너 노출 (F04-03) |
+| GET | `/admin/main-banners` | `user` | 표지민 | 메인 배너 목록 (F04-03) |
+| POST | `/admin/main-banners` | `user` | 표지민 | 메인 배너 등록 |
+| PATCH | `/admin/main-banners/{id}` | `user` | 표지민 | 메인 배너 수정 |
+| DELETE | `/admin/main-banners/{id}` | `user` | 표지민 | 메인 배너 삭제 |
+| GET | `/banners/main` | `user` | 표지민 | GNB 홈 메인 배너 노출 (F04-03) |
 
 F04-03은 **메인 배너만**. 스토어 아티스트 노출 순서는 F04-01 (`GET /artists?sort=fanCount`).
 
@@ -342,9 +350,9 @@ F04-03은 **메인 배너만**. 스토어 아티스트 노출 순서는 F04-01 (
 | INVENTORY | — | `total_qty`, `reserved_qty`, `available_qty` (`available_qty = total_qty - reserved_qty`) |
 | INVENTORY_HISTORY | `change_type` | `RESERVE` / `RELEASE` / `DECREASE` / `INCREASE` / `COMPENSATE` |
 | CART / CART_ITEM | — | RDB `carts`·`cart_items` — [ADR-003](../adr/ADR-003-cart-storage-rdb-phase1.md) (Phase 1 Redis 미사용) |
-| RESTOCK_ALERT | `status` | `ACTIVE` / `SENT` (구현 시 문자열 — [§7.2](../state/invariants-and-state-machines.md#72-restock_alert)) |
+| RESTOCK_ALERT | `status` | `PENDING` / `SENT` / `CANCELLED` — [§7.2](../state/invariants-and-state-machines.md#72-restock_alert) |
 | `outbox_events` | `status` | `PENDING` → `PUBLISHED` / `FAILED` (DLQ) — [ERD §11](../erd/erd-design.md#11-알림--notification-vs-outbox) |
-| NOTIFICATION | — | 팬 알림함: `type`, `title`, `message`, `sent_at` (전송 완료 후 기록) |
+| NOTIFICATION | `notification_type` | `NEW_FEED` / `NEW_COMMENT` / `RESTOCK` / `ARTIST_SCHEDULE` · `is_read`, `sent_at` |
 
 > `POST /orders` 성공 응답은 `RESERVED`만 노출. `PENDING`은 TX 내부용 — [상태 머신 §2.3](../state/invariants-and-state-machines.md#23-공개-api-vs-내부-tx).
 
@@ -354,7 +362,7 @@ F04-03은 **메인 배너만**. 스토어 아티스트 노출 순서는 F04-01 (
 
 | 항목 | 평가 |
 | --- | --- |
-| ERD·시퀀스와의 정합 | ✅ ERD 24테이블·`drops_*`(드롭스 기간 컬럼)·`NOTIFICATION`(read 없음)·이메일/소셜 Auth·`CART` RDB — [erd-design](../erd/erd-design.md) |
+| ERD·시퀀스와의 정합 | ✅ ERD 29테이블·`FEED_IMAGE`·`GOODS_VOTE_*`·`ATTENDANCE_*`·`drops_*`·`NOTIFICATION`·`AGENCY_ACCOUNT`·`FEED_LIKE`/`COMMENT_LIKE`·`USER_FOLLOW`·`CART` RDB — [erd-design](../erd/erd-design.md) |
 | 보안·멱등 | ✅ confirm/fail 비노출, 웹훅 내부 처리, `DUPLICATE_PAYMENT` |
 | UX 에러 구분 | ✅ 4004/4005 분리 — 문서화 우수 |
 | 제목 vs 범위 | ✅ F01~F08 MVP 핵심 기능을 본 문서에 반영. 좌석 예매·자체 라이브·리워드 배송 자동화는 Not Scope로 분리 |

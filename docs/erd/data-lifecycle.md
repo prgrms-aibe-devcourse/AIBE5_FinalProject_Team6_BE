@@ -36,8 +36,8 @@
 | `fans` | 탈퇴 시 `email`·`nickname` **마스킹**(동일 행) | 30일 유예 후 irreversible |
 | `products` | Admin **DELETE** 또는 드롭 종료(`drops_end_at` 경과) | 이력은 `order_items` |
 | `banners` | `is_active=false` 또는 DELETE | |
-| `feeds`, `notices`, `comments` | 작성자·Admin **DELETE** | 90일 후 purge Job |
-| `hearts` | 부모 삭제 시 연쇄 DELETE | |
+| `artist_feeds`, `artist_notices`, `comments` | 작성자·Admin **DELETE** | 90일 후 purge Job |
+| `feed_likes`, `comment_likes` | 부모 삭제 시 연쇄 DELETE | |
 | 드롭스 대기열 (Redis) | TTL · 집계 | [ERD §10](./erd-design.md#10-드롭스-대기열--redis-db-erd-미포함) |
 | `payment_webhook_events` | 기간 만료 purge | ERD PNG 외 |
 
@@ -102,14 +102,16 @@ MVP: [행사는 외부 티켓 링크](./erd-design.md#8-schedule--artist_schedul
 
 ### 3.5 커뮤니티 · 콘텐츠
 
-[ERD §5](./erd-design.md#5-커뮤니티--artist_space-feed-notice-comment-heart-attendance) · `ARTIST_SPACE`, `FEED`, `NOTICE`, `COMMENT`, `HEART`, `ATTENDANCE_EVENT`, `ATTENDANCE_CHECK`
+[ERD §5](./erd-design.md#5-커뮤니티--피드-이미지-공지-댓글-좋아요) · `ARTIST_FEED`, `FEED_IMAGE`, `ARTIST_NOTICE`, `COMMENT`, `FEED_LIKE`, `COMMENT_LIKE` · [§12·§13](./erd-design.md#12-출석-체크--attendance_event--attendance_log-신규) `ATTENDANCE_*`, `GOODS_VOTE_*`
 
 | 데이터 | Active | 비노출·삭제 | Purge |
 | --- | --- | --- | --- |
-| `feeds`, `notices`, `comments` | 노출 중 | 작성자·Admin **DELETE** | 90일 후 연관 `hearts` 정리 |
-| `hearts` | 반응 중 | — | 피드·댓글 purge 시 연쇄 또는 고아 정리 |
-| `attendance_events`, `attendance_checks` | 프로모션 기간 | 이벤트 종료 | 1년 후 대상자 집계만 유지 |
-| `goods_polls`, `goods_poll_options`, `votes` | 굿즈 투표 기간 | 투표 종료 | 1년 후 원본 purge 또는 집계만 유지 |
+| `artist_feeds`, `feed_images`, `artist_notices`, `comments` | 노출 중 | 작성자·Admin **DELETE** | 90일 후 연관 `feed_likes`·`comment_likes` 정리 |
+| `feed_likes`, `comment_likes` | 반응 중 | — | 피드·댓글 purge 시 연쇄 또는 고아 정리 |
+| `votes` (이달의 아이돌, `VOTE`) | 해당 `round`·`month` | 투표 종료 | 1년 후 원본 purge 또는 집계만 유지 |
+| `goods_votes`, `goods_vote_options`, `goods_vote_records` | `is_active`·`ends_at` 내 | 마감·비활성 | 1년 (집계 `vote_count` 유지 가능) |
+| `attendance_events`, `attendance_logs` | `is_active`·기간 내 | `is_active=false` | 1년 |
+| `user_follows` | 팔로우 중 | 언팔로우 DELETE | — |
 | `artist_schedules` (LIVE 등) | 방송·일정 중 | 종료 | 1년 |
 
 ---
@@ -122,8 +124,8 @@ FANDROPS는 **10~30대 팬(B2C)** 과 **기획사(B2B)** 를 동시에 다루므
 
 | 항목 | 정책 |
 | --- | --- |
-| 회원가입 (팬) | `email`, `nickname`, `terms_agreed_at` 저장. 이메일 가입 시 `password_hash`만 저장하고, 소셜 `providerToken`은 저장하지 않음 ([ERD §4](./erd-design.md#4-partner--artist--artist_member--fan)) |
-| B2B·멤버 | `PARTNER` / `ARTIST_MEMBER`의 `password` (해시) — ERD 컬럼 |
+| 회원가입 (팬) | `email`, `nickname`, `auth_provider`, `provider_id`(소셜), `password_hash`(로컬). 소셜 `providerToken`은 저장하지 않음 ([ERD §4](./erd-design.md#4-agency_account--artist_profile--artist_member--fan)) |
+| B2B·멤버 | `AGENCY_ACCOUNT` / `ARTIST_MEMBER`의 `password_hash` — ERD 컬럼 |
 | 주문 | `fan_id`, 배송지(도입 시) — 주문 시점 스냅샷을 `order_items` 또는 `order_shipping_snapshot` |
 | 결제 | PG 위임 — 카드번호·CVV **미저장** |
 | 소셜 로그인 | `providerToken` **일회성 검증만**, DB 미저장 |

@@ -15,7 +15,7 @@ team: FANDROPS_Backend
 
 ## 역할 한 줄
 
-`order` · `inventory` — 상시/드롭스 상품, **스토어 배너(상품 프로모션) Admin**, 장바구니, **주문**, 재고 예약/확정/복구, 드롭스 동시성, 재입고 이벤트 **발행**. (메인 배너 F04-03은 정환철 담당)
+`order` · `inventory` — 상시/드롭스 상품, **스토어 배너(상품 프로모션) Admin**, 장바구니, **주문**, 재고 예약/확정/복구, 드롭스 동시성, 재입고 이벤트 **발행**. (메인 배너 F04-03은 표지민 `user` 담당)
 
 ## 수정 가능 경로
 
@@ -64,7 +64,7 @@ modules/inventory/**
 | 결제 후 `PAID→COMPLETED`, 웹훅 | 장성재 |
 | `inventory.restore` / `confirm` 호출 순서 | 장성재 |
 | 상품 목록 캐시·부하 | 지영재 |
-| GNB 스토어 상품 Read (F04) | community 연동 없음 — 메인 배너(F04-03)만 정환철 |
+| GNB 스토어 상품 Read (F04) | community 연동 없음 — 메인 배너(F04-03)는 표지민 `user` |
 
 ---
 
@@ -76,7 +76,7 @@ modules/inventory/**
 - [ ] MVP 재고 락: MySQL `FOR UPDATE` (Redis 락은 Phase 3)
 - [ ] 장바구니: **RDB** `CART`/`CART_ITEM` only — Redis 장바구니 금지 (ADR-003)
 - [ ] 상시/드롭스 상품 등록·품절처리·카운트다운 값은 Commerce 책임
-- [ ] **스토어 배너**(상품 프로모션·기획전 성격) Admin CRUD 및 노출 Read는 `order`(Commerce)가 관리한다. **메인 배너**(아티스트 이벤트 홍보 성격, F04-03)는 정환철(`community`) 담당 — 절대 혼동하지 않는다.
+- [ ] **스토어 배너**(`BANNER.banner_type=STORE`, 상품 프로모션) Admin·노출은 `order`. **메인 배너**(`MAIN`, F04-03)는 표지민 `user` — 절대 혼동하지 않는다.
 - [ ] `inventory` 포트: reserve / confirm / restore — HTTP 아님
 - [ ] 재고(`INVENTORY`) 변경 시 반드시 `INVENTORY_HISTORY` 에 이력을 기록 (I-5 불변조건)
 - [ ] 드롭스 동시성 수정 후 검증 절차

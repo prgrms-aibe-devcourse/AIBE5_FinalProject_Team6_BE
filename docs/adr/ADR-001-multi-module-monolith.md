@@ -196,8 +196,8 @@ Client
 | 담당자 | Gradle 모듈 | 핵심 책임 |
 | --- | --- | --- |
 | 지영재 | `apps/api-server` · 플랫폼 | AWS · CI/CD · Prometheus/Grafana · k6 |
-| 표지민 | `user` · `notification` | Auth · 알림 전송 |
-| 정환철 | `community` | 피드 · 댓글 · 출석 · 굿즈 투표 · 라이브 |
+| 표지민 | `user` · `notification` | Auth · 알림 전송 · 메인 배너 |
+| 정환철 | `community` | 피드 · 댓글 · 출석체크 · 굿즈투표 · 라이브 |
 | 형성빈 | `order` · `inventory` | 상품 · 주문 · 장바구니 · 드롭스 재고 (결제 PG는 비범위) |
 | 장성재 | `payment` | 토스 · 웹훅 · 멱등 · 주문-결제 E2E·보상 |
 

@@ -1,7 +1,7 @@
 # 운영 메트릭 최소 세트 (Observability)
 
 > **스택:** Prometheus + Grafana · Actuator — [ADR-001](../adr/ADR-001-multi-module-monolith.md)  
-> **장애 대응:** [incident-response.md](./incident-response.md) · **SLO 근거:** 서비스 소개 — Write P95 &lt; 300ms, 5xx &lt; 0.1%
+> **장애 대응:** [incident-response.md](./incident-response.md) · **SLO·부하 가정 SSOT:** [03_planning.html §02 KPI](../03_planning.html#kpi) — Write P95 &lt; 300ms, Read P95 80~120ms, 5xx &lt; 0.1%, 오버셀 0
 
 MVP에서 **반드시 수집·대시보드·알람**할 메트릭.  
 드롭스(오픈런) 전 **Grafana 패널 + PagerDuty/Slack 연동** 완료를 DoD로 한다.
@@ -42,10 +42,12 @@ MVP에서 **반드시 수집·대시보드·알람**할 메트릭.
 
 | SLO | 목표 | 측정 창 |
 | --- | --- | --- |
-| Write API P95 | **&lt; 300ms** | 5m rolling |
+| Write API P95 | **&lt; 300ms** (주문·결제·드롭스 쓰기) | 5m rolling |
+| Read API P95 | **80~120ms** (피드·행사 등), 상품 Read **~300 RPS** 전제 | 5m rolling · k6 |
 | 5xx rate | **&lt; 0.1%** | 5m rolling |
-| 결제 실패 후 일관 상태 | **&lt; 60s** | [상태 머신 SLO](../state/invariants-and-state-machines.md#43-paid-정체-재처리) |
-| 오버셀 | **0건** | 비즈니스 리포트 |
+| 결제 실패 후 일관 상태 | **&lt; 60s** | [03_planning §02](../03_planning.html#kpi) · [상태 머신](../state/invariants-and-state-machines.md#43-paid-정체-재처리) |
+| 오버셀·중복 결제 | **0건** | 부하 후 DB·로그 교차 검증 |
+| 드롭스 스파이크 | **~1k/~10k** 동시 요청 시나리오 | k6 Spike |
 
 부하 검증: **k6** 드롭스 시나리오 — [ADR-001](../adr/ADR-001-multi-module-monolith.md).
 

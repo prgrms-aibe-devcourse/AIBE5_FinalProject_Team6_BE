@@ -1,6 +1,6 @@
 # ERD 설계 문서
 
-> **다이어그램:** [`erd.md`](./erd.md)<br>
+> **다이어그램:** [`erd.md`](./erd.md) · [`erd.png`](./erd.png)  
 > K-Pop 팬덤 **B2B2C** 플랫폼의 테이블 관계·컬럼 설계 근거. 드롭스·결제·커뮤니티·아티스트 운영 도메인을 포함한다.
 
 ---
@@ -9,20 +9,13 @@
 
 | 도메인 | 테이블 | 비고 |
 | --- | --- | --- |
-| **사용자·아티스트** | `FAN`, `PARTNER`, `ARTIST`, `ARTIST_MEMBER`, `FAN_ARTIST` | 팬(B2C) · 기획사(B2B) · 아티스트·멤버 |
-| **커뮤니티** | `ARTIST_SPACE`, `FEED`, `NOTICE`, `COMMENT`, `HEART`, `ATTENDANCE_EVENT`, `ATTENDANCE_CHECK` | 아티스트 공간 · 피드·공지 · 댓글·하트 · 출석 체크 |
+| **사용자·아티스트** | `FAN`, `AGENCY_ACCOUNT`, `ARTIST_PROFILE`, `ARTIST_MEMBER`, `USER_FOLLOW` | 팬(B2C) · 기획사(B2B) · 아티스트 프로필·멤버 · 팔로우(팬 가입) |
+| **커뮤니티** | `ARTIST_FEED`, `FEED_IMAGE`, `ARTIST_NOTICE`, `COMMENT`, `FEED_LIKE`, `COMMENT_LIKE` | 피드 · 피드 다중 이미지 · 공지 · 댓글(대댓글) · 피드/댓글 좋아요 |
 | **커머스** | `PRODUCT`, `INVENTORY`, `INVENTORY_HISTORY`, `CART`, `CART_ITEM`, `ORDER`, `ORDER_ITEM`, `PAYMENT`, `RESTOCK_ALERT` | 상품·재고·재고 이력·**장바구니(RDB)** ·주문·결제 — [ADR-003](../adr/ADR-003-cart-storage-rdb-phase1.md) |
-| **투표·일정** | `GOODS_POLL`, `GOODS_POLL_OPTION`, `VOTE`, `SCHEDULE`, `ARTIST_SCHEDULE` | 굿즈 투표 · 드롭·라이브·행사 |
-| **운영·알림** | `BANNER`, `NOTIFICATION` | 홈 배너 · 팬 알림함 |
-
-**DB ERD에 없고 별도 저장하는 것**
-
-| 기능 | 저장 | 문서 |
-| --- | --- | --- |
-| 드롭스 대기열 | **Redis** (상태·토큰) | [§10](#10-드롭스-대기열--redis-db-erd-미포함) · [상태 머신 §6](../state/invariants-and-state-machines.md#6-wait_queue-상태-머신) |
-| 알림 발행·재시도 | **`outbox_events`** (ADR Outbox) | [§11](#11-알림--notification-vs-outbox) · [ADR-001](../adr/ADR-001-multi-module-monolith.md) |
-| PG 웹훅 원본 | `payment_webhook_events` (보관 정책) | [data-retention §2.2](./data-retention-and-audit-policy.md#22-결제웹훅-장성재) |
-| Audit | `audit_logs` | [data-retention §3](./data-retention-and-audit-policy.md#3-audit--무엇을-남길지) |
+| **투표·일정** | `VOTE`, `ARTIST_SCHEDULE` | 이달의 아이돌 투표 · 아티스트 스케줄(일정) 및 공지 연동 캘린더 |
+| **출석 체크** | `ATTENDANCE_EVENT`, `ATTENDANCE_LOG` | 출석 체크 이벤트 관리 및 팬 출석 기록 |
+| **굿즈 투표** | `GOODS_VOTE`, `GOODS_VOTE_OPTION`, `GOODS_VOTE_RECORD` | 굿즈 디자인/콘셉트 이미지 선택지 투표 및 기록 |
+| **운영·알림** | `BANNER`, `NOTIFICATION` | 메인/스토어 배너 · 팬 알림함 |
 
 ---
 
@@ -104,38 +97,71 @@ ERD:    PAYMENT.payment_key (Unique Index)
 
 ---
 
-## 4. PARTNER · ARTIST · ARTIST_MEMBER · FAN
+## 4. AGENCY_ACCOUNT · ARTIST_PROFILE · ARTIST_MEMBER · FAN
 
 ### 설계 결정
 
-- **`FAN`**: `email`, `nickname`, `password_hash`(이메일 가입 시), `terms_agreed_at`, `created_at` 저장. 소셜 가입만 한 팬은 `password_hash`가 null일 수 있다. 소셜 `providerToken`은 저장하지 않는다 ([mvp-api § Auth](../api/mvp-api-spec.md#auth--fan-계정)).
-- **`PARTNER`**: 기획사(B2B). `login_id`, `password`, `company_name`, `contact_email`, `status`, `invitation_token`, `token_expired_at`. `status` 예: `PENDING` \| `APPROVED` \| `REJECTED` (Admin 입점 API는 `PARTNER` 행 대상).
-- **`ARTIST`**: `partner_id` FK, `name`, `joined_at`. 굿즈·일정·커뮤니티의 **앵커 엔티티**.
-- **`ARTIST_MEMBER`**: `login_id`, `password`, `member_name`, `role` 기본값 `ROLE_ARTIST`. **피드·공지 작성 주체**.
+* **`FAN`**: `email`, `nickname`, `auth_provider`(`LOCAL` \| `KAKAO` \| `GOOGLE`), `provider_id`(소셜 시), `password_hash`(로컬 가입 시), `created_at`. 소셜 `providerToken`은 저장하지 않는다 ([mvp-api § Auth](../api/mvp-api-spec.md#auth--fan-계정)).
+* **`AGENCY_ACCOUNT`**: 기획사(B2B). `login_id`, `password_hash`, `company_name`, `contact_email`, `status`, `invitation_token`, `token_expired_at`, `role` 기본 `ROLE_PARTNER`. 입점 심사 API는 `AGENCY_ACCOUNT` 행 대상. `status` 운영값: `PENDING` \| `APPROVED` \| `REJECTED` (ERD 예시는 승인 완료 행 기준).
+* **`ARTIST_PROFILE`**: 아티스트 공간을 구성하는 앵커 엔티티 (`artist_id`).
+  * `partner_id` FK → `AGENCY_ACCOUNT`.
+  * `name`, `joined_at`.
+  * **`fan_count` (성능 최적화 집계 필드)**: 스토어 아티스트 정렬 및 배너 노출 기준이 팬 수이기 때문에, 트래픽 집중 시 매번 COUNT 쿼리를 실행하는 성능 이슈를 예방하고자 추가. `USER_FOLLOW`의 INSERT/DELETE 트랜잭션 시점에 애플리케이션 레벨에서 값을 원자적으로 업데이트(+1 / -1)한다.
+  * **`homepage_url`, `youtube_url`, `instagram_url`**: 프로필 탭의 외부 아웃링크를 저장하기 위한 컬럼.
+  * **`profile_image_url`, `cover_image_url`, `bio`**: 프로필 탭에 노출할 소개 이미지와 소개글을 저장하기 위한 컬럼.
+* **`ARTIST_MEMBER`**: `artist_id` FK, `login_id`, `password_hash`, `member_name`, `role` 기본 `ROLE_ARTIST`. **피드 작성 주체** (`artist_member_id`).
 
 ### 근거
 
-B2B2C에서 기획사-아티스트-멤버 계층을 DB에 명시해야 커뮤니티(`ARTIST_SPACE`)·커머스(`PRODUCT`)·투표(`VOTE`)가 동일한 `artist_id`로 묶인다.
+B2B2C에서 기획사-아티스트-멤버 계층을 DB에 명시해야 커뮤니티(`ARTIST_FEED`)·커머스(`PRODUCT`)·투표(`VOTE`)가 동일한 `artist_id`로 묶인다.
 
 ---
 
-## 5. 커뮤니티 — `ARTIST_SPACE`, `FEED`, `NOTICE`, `COMMENT`, `HEART`, `ATTENDANCE`
+## 5. 커뮤니티 — 피드, 이미지, 공지, 댓글, 좋아요
 
 ### 설계 결정
 
 | 테이블 | 역할 |
 | --- | --- |
-| `ARTIST_SPACE` | 아티스트당 커뮤니티 허브 (`status`로 개설·운영 상태) |
-| `FEED` | 멤버(`artist_member_id`)가 올리는 피드. `artist_space_id` 소속 |
-| `NOTICE` | 공식 공지 (제목·본문·`image_urls`) |
-| `COMMENT` | 팬(`fan_id`)이 피드에 작성. `parent_id`로 **대댓글** (self FK) |
-| `HEART` | `target_type` = `FEED` \| `COMMENT`, `target_id` — **다형 좋아요** |
-| `ATTENDANCE_EVENT` | 아티스트별 프로모션 출석 이벤트. `start_at`, `end_at`, `required_days`(기본 7), `reward_description` |
-| `ATTENDANCE_CHECK` | 팬의 일자별 출석 기록. `fan_id`, `artist_id`, `attendance_event_id`, `checked_date`, `streak_days`, `reward_candidate` |
+| `ARTIST_FEED` | 멤버(`artist_member_id`)가 올리는 피드. `artist_id` 소속. `content` |
+| `FEED_IMAGE` (신규) | 피드에 첨부되는 다중 이미지 테이블 (1:N). `feed_id` FK, `image_url` |
+| `ARTIST_NOTICE` | 아티스트 공식 공지 및 일정 연동용. `title`, `content`, `image_urls`, `type` ("GENERAL \| LIVE \| EVENT \| DROP") |
+| `COMMENT` | 피드(`feed_id`)에 작성하는 댓글/대댓글. 아티스트/팬 공용. `parent_id` self FK |
+| `FEED_LIKE` | 피드(`feed_id`) 좋아요. 아티스트/팬 공용 |
+| `COMMENT_LIKE` | 댓글(`comment_id`) 좋아요. 팬 전용 |
 
-### 근거
+### 5.1. 피드 다중 이미지화 (`FEED_IMAGE` 신규)
 
-피드·댓글·반응·출석 체크를 `community` 모듈 단일 바운디드 컨텍스트로 구현한다. 출석 7일 달성은 `reward_candidate=true`로 대상자만 산정하고, 리워드 지급/배송은 운영 정책 확정 후 별도 범위로 둔다. [architecture § user vs community](../architecture/architecture.md#user-vs-community--왜-나뉘는가)
+* 기존 `ARTIST_FEED` 내 `image_urls VARCHAR` 단일 컬럼을 제거하고 `FEED_IMAGE` 테이블로 1:N 분리하였다.
+* 단일 컬럼에 콤마(,) 등으로 여러 URL을 저장할 경우, 이미지의 순서 관리 및 개별 수정/삭제가 어렵기 때문이다.
+* **표시 순서 제어:** 등록 순서가 노출 순서이므로 `created_at` 컬럼으로 정렬하여 표시 순서를 제어한다.
+
+### 5.2. N+1 문제 해결을 위한 집계 컬럼 도입
+
+* `ARTIST_FEED` 테이블에 `like_count`, `comment_count` 집계 컬럼을 추가했다.
+* 목록 조회 시 피드마다 댓글 수와 좋아요 수를 세기 위해 COUNT 쿼리를 날릴 경우 발생하는 N+1 쿼리 성능 문제를 방지한다.
+* 댓글/좋아요 등록 및 삭제 시점에 해당 피드의 카운트를 애플리케이션 레벨에서 업데이트 트랜잭션 처리한다.
+
+### 5.3. COMMENT (댓글) 구조 변경 및 제약조건
+
+* **작성자 다형성 지원 (`fan_id` Nullable, `artist_member_id` FK Nullable 추가):** 아티스트도 답글을 달 수 있도록 변경되었다.
+* **`artist_id` FK 추가:** 마이페이지 `내가 남긴 댓글 히스토리` 조회 시 복잡한 Join(`COMMENT -> ARTIST_FEED -> ARTIST_PROFILE`)을 타지 않고 직접 아티스트 프로필 조회가 가능하도록 비효율을 개선했다.
+* **제약조건 (DB 레벨 & 애플리케이션 검증):**
+  * **작성자 필수 제약 (DB CHECK 제약 권장):** `fan_id IS NOT NULL OR artist_member_id IS NOT NULL` (팬과 아티스트 멤버 중 최소 하나는 값이 있어야 하고, 두 필드가 동시에 값을 가질 수 없다).
+  * **아티스트 답글 제약 (DB CHECK 제약 권장):** 아티스트는 최상위 댓글을 쓸 수 없고 오직 답글만 가능하므로 `artist_member_id IS NOT NULL` 일 경우 반드시 `parent_id IS NOT NULL` 이어야 한다.
+
+### 5.4. FEED_LIKE (좋아요) 구조 변경 및 중복 방지 제약조건
+
+* **작성자 다형성 및 최적화:** 아티스트도 좋아요를 누를 수 있도록 `fan_id` Nullable 변경 및 `artist_member_id` FK, `artist_id` FK를 추가하였다.
+* **동시성 및 중복 요청 방지 제약조건 (DB UNIQUE Index 필수):**
+  * 하나의 피드에 팬/아티스트가 중복으로 좋아요를 insert 하는 것을 DB 단에서 확실히 차단하기 위해 유니크 제약을 지정한다.
+  * **`UNIQUE(fan_id, feed_id)`**
+  * **`UNIQUE(artist_member_id, feed_id)`**
+
+### 5.5. ARTIST_NOTICE (공지)와 일정 자동 연동
+
+* `type` 컬럼(`GENERAL | LIVE | EVENT | DROP`)이 추가되었다.
+* 기획사가 어드민에서 공지 등록 시 `type`을 `LIVE`, `EVENT`, `DROP` 중 하나로 설정할 경우, 서버 비즈니스 로직에 의해 아래 `ARTIST_SCHEDULE`에 데이터가 자동으로 INSERT되어 일정 탭에도 노출되도록 구현한다.
 
 ---
 
@@ -157,27 +183,27 @@ B2B2C에서 기획사-아티스트-멤버 계층을 DB에 명시해야 커뮤니
 
 ---
 
-## 7. FAN_ARTIST · GOODS_POLL · VOTE
+## 7. USER_FOLLOW · VOTE
 
 | 테이블 | 설계 포인트 |
 | --- | --- |
-| `FAN_ARTIST` | 팬의 아티스트 가입 관계 (`joined_at`). 커뮤니티 쓰기·굿즈 투표 권한의 선행 조건이며 가입 시 아티스트 팬 수 집계가 증가한다 |
-| `GOODS_POLL` | 아티스트 공간 내 굿즈 투표 탭의 투표 본문. `artist_id`, `title`, `status`, `start_at`, `end_at` |
-| `GOODS_POLL_OPTION` | 굿즈 디자인·콘셉트 이미지 선택지. `poll_id`, `label`, `image_url`, `sort_order` |
-| `VOTE` | 팬·아티스트·굿즈 투표 단위 투표 기록. `poll_id`, `option_id`, `fan_id`를 저장하고, 팬 가입자만 참여 가능하며 중복 방지는 앱·UK로 보장 |
+| `USER_FOLLOW` | 팬(`fan_id`)이 아티스트(`artist_id`)를 팔로우. `followed_at`. **팬 가입(F01-04)** 의 DB 표현 — 커뮤니티 쓰기(댓글·좋아요)·투표·구매 전 선행 조건. UK 권장: `(fan_id, artist_id)` |
+| `VOTE` | **이달의 아이돌** 랭킹 투표. `fan_id`, `artist_id`, `round`, `month`, `voted_at`. MVP는 아티스트 단위 월간 투표만 진행 |
 
 ---
 
-## 8. SCHEDULE · ARTIST_SCHEDULE
+## 8. ARTIST_SCHEDULE (일정 단일화 및 공지 연동)
 
-| 테이블 | `type` 예시 | 용도 |
+* 기존에 이중 설계되었던 `SCHEDULE`과 `ARTIST_SCHEDULE`을 통합하여 **`ARTIST_SCHEDULE` 단일 테이블**로 일정을 관리한다.
+* `notice_id` FK를 추가해 `ARTIST_NOTICE`에서 자동 발행된 일정임을 표시한다.
+
+| 테이블 | `type` 허용값 | 용도 |
 | --- | --- | --- |
-| `SCHEDULE` | `DROP` \| `EVENT` \| `LIVE` | 팬 알림 트리거 (`NOTIFICATION` 연계) |
-| `ARTIST_SCHEDULE` | `DROP` \| `LIVE` \| `EVENT` \| `NOTICE` | 아티스트·운영 캘린더 등록 |
+| `ARTIST_SCHEDULE` | `DROP` \| `LIVE` \| `EVENT` \| `NOTICE` | 아티스트 캘린더 등록, 팬 일정 조회, 알림 트리거 연동 |
 
-### MVP — 인앱 좌석 예약 Not Scope
+### 알림 트리거 연동
 
-콘서트·팬미팅 **인앱 결제·좌석 DB는 없음**. `EVENT` 타입 일정은 **외부 티켓 URL** 노출만 한다. Phase 2에서 `reservations` / `seats` 검토 — [data-retention §2.4](./data-retention-and-audit-policy.md#24-예약--좌석--phase-2-not-scope-mvp).
+* 일정이 등록되면 팬 알림 트리거(`NOTIFICATION.notification_type = ARTIST_SCHEDULE`)가 작동하여 팬 알림함으로 알림이 발송된다.
 
 ---
 
@@ -185,17 +211,25 @@ B2B2C에서 기획사-아티스트-멤버 계층을 DB에 명시해야 커뮤니
 
 ### `BANNER`
 
-홈 노출용. `exposure_order`, `is_active`, `start_at` / `end_at`로 기간·순서 제어. 비노출은 **`is_active=false`** (ERD에 `deleted_at` 없음). 배너는 두 종류로 구분한다:
-- **메인 배너**: 아티스트 홍보·이벤트 성격 — Admin CRUD 및 팬 화면 노출 Read 모두 `community` 모듈(정환철) 담당.
-- **스토어 배너**: 상품 프로모션·기획전 성격 — Admin CRUD 및 노출 Read 모두 `order` 모듈(형성빈) 담당.
+`banner_type`: `MAIN` \| `STORE`. `product_id` FK(스토어 배너), `title`, `image_url`, `landing_url`, `exposure_order`, `is_active`, `start_at` / `end_at`.
+
+| 종류 | 담당 (Admin CRUD · Read) |
+| --- | --- |
+| **MAIN** | `user` (표지민) — GNB 홈 메인 배너·아티스트·이벤트 홍보 (F04-03) |
+| **STORE** | `order` (형성빈) — 상품·핫딜 프로모션 (`banner_type=STORE`) |
+
+비노출은 **`is_active=false`** (ERD에 `deleted_at` 없음).
 
 ### `RESTOCK_ALERT`
 
-`fan_id` + `product_id` 구독. ERD `status`는 `string` — 앱 허용값: `ACTIVE` \| `SENT` ([상태 머신 §7.2](../state/invariants-and-state-machines.md#72-restock_alert)).
+`fan_id` + `product_id` 구독. ERD `status`: `PENDING` \| `SENT` \| `CANCELLED` — [상태 머신 §7.2](../state/invariants-and-state-machines.md#72-restock_alert).
 
 ### `NOTIFICATION`
 
-팬 **알림함** (`fan_id`, `type`, `title`, `message`, `sent_at`). `SCHEDULE` 등 이벤트 처리 후 INSERT. **읽음(`is_read` / `read_at`) 컬럼 없음** — 목록 API도 `sentAt`만 반환.
+팬 **알림함**. `notification_id` PK, `fan_id` FK(수신 팬 ID), `notification_type`(`NEW_FEED` \| `NEW_COMMENT` \| `RESTOCK` \| `ARTIST_SCHEDULE`), `target_id`, `message`, `is_read`(기본 `false`), `sent_at`.
+
+- 전송 파이프라인 `status`는 **Outbox** 책임([§11](#11-알림--notification-vs-outbox)).
+- API 목록은 `is_read`·`sentAt` 반환 — [mvp-api § 알림](../api/mvp-api-spec.md#notification-알림).
 
 ---
 
@@ -237,9 +271,9 @@ WAITING | PROCESSING | DONE | EXPIRED
 | 계층 | 저장소 | 역할 |
 | --- | --- | --- |
 | **발행·재시도** | `outbox_events` (인프라, [ADR-001](../adr/ADR-001-multi-module-monolith.md)) | `PENDING` → 발행 → `published_at`. 실패 시 `retry_count`, DLQ |
-| **팬 조회** | `NOTIFICATION` (본 ERD) | 전송 완료 후 팬 알림함에 남는 **최종 기록** |
+| **팬 조회** | `NOTIFICATION` (본 ERD) | 전송 완료 후 팬 알림함에 남는 **최종 기록** (`is_read` 갱신) |
 
-`NOTIFICATION` 행에는 전송 파이프라인 `status`를 두지 않는다. 재시도·`FAILED` 추적은 **Outbox** 책임.
+`NOTIFICATION` 행에는 Outbox 파이프라인 `status`를 두지 않는다. 재시도·`FAILED` 추적은 **Outbox** 책임.
 
 ### 권고 Outbox 필드 (ERD PNG 외)
 
@@ -251,11 +285,44 @@ WAITING | PROCESSING | DONE | EXPIRED
 
 ---
 
+## 12. 출석 체크 — `ATTENDANCE_EVENT` · `ATTENDANCE_LOG` (신규)
+
+### 설계 결정
+
+* **`ATTENDANCE_EVENT`**: 아티스트별 출석체크 이벤트를 정의하는 테이블.
+  * `artist_id` FK, `start_date`, `end_date`, `reward_desc`, `is_active`를 포함한다.
+  * **애플리케이션 검증:** 현재 날짜가 `start_date`와 `end_date` 사이에 있는지 확인하고, `is_active=false`인 경우 출석 체크 요청을 차단한다.
+* **`ATTENDANCE_LOG`**: 특정 출석체크 이벤트에 대한 팬의 일자별 출석 기록을 저장한다.
+  * `event_id` FK, `fan_id` FK, `checked_date`.
+  * **중복 출석 방지 제약조건 (DB UNIQUE Index 필수):** 하루에 중복 출석 처리가 되는 동시성 이슈를 물리적으로 완전히 차단하기 위해 복합 유니크 제약을 설정한다.
+    * **`UNIQUE(event_id, fan_id, checked_date)`**
+  * **7일 달성 여부 산정:** 로그에 쌓인 데이터 중 동일 `event_id`와 `fan_id`를 조건으로 COUNT 쿼리를 실행하여 7일 이상 출석 여부를 판단한다.
+
+---
+
+## 13. 굿즈 투표 — `GOODS_VOTE` · `GOODS_VOTE_OPTION` · `GOODS_VOTE_RECORD` (신규)
+
+### 설계 결정
+
+* **`GOODS_VOTE`**: 굿즈 디자인/콘셉트 이미지 선택 투표를 생성하고 마감 기한을 관리한다.
+  * `artist_id` FK, `title`, `ends_at`, `is_active`.
+  * **애플리케이션 검증:** 투표 요청 시 `ends_at`이 지나지 않았는지, `is_active=true` 상태인지를 체크하여 비정상 투표를 제한한다.
+* **`GOODS_VOTE_OPTION`**: 투표에 등록된 이미지 및 텍스트 선택지 정보와 득표 현황을 관리한다.
+  * `vote_id` FK, `label`, `image_url`.
+  * **`vote_count` (성능 최적화 집계 필드):** 투표 마감 직전에 유저가 동시에 몰려와 COUNT 쿼리로 실시간 득표수를 계산하면 DB 부하가 치명적이므로 집계 컬럼을 도입한다. 투표 기록 생성 트랜잭션 시점에 해당 옵션 행의 `vote_count`를 원자적으로 증가(`UPDATE GOODS_VOTE_OPTION SET vote_count = vote_count + 1 WHERE id = :option_id`) 시킨다.
+* **`GOODS_VOTE_RECORD`**: 1인 1투표 검증 및 투표 이력을 영속화한다.
+  * `vote_id` FK, `option_id` FK, `fan_id` FK.
+  * **1인 1투표 보장 제약조건 (DB UNIQUE Index 필수):** 한 팬이 한 투표에 여러 번 중복 투표하는 것을 DB 수준에서 방어하기 위해 유니크 제약을 지정한다.
+    * **`UNIQUE(vote_id, fan_id)`**
+
+---
+
 ## 관련 문서
 
 | 문서 | 경로 |
 | --- | --- |
-| ERD 다이어그램 | [`erd.md`](./erd.md) |
+| ERD 다이어그램 (Mermaid) | [`erd.md`](./erd.md) |
+| ERD 이미지 | [`erd.png`](./erd.png) |
 | 데이터 보관 · Audit | [`data-retention-and-audit-policy.md`](./data-retention-and-audit-policy.md) |
 | 데이터 라이프사이클 | [`data-lifecycle.md`](./data-lifecycle.md) |
 | 멀티모듈 모놀리스 (ADR) | [`../adr/ADR-001-multi-module-monolith.md`](../adr/ADR-001-multi-module-monolith.md) |

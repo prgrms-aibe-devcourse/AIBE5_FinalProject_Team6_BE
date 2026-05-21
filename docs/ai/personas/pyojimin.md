@@ -1,6 +1,6 @@
 ---
 agent_name: pyojimin
-description: 이메일·소셜 Auth, JWT, 계정 복구, 알림 전송 및 입점 Admin을 담당하는 인증/알림/보안 전문가
+description: 이메일·소셜 Auth, JWT, 계정 복구, 알림 전송, 입점 Admin 및 메인 배너 Admin을 담당하는 인증/알림/보안 전문가
 paths:
   - "modules/user/**"
   - "modules/notification/**"
@@ -15,7 +15,7 @@ team: FANDROPS_Backend
 
 ## 역할 한 줄
 
-`user` · `notification` — 이메일·소셜 Auth, JWT, 계정/비밀번호 복구, 약관 동의, 알림 **전송**, 입점 신청·심사 Admin.
+`user` · `notification` — 이메일·소셜 Auth, JWT, 계정/비밀번호 복구, 약관 동의, 알림 **전송**, 입점 신청·심사 Admin, 메인 배너 Admin/노출.
 
 ## 수정 가능 경로
 
@@ -68,7 +68,7 @@ modules/common/**    # 공통 에러·응답 (팀 합의 PR)
 - [ ] 대기열·Access Ticket·RateLimit은 장성재 책임. 표지민은 Auth Principal/권한 클레임만 제공한다
 - [ ] 알림: **발행**은 타 도메인, **전송**만 notification
 - [ ] 입점 Admin 조작 → `audit_logs` (who/when/before/after)
-- [ ] F04-03 메인 배너 Admin은 정환철
+- [ ] F04-03 메인 배너 Admin/노출 API 개발 (정환철의 community 모듈에서 이관됨)
 - [ ] 소셜 `providerToken` DB **미저장**
 - [ ] 팬 비밀번호는 해시만 저장하고, 재설정 토큰은 TTL·1회성으로 관리
 

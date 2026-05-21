@@ -46,7 +46,7 @@ fandrops/
 │   │   ├── notification-domain/
 │   │   ├── notification-application/
 │   │   └── notification-infrastructure/
-│   └── community/                  # 피드·공지·댓글·일정·출석·투표·라이브·행사 (정환철)
+│   └── community/                  # 피드·공지사항·댓글·스케줄·출석(배너)·투표·라이브·행사 (정환철)
 │       ├── community-domain/
 │       ├── community-application/
 │       ├── community-api/
@@ -100,8 +100,8 @@ ArchUnit(선택): `domain` 패키지가 `org.springframework`, `jakarta.persiste
 | 담당자 | Gradle 모듈 | 도메인 영역 | F-scope (요약) |
 | --- | --- | --- | --- |
 | 지영재 | `apps/api-server` + 플랫폼 | Platform / SRE | F08-02, 인프라·k6·Grafana |
-| 표지민 | `user` · `notification` | Identity / Notification | F01-01~03, F02-01~02, 알림 **전송**, F03-04(채널) |
-| 정환철 | `community` | Community / Content | F01-04, F02-03, F03-01~08, F05-01~03, F04-03, F07-01 |
+| 표지민 | `user` · `notification` | Identity / Platform Admin | F01-01~03, F02-01~02, F04-03, 알림 **전송**, F03-04(전송) |
+| 정환철 | `community` | Community / Content | F01-04, F02-03, F03-01~08(발행), F05-01~03, F07-01 |
 | **형성빈** | **`order` · `inventory`** | **Commerce** | **F04-01~02**, F04-04~05, F07-02(주문) |
 | **장성재** | **`payment`** | **Payment / Traffic Gate** | F04-02(대기열), **F06-01~03**, F07-02(결제) |
 
@@ -124,22 +124,22 @@ PR 머지 전 **해당 도메인 오너 리뷰** · API·이벤트 페이로드 
 
 | Gradle 모듈 | 담당 | 들어가는 기능 (예시) | 들어가지 **않는** 것 |
 | --- | --- | --- | --- |
-| **`user`** | 표지민 | F01-01~03 Auth, F02-01~02 입점 Admin | 피드·댓글, F01-04 팬 가입 구현, 대기열, F04 상품 |
-| **`community`** | 정환철 | F03 전부, F05, F02-03, F01-04, F04-03 메인 배너, F07-01 | Auth 발급, 주문·결제·상시/드롭스 상품 CRUD |
+| **`user`** | 표지민 | F01-01~03 Auth, F02-01~02 입점 Admin, F04-03 메인 배너 | 피드·댓글, F01-04 팬 가입 구현, 대기열, F04 상품(스토어배너 제외) |
+| **`community`** | 정환철 | F03 전부, F05, F07-01 | Auth 발급, 주문·결제·상시/드롭스 상품 CRUD |
 | **`notification`** | 표지민 (전송) | 이메일/푸시 **발송** 어댑터 | 이벤트 **발행**(페이로드) — 발행은 각 도메인 오너 |
 
 ### 피드·댓글·출석·투표·라이브가 전부 `community`인 이유
 
 명세상 이 기능들은 **F03(커뮤니티)·F05(행사/콘텐츠)** 묶음이고, 오너는 **정환철(Community / Content)** 한 명이다.  
-별도 `feed` / `comment` Gradle 모듈로 쪼개지 **않는다** — ADR-002 원칙(레이어×바운디드 컨텍스트까지만 분리).
+별도 `feed` / `comment` Gradle 모듈로 쪼개지 **않는다** — ADR-002 원칙(레이어×바운디드 컨텍스트까지만 분리).  
 
-패키지 예: `com.fandrops.community.api` · `…application.feed` · `…domain.poll` · `…domain.attendance` 처럼 **하위 패키지**로 나누고, 빌드 모듈은 `community-*` 하나로 유지한다.
+패키지 예: `com.fandrops.community.api` · `…application.feed` · `…domain.poll` · `…domain.attendance` 처럼 **하위 패키지**로 나누고, 빌드 모듈 is `community-*` 하나로 유지한다.
 
 ### 경계가 헷갈리는 협업 (명세 기준)
 
 | 기능 | 오너 | 모듈 |
 | --- | --- | --- |
-| 팬 가입 (+1) | 정환철 | `community`의 `FAN_ARTIST` 관계. 커뮤니티 쓰기 권한의 선행 조건 |
+| 팬 가입 (+1) | 정환철 | `community`의 `USER_FOLLOW` 관계. 커뮤니티 쓰기 권한의 선행 조건 |
 | 아티스트 프로필 **편집/공개** | 정환철 | 승인된 입점 건을 받아 프로필·외부 링크·공간을 공개 |
 | 팬·SNS 프로필 **Read**, 마이페이지 활동 **집계/BFF** | 정환철 | `community` (Read·BFF) |
 | 대기열·Access Ticket | 장성재 | `payment`의 Traffic Gate 책임. 주문 검증은 형성빈, Redis/Nginx 운영값은 지영재 리뷰 |

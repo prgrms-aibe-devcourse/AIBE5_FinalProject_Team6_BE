@@ -249,8 +249,9 @@ ORDER.status = RESERVED AND reserved_at + payment-timeout < now()
 
 | 상태 | Terminal | 전이 |
 | --- | --- | --- |
-| `ACTIVE` | ❌ | `SENT` (재입고 알림 발행 후) |
+| `PENDING` | ❌ | `SENT` (재입고 알림 발행 후) / `CANCELLED` (팬 구독 해지) |
 | `SENT` | ✅ | 없음 |
+| `CANCELLED` | ✅ | 없음 |
 
 ### 7.3 알림 파이프라인 (Outbox → `NOTIFICATION`)
 
@@ -262,7 +263,7 @@ ORDER.status = RESERVED AND reserved_at + payment-timeout < now()
 | `PUBLISHED` | ✅ | — |
 | `FAILED` | ✅ (DLQ) | 수동 재처리만 |
 
-**팬 알림함** (`NOTIFICATION`): 전송 성공 후 `sent_at`과 함께 INSERT. 행 단위 `status` 전이는 없음.
+**팬 알림함** (`NOTIFICATION`): 전송 성공 후 `sent_at`과 함께 INSERT. `is_read`만 갱신하며, 행 단위 전송 `status`는 없음.
 
 전송: **표지민** (`notification`)
 

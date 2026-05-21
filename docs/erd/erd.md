@@ -1,47 +1,46 @@
 ```mermaid
+---
+config:
+  layout: elk
+  theme: base
+---
 erDiagram
-    %% === CORE USER & ARTIST DOMAINS ===
     FAN ||--o{ ORDER : places
     FAN ||--o{ RESTOCK_ALERT : subscribes
     FAN ||--o{ NOTIFICATION : receives
     FAN ||--o{ VOTE : "투표"
-    FAN ||--o{ ATTENDANCE_CHECK : "출석"
+    FAN ||--o{ ATTENDANCE_LOG : "출석"
+    FAN ||--o{ GOODS_VOTE_RECORD : "투표"
 
-    PARTNER ||--o{ ARTIST : "소속"
-    ARTIST ||--o{ ARTIST_MEMBER : "멤버"
-    ARTIST ||--o{ ARTIST_SPACE : owns
-    ARTIST ||--o{ PRODUCT : owns
-    ARTIST ||--o{ SCHEDULE : hosts
-    ARTIST ||--o{ FEED : posts
-    ARTIST ||--o{ ARTIST_SCHEDULE : "등록"
-    ARTIST ||--o{ FAN_ARTIST : "가입 팬"
-    ARTIST ||--o{ VOTE : "득표"
-    ARTIST ||--o{ GOODS_POLL : "굿즈 투표"
-    ARTIST ||--o{ ATTENDANCE_EVENT : "출석 이벤트"
+    AGENCY_ACCOUNT ||--o{ ARTIST_PROFILE : "소속"
+    ARTIST_PROFILE ||--o{ ARTIST_MEMBER : "멤버"
+    ARTIST_PROFILE ||--o{ PRODUCT : owns
+    ARTIST_PROFILE ||--o{ ARTIST_FEED : posts
+    ARTIST_PROFILE ||--o{ ARTIST_NOTICE : publishes
+    ARTIST_PROFILE ||--o{ ARTIST_SCHEDULE : "등록"
+    ARTIST_PROFILE ||--o{ USER_FOLLOW : "팔로워"
+    ARTIST_PROFILE ||--o{ VOTE : "득표"
+    ARTIST_PROFILE ||--o{ ATTENDANCE_EVENT : "출석이벤트"
+    ARTIST_PROFILE ||--o{ GOODS_VOTE : "굿즈투표"
 
-    ARTIST_MEMBER ||--o{ FEED : "작성"
-    ARTIST_MEMBER ||--o{ NOTICE : "작성"
+    ARTIST_MEMBER ||--o{ ARTIST_FEED : "작성"
+    ARTIST_MEMBER ||--o{ COMMENT : "답글"
+    ARTIST_MEMBER ||--o{ FEED_LIKE : "좋아요"
 
-    FAN ||--o{ FAN_ARTIST : "팬 가입"
+    FAN ||--o{ USER_FOLLOW : "팔로우"
     FAN ||--|| CART : "보유"
-
-    %% === COMMUNITY DOMAINS ===
-    ARTIST_SPACE ||--o{ FEED : "includes"
-    ARTIST_SPACE ||--o{ NOTICE : "includes"
-    ARTIST_SPACE ||--o{ GOODS_POLL : "poll tab"
-    ARTIST_SPACE ||--o{ ATTENDANCE_EVENT : "attendance"
-    FEED ||--o{ COMMENT : has
-    FEED ||--o{ HEART : has
-    COMMENT ||--o{ HEART : receives
-    COMMENT ||--o{ COMMENT : "parent(대댓글)"
     FAN ||--o{ COMMENT : writes
-    FAN ||--o{ HEART : reacts
-    GOODS_POLL ||--o{ GOODS_POLL_OPTION : has
-    GOODS_POLL ||--o{ VOTE : receives
-    GOODS_POLL_OPTION ||--o{ VOTE : selected
-    ATTENDANCE_EVENT ||--o{ ATTENDANCE_CHECK : has
+    FAN ||--o{ FEED_LIKE : "좋아요"
+    FAN ||--o{ COMMENT_LIKE : "좋아요"
 
-    %% === COMMERCE DOMAINS ===
+    ARTIST_FEED ||--o{ COMMENT : has
+    ARTIST_FEED ||--o{ FEED_LIKE : receives
+    ARTIST_FEED ||--o{ FEED_IMAGE : "이미지"
+    COMMENT ||--o{ COMMENT_LIKE : receives
+    COMMENT ||--o{ COMMENT : "parent(대댓글)"
+    ARTIST_SCHEDULE ||--o{ NOTIFICATION : notifies
+
+    PRODUCT ||--o{ BANNER : "배너"
     PRODUCT ||--|{ ORDER_ITEM : contains
     PRODUCT ||--|| INVENTORY : "재고"
     PRODUCT ||--o{ CART_ITEM : "담김"
@@ -51,35 +50,47 @@ erDiagram
     CART ||--o{ CART_ITEM : "담김"
     INVENTORY ||--o{ INVENTORY_HISTORY : "이력"
 
-    %% === VOTE & SCHEDULE ===
-    SCHEDULE ||--o{ NOTIFICATION : notifies
+    ATTENDANCE_EVENT ||--o{ ATTENDANCE_LOG : "기록"
+    GOODS_VOTE ||--o{ GOODS_VOTE_OPTION : "선택지"
+    GOODS_VOTE ||--o{ GOODS_VOTE_RECORD : "기록"
+    GOODS_VOTE_OPTION ||--o{ GOODS_VOTE_RECORD : "선택"
 
-    %% === ENTITY DEFINITIONS ===
+    ARTIST_NOTICE ||--o{ ARTIST_SCHEDULE : "일정연동"
+
     FAN {
         bigint id PK
         string email
         string nickname
-        string password_hash
-        datetime terms_agreed_at
+        varchar auth_provider "LOCAL | KAKAO | GOOGLE"
+        varchar provider_id
+        varchar password_hash
         datetime created_at
     }
 
-    PARTNER {
+    AGENCY_ACCOUNT {
         bigint id PK
         string login_id
-        string password
+        varchar password_hash
         string company_name
         string contact_email
         varchar status "APPROVED"
         varchar invitation_token
         datetime token_expired_at
+        varchar role "ROLE_PARTNER"
         datetime created_at
     }
 
-    ARTIST {
+    ARTIST_PROFILE {
         bigint id PK
         bigint partner_id FK
         string name
+        int fan_count
+        varchar homepage_url
+        varchar youtube_url
+        varchar instagram_url
+        varchar profile_image_url
+        varchar cover_image_url
+        string bio
         datetime joined_at
     }
 
@@ -87,23 +98,34 @@ erDiagram
         bigint id PK
         bigint artist_id FK
         string login_id
-        string password
+        varchar password_hash
         string member_name
         varchar role "ROLE_ARTIST"
         datetime created_at
     }
 
-    ARTIST_SPACE {
+    ARTIST_FEED {
         bigint id PK
         bigint artist_id FK
-        varchar status
+        bigint artist_member_id FK
+        string content
+        int like_count
+        int comment_count
         datetime created_at
     }
 
-    FEED {
+    FEED_IMAGE {
         bigint id PK
-        bigint artist_space_id FK
-        bigint artist_member_id FK
+        bigint feed_id FK
+        varchar image_url
+        datetime created_at
+    }
+
+    ARTIST_NOTICE {
+        bigint id PK
+        bigint artist_id FK
+        varchar type "GENERAL | LIVE | EVENT | DROP"
+        string title
         string content
         varchar image_urls
         datetime created_at
@@ -112,69 +134,26 @@ erDiagram
     COMMENT {
         bigint id PK
         bigint fan_id FK
+        bigint artist_member_id FK
+        bigint artist_id FK
         bigint feed_id FK
         bigint parent_id
         string content
         datetime created_at
     }
 
-    HEART {
+    FEED_LIKE {
         bigint id PK
         bigint fan_id FK
-        string target_type "FEED | COMMENT"
-        bigint target_id
-        datetime created_at
-    }
-
-    NOTICE {
-        bigint id PK
-        bigint artist_space_id FK
         bigint artist_member_id FK
-        string title
-        string content
-        varchar image_urls
-        datetime created_at
-    }
-
-    GOODS_POLL {
-        bigint id PK
         bigint artist_id FK
-        bigint artist_space_id FK
-        string title
-        string status
-        datetime start_at
-        datetime end_at
-        datetime created_at
+        bigint feed_id FK
     }
 
-    GOODS_POLL_OPTION {
+    COMMENT_LIKE {
         bigint id PK
-        bigint poll_id FK
-        string label
-        varchar image_url
-        int sort_order
-    }
-
-    ATTENDANCE_EVENT {
-        bigint id PK
-        bigint artist_id FK
-        bigint artist_space_id FK
-        string title
-        datetime start_at
-        datetime end_at
-        int required_days
-        string reward_description
-    }
-
-    ATTENDANCE_CHECK {
-        bigint id PK
-        bigint attendance_event_id FK
         bigint fan_id FK
-        bigint artist_id FK
-        date checked_date
-        int streak_days
-        boolean reward_candidate
-        datetime checked_at
+        bigint comment_id FK
     }
 
     PRODUCT {
@@ -253,19 +232,19 @@ erDiagram
         datetime added_at
     }
 
-    FAN_ARTIST {
+    USER_FOLLOW {
         bigint id PK
         bigint fan_id FK
         bigint artist_id FK
-        datetime joined_at
+        datetime followed_at
     }
 
     VOTE {
         bigint id PK
         bigint fan_id FK
         bigint artist_id FK
-        bigint poll_id
-        bigint option_id
+        int round
+        varchar month
         datetime voted_at
     }
 
@@ -273,21 +252,14 @@ erDiagram
         bigint id PK
         bigint fan_id FK
         bigint product_id FK
-        string status
+        varchar status "PENDING | SENT | CANCELLED"
         datetime created_at
-    }
-
-    SCHEDULE {
-        bigint id PK
-        bigint artist_id FK
-        string title
-        datetime start_time
-        string type "DROP | EVENT | LIVE"
     }
 
     ARTIST_SCHEDULE {
         bigint id PK
         bigint artist_id FK
+        bigint notice_id FK
         varchar title
         varchar type "DROP | LIVE | EVENT | NOTICE"
         datetime scheduled_at
@@ -295,6 +267,8 @@ erDiagram
 
     BANNER {
         bigint id PK
+        varchar banner_type "MAIN | STORE"
+        bigint product_id FK
         string title
         varchar image_url
         varchar landing_url
@@ -305,11 +279,51 @@ erDiagram
     }
 
     NOTIFICATION {
-        bigint id PK
+        bigint notification_id PK
         bigint fan_id FK
-        string type
-        string title
-        string message
+        varchar notification_type "NEW_FEED | NEW_COMMENT | RESTOCK | ARTIST_SCHEDULE"
+        bigint target_id
+        varchar message
+        boolean is_read
         datetime sent_at
+    }
+
+    ATTENDANCE_EVENT {
+        bigint id PK
+        bigint artist_id FK
+        date start_date
+        date end_date
+        string reward_desc
+        boolean is_active
+    }
+
+    ATTENDANCE_LOG {
+        bigint id PK
+        bigint event_id FK
+        bigint fan_id FK
+        date checked_date
+    }
+
+    GOODS_VOTE {
+        bigint id PK
+        bigint artist_id FK
+        string title
+        datetime ends_at
+        boolean is_active
+    }
+
+    GOODS_VOTE_OPTION {
+        bigint id PK
+        bigint vote_id FK
+        string label
+        varchar image_url
+        int vote_count
+    }
+
+    GOODS_VOTE_RECORD {
+        bigint id PK
+        bigint vote_id FK
+        bigint option_id FK
+        bigint fan_id FK
     }
 ```
