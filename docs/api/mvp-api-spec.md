@@ -24,7 +24,8 @@ Gradle 모듈·담당자: [architecture.md § 도메인 오너십](../architectu
 | --- | --- | --- |
 | F01-01~03 | `/auth/*` | `user` |
 | F01-04 | `POST /artists/{id}/join` | `community` |
-| F02-01~02 | `/admin/artist-applications` | `user` |
+| F02-01 | `POST /b2b/apply` (입점 신청) | `user` |
+| F02-02 | `/admin/artist-applications` (Admin 심사) | `user` |
 | F02-03 | `GET /artists/{id}` (프로필·SNS) | `community` |
 | F03-01 | `POST /artists/{id}/spaces` | `community` |
 | F03-02~03 | `/feeds`, `/comments`, `.../likes` (`FEED_LIKE`/`COMMENT_LIKE`) | `community` |
@@ -59,7 +60,7 @@ Gradle 모듈·담당자: [architecture.md § 도메인 오너십](../architectu
 
 | 접두 경로 / 영역 | 모듈 | 담당 |
 | --- | --- | --- |
-| `/auth/*`, `/fans/me` (계정), `/admin/artist-applications` | `user` | 표지민 |
+| `/auth/*`, `/fans/me` (계정), `/b2b/apply`, `/admin/artist-applications` | `user` | 표지민 |
 | `/queue/*` | `payment` | 장성재 |
 | `/artists/*`, `/spaces/*`, `/feeds/*`, `/comments/*`, `/lives/*`, 행사·스케줄·출석·투표 | `community` | 정환철 |
 | `/products/*`, `/cart/*`, `/orders/*`, `/fans/me/orders` | `order` · `inventory` | 형성빈 |
@@ -86,8 +87,9 @@ Gradle 모듈·담당자: [architecture.md § 도메인 오너십](../architectu
 | POST | `/auth/password-reset/confirm` | 재설정 토큰 검증 후 비밀번호 변경 | `token`, `newPassword` | `204 No Content` |
 | POST | `/auth/logout` | 로그아웃 (토큰 무효화) | — | `204 No Content` |
 | POST | `/auth/token/refresh` | Access Token 재발급 | `refreshToken` | `{ accessToken, expiresIn }` |
-| GET | `/fans/me` | 내 정보 조회 | — | `{ fanId, email, nickname, createdAt }` |
-| PUT | `/fans/me` | 내 정보 수정 | `nickname` (optional) | `{ fanId, nickname }` |
+| GET | `/fans/me` | 내 정보 조회 | — | `{ fanId, email, nickname, isAllowNotification, createdAt }` |
+| PUT | `/fans/me` | 내 정보 수정 | `nickname` (optional), `isAllowNotification` (optional) | `{ fanId, nickname, isAllowNotification }` |
+| POST | `/b2b/apply` | 기획사 입점 신청 (F02-01) | `companyName`, `businessRegistrationNumber`, `representativeName`, `contactEmail`, `contactPhone`, `introduction`, `targetArtistName` | `201` `{ applicationId, status: "PENDING" }` |
 
 ---
 
@@ -308,8 +310,8 @@ PG  → POST .../webhook      → payload 내 키 → tossPaymentKey로 매핑 �
 
 | Method | Endpoint | 모듈 | 담당 | 설명 |
 | --- | --- | --- | --- | --- |
-| GET | `/admin/artist-applications` | `user` | 표지민 | 입점 신청 목록 `?status=PENDING` — DB `AGENCY_ACCOUNT` ([ERD §4](../erd/erd-design.md#4-agency_account--artist_profile--artist_member--fan)) |
-| PATCH | `/admin/artist-applications/{id}` | `user` | 표지민 | 승인·반려 `status`, `reason` |
+| GET | `/admin/artist-applications` | `user` | 표지민 | 입점 신청 목록 `?status=PENDING` — DB `AGENCY_APPLICATION` ([ERD §3](../erd/erd-design.md#1-기획사-입점-신청서-테이블-신규-개설)) |
+| PATCH | `/admin/artist-applications/{id}` | `user` | 표지민 | 승인·반려 `status` ("APPROVED | REJECTED"), `rejectReason` (반려 시 필수) |
 | GET | `/admin/monitoring` | platform | 지영재 | 주문·결제·재고 모니터링 `?from`, `to` |
 | GET | `/admin/main-banners` | `user` | 표지민 | 메인 배너 목록 (F04-03) |
 | POST | `/admin/main-banners` | `user` | 표지민 | 메인 배너 등록 |

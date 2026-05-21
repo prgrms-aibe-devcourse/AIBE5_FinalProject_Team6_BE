@@ -267,6 +267,21 @@ ORDER.status = RESERVED AND reserved_at + payment-timeout < now()
 
 전송: **표지민** (`notification`)
 
+### 7.4 B2B 기획사 입점 신청 (AGENCY_APPLICATION)
+
+기획사의 플랫폼 입점 신청서(`AGENCY_APPLICATION`) 상태 머신 및 불변조건입니다.
+
+| From | Event / 조건 | To | 담당 모듈 | 비고 |
+| --- | --- | --- | --- | --- |
+| *(start)* | 입점 신청서 제출 (`POST /b2b/apply`) | `PENDING` | `user` | 심사 대기 |
+| `PENDING` | Admin 심사 승인 (`PATCH /admin/artist-applications/{id}`) | `APPROVED` | `user` | **Terminal**. 계정 및 아티스트 공간 연쇄 자동 생성 |
+| `PENDING` | Admin 심사 반려 | `REJECTED` | `user` | **Terminal**. 반려 사유(`rejectReason`) 필수 기록 |
+
+#### 불변조건
+* **AA-1**: `APPROVED`와 `REJECTED`는 최종 **Terminal** 상태이며, 상태 변경 완료 후 재전이가 불가함.
+* **AA-2**: `status = REJECTED` 일 경우 반드시 `reject_reason`이 NOT NULL 이어야 함.
+* **AA-3**: `status = APPROVED` 가 되면 트랜잭션 내에서 `AGENCY_ACCOUNT` 로그인 계정과 `ARTIST_PROFILE` 공간이 100% 자동 개설되어야 함.
+
 ---
 
 ## 8. 크로스 도메인 불변조건 (요약)

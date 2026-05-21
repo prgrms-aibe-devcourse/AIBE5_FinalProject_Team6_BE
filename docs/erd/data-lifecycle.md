@@ -34,6 +34,7 @@
 | `orders`, `order_items`, `payments` | 상태 전이만 | soft delete 없음 |
 | `carts`, `cart_items` | 주문 성공 시 삭제 · 탈퇴 cascade | [ADR-003](../adr/ADR-003-cart-storage-rdb-phase1.md) |
 | `fans` | 탈퇴 시 `email`·`nickname` **마스킹**(동일 행) | 30일 유예 후 irreversible |
+| `agency_applications` | 심사 완료(승인/반려) 후 1년 보관 후 DELETE | Admin 감사용 |
 | `products` | Admin **DELETE** 또는 드롭 종료(`drops_end_at` 경과) | 이력은 `order_items` |
 | `banners` | `is_active=false` 또는 DELETE | |
 | `artist_feeds`, `artist_notices`, `comments` | 작성자·Admin **DELETE** | 90일 후 purge Job |
@@ -113,6 +114,14 @@ MVP: [행사는 외부 티켓 링크](./erd-design.md#8-schedule--artist_schedul
 | `attendance_events`, `attendance_logs` | `is_active`·기간 내 | `is_active=false` | 1년 |
 | `user_follows` | 팔로우 중 | 언팔로우 DELETE | — |
 | `artist_schedules` (LIVE 등) | 방송·일정 중 | 종료 | 1년 |
+
+### 3.6 기획사 입점 신청 (B2B)
+
+기획사 입점 신청(`AGENCY_APPLICATION`) 서류 데이터는 감사 및 세무/법무적 분쟁 방지를 위해 관리됩니다.
+
+| 데이터 | Active | 비노출·삭제 | Purge |
+| --- | --- | --- | --- |
+| `agency_applications` | PENDING 심사 중 | APPROVED (계정 자동생성) / REJECTED (반려) | 처리 완료 후 **1년** 보관 후 삭제(Purge) |
 
 ---
 

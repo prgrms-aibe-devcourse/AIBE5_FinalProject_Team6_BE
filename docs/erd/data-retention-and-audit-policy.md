@@ -76,6 +76,7 @@ MVP는 행사 **외부 티켓 링크**만 제공([ERD §8](./erd-design.md#8-sch
 | **`attendance_events`**, **`attendance_checks`** | 이벤트 종료 후 **1년** | 리워드 대상자 산정 근거. 배송/지급 자동화는 별도 정책 |
 | **`goods_polls`**, **`goods_poll_options`**, **`votes`** | 투표 종료 후 **1년** | 굿즈 투표 집계·중복 투표 검증 |
 | **`banners`** | `is_active=false` 또는 DELETE 후 **1년** | ERD `is_active` 사용 |
+| **`agency_applications`** (입점신청) | **1년** | 심사 완료(승인/반려) 시점 | 1년 보관 후 삭제(Purge) | B2B 입점 심사 서류 보관 |
 | **`partners`** (입점) | `REJECTED`·만료 초대 **1년**, `APPROVED`는 영구 메타만 | `invitation_token` 만료 후 정리 · Admin audit |
 | **`fan_artist`** | 탈퇴 시 관계 **DELETE** | 아티스트별 가입 팬 수 집계만 유지 가능 |
 | **`notifications`** | `sent_at` 기준 **1년** 후 DELETE | 읽음 상태 없음 — [ERD §9](./erd-design.md#9-banner--restock_alert--notification-팬-알림함) |
