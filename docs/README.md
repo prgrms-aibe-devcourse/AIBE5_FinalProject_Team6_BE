@@ -12,7 +12,7 @@
 | Sequence | [sequence/payment-flow-reason.md](./sequence/payment-flow-reason.md) | [sequence/payment-order-flow.png](./sequence/payment-order-flow.png) |
 | ADR | [ADR-001](./adr/ADR-001-multi-module-monolith.md) · [ADR-002](./adr/ADR-002-per-layer-gradle-modules.md) · [ADR-003 장바구니 RDB](./adr/ADR-003-cart-storage-rdb-phase1.md) | — |
 | **기능 요구사항 §3** | [requirements/mvp-functional-requirements.md](./requirements/mvp-functional-requirements.md) | **F-ID SSOT** |
-| **포트폴리오 01–04** | [01](./01_service_intro.html) · [02](./02_research.html) · [03](./03_planning.html) · [04](./04_IA.html) | 서비스·리서치·Not Scope·IA |
+| **포트폴리오 01–05** | [01](./01_service_intro.html) · [02](./02_research.html) · [03](./03_planning.html) · [04](./04_IA.html) · [05](./05_architecture.html) | 서비스·리서치·기획·IA·아키텍처 |
 | Architecture | [architecture/architecture.md](./architecture/architecture.md) | — |
 | API (MVP) | [api/mvp-api-spec.md](./api/mvp-api-spec.md) | — |
 | API · Contract | [api/api-contract.md](./api/api-contract.md) | — |

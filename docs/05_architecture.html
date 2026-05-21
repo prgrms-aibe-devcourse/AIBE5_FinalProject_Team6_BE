@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FANDROPS — 기술 스택 / 아키텍처</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --text-primary: #111111;
+  --text-secondary: #555555;
+  --text-muted: #999999;
+  --border: #e5e5e5;
+  --bg: #ffffff;
+  --bg-subtle: #f8f8f6;
+  --bg-dark: #111111;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: 'Noto Sans KR', sans-serif;
+  font-size: 15px;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+
+.page {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 0 2.5rem 6rem;
+}
+
+.topbar {
+  border-bottom: 1px solid var(--border);
+  padding: 1.5rem 0;
+  margin-bottom: 4rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.topbar-left {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.doc-tag {
+  display: inline-block;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: var(--bg-dark);
+  color: #fff;
+  padding: 3px 10px;
+  border-radius: 3px;
+}
+
+.page-title { margin-bottom: 4rem; }
+.page-title-eyebrow {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 1rem;
+}
+.page-title h1 {
+  font-family: 'DM Sans', sans-serif;
+  font-size: clamp(1.8rem, 5vw, 2.6rem);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  color: var(--text-primary);
+}
+.page-title h1 span { color: var(--text-muted); font-weight: 300; }
+
+.section { margin-bottom: 4rem; }
+
+.section-header {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  margin-bottom: 1.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+.section-num {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+}
+.section-title {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+
+.body-text {
+  color: var(--text-secondary);
+  line-height: 1.85;
+  margin-bottom: 1rem;
+  font-size: 14.5px;
+}
+.body-text strong { color: var(--text-primary); font-weight: 500; }
+.body-text a { color: var(--text-primary); text-decoration: underline; text-underline-offset: 4px; }
+.body-text a:hover { color: var(--text-secondary); }
+
+/* ── intro block ── */
+.intro-block {
+  background: var(--bg-subtle);
+  border-left: 3px solid var(--text-primary);
+  border-radius: 0 6px 6px 0;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.75rem;
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.8;
+}
+.intro-block strong { color: var(--text-primary); font-weight: 500; }
+.intro-block a { color: var(--text-primary); text-decoration: underline; text-underline-offset: 4px; }
+.intro-block a:hover { color: var(--text-secondary); }
+
+/* ── tradeoff dark box ── */
+.dark-box {
+  background: var(--bg-dark);
+  color: #fff;
+  border-radius: 6px;
+  padding: 1.75rem 2rem;
+  margin-bottom: 1.75rem;
+}
+.dark-box-label {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #888;
+  margin-bottom: 1rem;
+}
+.dark-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.dark-list li {
+  font-size: 14px;
+  color: #e0e0e0;
+  line-height: 1.6;
+  padding-left: 1.25rem;
+  position: relative;
+}
+.dark-list li::before {
+  content: '→';
+  position: absolute;
+  left: 0;
+  color: #666;
+}
+.dark-list li strong { color: #fff; font-weight: 500; }
+
+/* ── tech stack grid ── */
+.stack-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 1.75rem;
+}
+.stack-item {
+  background: var(--bg);
+  padding: 1.25rem 1.5rem;
+}
+.stack-category {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+.stack-name {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+.stack-reason {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+.stack-reason a { color: var(--text-secondary); text-decoration: underline; }
+.stack-reason a:hover { color: var(--text-primary); }
+
+code {
+  font-family: 'DM Mono', 'Courier New', monospace;
+  font-size: 12.5px;
+  background: var(--bg-subtle);
+  padding: 2px 6px;
+  border-radius: 3px;
+  color: var(--text-primary);
+}
+
+/* ── general table ── */
+.gen-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+  margin: 1.25rem 0;
+}
+.gen-table th {
+  text-align: left;
+  padding: 9px 14px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+}
+.gen-table td {
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+  vertical-align: top;
+  line-height: 1.6;
+}
+.gen-table tr:last-child td { border-bottom: none; }
+.gen-table td:first-child {
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+.gen-table td a { color: var(--text-primary); text-decoration: underline; }
+.gen-table td a:hover { color: var(--text-secondary); }
+
+/* ── module tree ── */
+.tree-block {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1.5rem 1.75rem;
+  margin-bottom: 1.75rem;
+  font-family: 'DM Mono', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 2;
+  color: var(--text-primary);
+  overflow-x: auto;
+}
+.tree-block .dim { color: var(--text-muted); }
+.tree-block .highlight { color: var(--text-primary); font-weight: 600; }
+
+/* ── rule block ── */
+.rule-block {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1rem 1.5rem;
+  margin-top: 1.25rem;
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+.rule-block strong { color: var(--text-primary); font-weight: 500; }
+.rule-block a { color: var(--text-primary); text-decoration: underline; }
+
+.option-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 1px;
+  background: var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  margin: 0.75rem 0;
+}
+.option-item {
+  background: var(--bg);
+  padding: 1rem 1.25rem;
+}
+.option-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+  font-family: 'DM Sans', sans-serif;
+}
+.option-label.chosen { color: var(--text-primary); }
+.option-verdict {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  font-family: 'DM Sans', sans-serif;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.option-verdict.yes { color: #2d7a4f; }
+.option-verdict.no { color: #999; }
+.option-desc {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+/* ── dep rules ── */
+.dep-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  margin: 1rem 0;
+}
+.dep-item {
+  background: var(--bg);
+  padding: 1rem 1.25rem;
+}
+.dep-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-family: 'DM Sans', sans-serif;
+  margin-bottom: 0.5rem;
+}
+.dep-label.allowed { color: #2d7a4f; }
+.dep-label.forbidden { color: #c0392b; }
+.dep-rule {
+  font-family: 'DM Mono', 'Courier New', monospace;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.8;
+}
+
+/* ── principles list ── */
+.principles-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.principles-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.25rem;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+.principles-list li:last-child { border-bottom: none; }
+.p-num {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  min-width: 24px;
+  padding-top: 1px;
+}
+
+/* ── footer ── */
+.footer {
+  margin-top: 5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.footer-project {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.06em;
+}
+.footer-nav {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.footer-nav a {
+  color: var(--text-muted);
+  text-decoration: none;
+}
+.footer-nav a:hover { color: var(--text-primary); }
+
+.subsection-title {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 2rem 0 1rem;
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ── Top bar ── -->
+  <div class="topbar">
+    <div class="topbar-left">FANDROPS · Backend Portfolio</div>
+    <span class="doc-tag">05 &nbsp;아키텍처</span>
+  </div>
+
+  <!-- ── Title ── -->
+  <div class="page-title">
+    <div class="page-title-eyebrow">Architecture · Tech Stack · ADR</div>
+    <h1>기술 스택 / 아키텍처 구조<br><span></span></h1>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       01 · 기술 스택
+  ══════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">01</span>
+      <span class="section-title">Tech Stack</span>
+    </div>
+
+    <p class="body-text">
+      Java 21 / Spring Boot 기반으로 구성한다.
+      아래 스택은 기획서(01~04) 및 정합성 설계 문서를 기준으로 도출한 것으로, 각 선택에는 <strong>왜 이 기술이어야 하는가</strong>에 대한 근거가 함께 명시된다.
+    </p>
+
+    <div class="subsection-title">Core</div>
+    <div class="stack-grid">
+      <div class="stack-item">
+        <div class="stack-category">Language</div>
+        <div class="stack-name">Java 21 (LTS)</div>
+        <div class="stack-reason">Virtual Thread(Project Loom)로 SSE·웹훅 등 I/O 블로킹 구간 처리 비용 최소화. 최신 LTS로 팀 기술 증명에 적합.</div>
+      </div>
+      <div class="stack-item">
+        <div class="stack-category">Framework</div>
+        <div class="stack-name">Spring Boot 3.x</div>
+        <div class="stack-reason">Java 21 Virtual Thread 공식 지원. Spring Security, Data JPA, Actuator 생태계 그대로 활용.</div>
+      </div>
+      <div class="stack-item">
+        <div class="stack-category">Build</div>
+        <div class="stack-name">Gradle (Kotlin DSL)</div>
+        <div class="stack-reason">멀티모듈 서브프로젝트 의존성 방향을 빌드 레벨에서 강제. 잘못된 모듈 참조는 컴파일 실패로 조기 차단. 자세한 사항은 <a href="adr/ADR-002-per-layer-gradle-modules.md">ADR-002</a> 참조.</div>
+      </div>
+      <div class="stack-item">
+        <div class="stack-category">API Style</div>
+        <div class="stack-name">REST (SpringMVC) + SSE</div>
+        <div class="stack-reason">대기열 순번 실시간 전달(F08-01)에 SSE 사용. WebSocket 스케일·모더레이션 부담은 Not Scope.</div>
+      </div>
+    </div>
+
+    <div class="subsection-title">Data</div>
+    <div class="stack-grid">
+      <div class="stack-item">
+        <div class="stack-category">RDBMS</div>
+        <div class="stack-name">MySQL 8.x (AWS RDS)</div>
+        <div class="stack-reason">주문·결제·재고 상태 정합성을 트랜잭션으로 보장. 동시성 제어를 위한 비관락(<code>SELECT … FOR UPDATE</code>) 및 단일 쿼리 원자적 업데이트(Atomic Update) 병용. 자세한 스키마는 <a href="erd/erd-design.md">ERD 설계 문서</a> 참조.</div>
+      </div>
+      <div class="stack-item">
+        <div class="stack-category">ORM</div>
+        <div class="stack-name">Spring Data JPA + QueryDSL</div>
+        <div class="stack-reason">커서 페이징·N+1 제어에 QueryDSL. JPA는 infrastructure 레이어에만 격리.</div>
+      </div>
+      <div class="stack-item">
+        <div class="stack-category">Cache / 분산락</div>
+        <div class="stack-name">Redis (AWS ElastiCache) + Redisson</div>
+        <div class="stack-reason">핫딜 대기열 Sorted Set, 재고 분산락, 랭킹 집계, Read 캐시. Redisson으로 <code>RLock</code> 비교 실험(Phase 3). 대기열 상태 관리는 <a href="state/invariants-and-state-machines.md#6-wait_queue-상태-머신">대기열 상태 머신 문서</a> 참조.</div>
+      </div>
+      <div class="stack-item">
+        <div class="stack-category">Migration</div>
+        <div class="stack-name">Flyway</div>
+        <div class="stack-reason">팀 멀티모듈 환경에서 스키마 변경 이력 버전 관리. 롤백 스크립트 강제.</div>
+      </div>
+    </div>
+
+    <div class="subsection-title">Security · Auth · Traffic Control</div>
+    <div class="stack-grid">
+      <div class="stack-item">
+        <div class="stack-category">인증</div>
+        <div class="stack-name">Spring Security + JWT</div>
+        <div class="stack-reason">이메일·소셜(카카오·구글) 로그인(F01-01~02). Access/Refresh Token 분리. 인가는 모듈 레벨에서 처리.</div>
+      </div>
+      <div class="stack-item">
+        <div class="stack-category">소셜 로그인</div>
+        <div class="stack-name">Spring OAuth2 Client</div>
+        <div class="stack-reason">카카오·구글 OAuth2 표준 흐름 처리. Spring Security와 통합.</div>
+      </div>
+      <div class="stack-item">
+        <div class="stack-category">Rate Limiting</div>
+        <div class="stack-name">Bucket4j (Redis 연동)</div>
+        <div class="stack-reason">핫딜 오픈 구간 매크로·비정상 트래픽 방어(장성재 담당). Token Bucket 알고리즘을 사용하며, Redis 백엔드로 분산 환경 적용.</div>
+      </div>
+      <div class="stack-item">
+        <div class="stack-category">멱등성</div>
+        <div class="stack-name">Idempotency Key (custom)</div>
+        <div class="stack-reason">결제 중복 요청 방어. <code>PAYMENT.payment_key</code> Unique Index 및 <code>INVENTORY_HISTORY</code> Unique Key 조합 연동. 웹훅 재전송 시나리오 완벽 대응.</div>
+      </div>
+    </div>
+
+    <div class="subsection-title">결제 · 외부 연동</div>
+    <div class="stack-grid">
+      <div class="stack-item">
+        <div class="stack-category">PG</div>
+        <div class="stack-name">토스페이먼츠</div>
+        <div class="stack-reason">단일 PG로 깊게 — 멱등·웹훅·실패 복구에 리소스 집중. 웹훅 수신 멱등성 보장. 시퀀스 근거는 <a href="sequence/payment-flow-reason.md">결제·주문 시퀀스 문서</a> 참조.</div>
+      </div>
+      <div class="stack-item">
+        <div class="stack-category">알림</div>
+        <div class="stack-name">이메일 (JavaMailSender) + 추후 FCM</div>
+        <div class="stack-reason">재입고·결제완료·라이브 알림 전송(표지민 담당). Kafka 없이 DB/내부 큐 및 Outbox 패턴으로 MVP 구현.</div>
+      </div>
+    </div>
+
+    <div class="subsection-title">Observability · 인프라</div>
+    <div class="stack-grid">
+      <div class="stack-item">
+        <div class="stack-category">모니터링</div>
+        <div class="stack-name">Prometheus + Grafana</div>
+        <div class="stack-reason">Write P95 &lt; 300ms, 5xx &lt; 0.1% SLO 수치 증명. Spring Actuator → Prometheus exporter 연결.</div>
+      </div>
+      <div class="stack-item">
+        <div class="stack-category">부하 테스트</div>
+        <div class="stack-name">k6</div>
+        <div class="stack-reason">핫딜 동시 ~1k 스파이크 시나리오 재현. 오버셀 0 검증, 락 전략 비교표 작성.</div>
+      </div>
+      <div class="stack-item">
+        <div class="stack-category">Cloud</div>
+        <div class="stack-name">AWS (EC2 · RDS · ElastiCache)</div>
+        <div class="stack-reason">스테이징·프로덕션 분리. VPC 격리, 보안그룹 설계(지영재 담당).</div>
+      </div>
+      <div class="stack-item">
+        <div class="stack-category">CI/CD</div>
+        <div class="stack-name">GitHub Actions</div>
+        <div class="stack-reason">PR머지 → 빌드·테스트·배포 파이프라인. 무중단 배포·롤백 검증.</div>
+      </div>
+      <div class="stack-item">
+        <div class="stack-category">Reverse Proxy</div>
+        <div class="stack-name">Nginx</div>
+        <div class="stack-reason">SSL 종단, 라우팅, 정적 자산 서빙. 무중단 Blue/Green 전환.</div>
+      </div>
+      <div class="stack-item">
+        <div class="stack-category">API 문서</div>
+        <div class="stack-name">SpringDoc (Swagger/OpenAPI 3)</div>
+        <div class="stack-reason">Phase 1에서 API Mock 계약 동결 후, 최종 확정판 자동 생성. API 스펙은 <a href="api/mvp-api-spec.md">MVP API 명세</a> 참조.</div>
+      </div>
+    </div>
+
+    <div class="subsection-title">테스트</div>
+    <div class="stack-grid">
+      <div class="stack-item">
+        <div class="stack-category">단위 테스트</div>
+        <div class="stack-name">JUnit 5 + Mockito</div>
+        <div class="stack-reason">Domain 레이어 순수 단위 테스트. Spring 컨텍스트 없이 빠른 피드백.</div>
+      </div>
+      <div class="stack-item">
+        <div class="stack-category">통합 테스트</div>
+        <div class="stack-name">Testcontainers</div>
+        <div class="stack-reason">MySQL·Redis 실제 컨테이너로 결제·재고 E2E 시나리오 검증. CI 환경에서 동일 재현.</div>
+      </div>
+      <div class="stack-item">
+        <div class="stack-category">아키텍처 검증</div>
+        <div class="stack-name">ArchUnit</div>
+        <div class="stack-reason">Domain 레이어가 Spring·JPA를 import하면 테스트 실패. 의존성 규칙을 코드로 강제.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
+       02 · 아키텍처 구조
+  ══════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-header">
+      <span class="section-num">02</span>
+      <span class="section-title">아키텍처 구조</span>
+    </div>
+
+    <p class="body-text">
+      <strong>멀티모듈 모놀리스</strong> — 하나의 Spring Boot 프로세스로 배포하되,
+      코드 경계는 Gradle 서브프로젝트로 분리하여 의존성 방향을 컴파일 단계에서 강제한다. 관련 결정 사항은 <a href="adr/ADR-001-multi-module-monolith.md">ADR-001</a>과 <a href="adr/ADR-002-per-layer-gradle-modules.md">ADR-002</a>를 참고한다.
+    </p>
+
+    <div class="subsection-title">레포지토리 디렉터리 구조</div>
+    <div class="tree-block">
+fandrops/<br>
+├── <span class="highlight">settings.gradle.kts</span><br>
+├── build.gradle.kts<br>
+├── <span class="highlight">apps/</span><br>
+│   └── api-server/                 <span class="dim"># Boot 진입점 — 조립·설정만. 비즈니스 로직 최소화</span><br>
+│       ├── src/main/java/com/fandrops/<br>
+│       │   └── FandropsApplication.java<br>
+│       └── build.gradle.kts<br>
+├── <span class="highlight">modules/</span><br>
+│   ├── <span class="highlight">common/</span>                     <span class="dim"># 공통 유틸·에러코드·응답 포맷 (최소화)</span><br>
+│   ├── <span class="highlight">user/</span>                       <span class="dim"># 회원 가입·인증·소셜 로그인 (표지민)</span><br>
+│   │   ├── user-domain/<br>
+│   │   ├── user-application/<br>
+│   │   ├── user-api/<br>
+│   │   └── user-infrastructure/<br>
+│   ├── <span class="highlight">order/</span>                      <span class="dim"># 상품·주문서·재고 예약 (형성빈)</span><br>
+│   │   ├── order-domain/<br>
+│   │   ├── order-application/<br>
+│   │   ├── order-api/<br>
+│   │   └── order-infrastructure/<br>
+│   ├── <span class="highlight">payment/</span>                    <span class="dim"># 토스결제·웹훅·대기열·트래픽제어 (장성재)</span><br>
+│   │   ├── payment-domain/<br>
+│   │   ├── payment-application/<br>
+│   │   ├── payment-api/<br>
+│   │   └── payment-infrastructure/<br>
+│   ├── <span class="highlight">inventory/</span>                  <span class="dim"># 재고·분산락 도메인 (형성빈)</span><br>
+│   │   ├── inventory-domain/<br>
+│   │   ├── inventory-application/<br>
+│   │   ├── inventory-api/<br>
+│   │   └── inventory-infrastructure/<br>
+│   ├── <span class="highlight">notification/</span>               <span class="dim"># 알림 발행·전송 분리 (표지민)</span><br>
+│   │   ├── notification-domain/<br>
+│   │   ├── notification-application/<br>
+│   │   └── notification-infrastructure/<br>
+│   └── <span class="highlight">community/</span>                  <span class="dim"># 피드·댓글·캘린더·출석·투표 (정환철)</span><br>
+│       ├── community-domain/<br>
+│       ├── community-application/<br>
+│       ├── community-api/<br>
+│       └── community-infrastructure/<br>
+└── <span class="highlight">docs/</span>                           <span class="dim"># ADR, 시퀀스, ERD 등 설계 문서</span>
+    </div>
+
+    <div class="subsection-title">레이어 역할 정의</div>
+    <table class="gen-table">
+      <thead>
+        <tr><th style="width:160px;">레이어</th><th>역할</th><th>규칙</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>*-api</code></td>
+          <td>HTTP 요청 수신, DTO 변환, Application 호출</td>
+          <td>비즈니스 로직 없음. Controller만.</td>
+        </tr>
+        <tr>
+          <td><code>*-application</code></td>
+          <td>유스케이스 실행, 트랜잭션 경계, 여러 Domain 조합</td>
+          <td>포트(interface) 정의. 구현체 직접 참조 금지.</td>
+        </tr>
+        <tr>
+          <td><code>*-domain</code></td>
+          <td>핵심 비즈니스 규칙, Entity, Value Object</td>
+          <td><strong>Spring·JPA·Redis 의존 금지.</strong> 빌드로 강제.</td>
+        </tr>
+        <tr>
+          <td><code>*-infrastructure</code></td>
+          <td>JPA Repository, Redis 클라이언트, 외부 API 어댑터</td>
+          <td>Application 포트 구현체. Domain은 참조하되 역방향 금지.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="subsection-title">의존성 방향 규칙</div>
+    <div class="dep-grid">
+      <div class="dep-item">
+        <div class="dep-label allowed">✔ 허용</div>
+        <div class="dep-rule">
+          api → application → domain<br>
+          infrastructure → domain<br>
+          application → (port interface)<br>
+          common → (모든 모듈)
+        </div>
+      </div>
+      <div class="dep-item">
+        <div class="dep-label forbidden">✕ 금지</div>
+        <div class="dep-rule">
+          domain → Spring / JPA / Redis<br>
+          user-* → order-infrastructure<br>
+          order-api → payment-infrastructure<br>
+          domain → domain (타 모듈 직접 참조)
+        </div>
+      </div>
+    </div>
+
+    <div class="rule-block">
+      <strong>검증 및 탐색</strong> — <code>./gradlew :modules:order:order-domain:dependencies</code> 로 Spring 누수 확인 가능.
+      자세한 의존성 구조 규칙은 <a href="architecture/architecture.md">아키텍처 규칙 상세 문서</a>를 참고한다.
+    </div>
+
+    <div class="subsection-title">도메인 오너십 → 모듈 매핑</div>
+    <table class="gen-table">
+      <thead>
+        <tr><th>담당자</th><th>모듈</th><th>핵심 책임</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>지영재</td><td><code>apps/api-server</code> · 인프라</td><td>AWS · CI/CD · Prometheus/Grafana · k6 부하 테스트</td></tr>
+        <tr><td>표지민</td><td><code>user</code> · <code>notification</code></td><td>로그인(카카오/구글) · 회원 가입 · 알림 전송 및 메일 발송</td></tr>
+        <tr><td>정환철</td><td><code>community</code></td><td>아티스트 공간 피드 · 댓글 · 캘린더 · 일정 · 랭킹 투표 · 출석체크</td></tr>
+        <tr><td>형성빈</td><td><code>order</code> · <code>inventory</code></td><td>상품 · 주문서 및 주문 접수 · 핫딜 재고 관리 (원자적 쿼리 예약)</td></tr>
+        <tr><td>장성재</td><td><code>payment</code> · 대기열</td><td>토스PG 연동 · 웹훅 수신 멱등성 · Saga 보상 트랜잭션 · Redis 대기열 및 Access Ticket · Bucket4j 레이트리밋</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── Footer ── -->
+  <div class="footer">
+    <div class="footer-project">FANDROPS · 5인 팀 · 2026.05.19 – 06.25</div>
+    <div class="footer-nav">
+      ← <a href="04_IA.html">04 · 화면 흐름 (IA)</a>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

@@ -85,7 +85,7 @@
 | P0 | `docs/api/api-contract.md` | 응답 envelope, `error.code`, `retryable`, 커서 |
 | P0 | `docs/README.md` | 설계·운영 문서 **목차** (필요한 파일만 골라 열기) |
 | P0 | `docs/requirements/mvp-functional-requirements.md` | **§3 F-ID·기능명·오너십 (SSOT)** |
-| P0 | `docs/01_service_intro.html` ~ `docs/04_IA.html` | 포트폴리오 시리즈 (서비스→리서치→기획→IA) |
+| P0 | `docs/01_service_intro.html` ~ `docs/05_architecture.html` | 포트폴리오 시리즈 (서비스→리서치→기획→IA→아키텍처) |
 | P0 | `docs/03_planning.html` · `docs/04_IA.html` | Not Scope · KPI · 로드맵 · 화면 흐름 (보조) |
 
 ---
