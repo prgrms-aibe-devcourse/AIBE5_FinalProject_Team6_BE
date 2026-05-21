@@ -24,7 +24,7 @@ FANDROPS **B2B2C 오픈런** 서비스에서 장애 **등급·대응·커뮤니�
 
 | 등급 | 조건 (예시) | 대응 | 커뮤니케이션 | 목표 복구 |
 | --- | --- | --- | --- | --- |
-| **P0** | 오버셀·중복 결제·`COMPLETED` without payment 등 **정합성 깨짐 가능** · Primary DB 장애 · 전면 5xx 급증 | **배포 중지** + 롤백 검토 · write 트래픽 차단 · IC 소집 | **팀 전체** Slack + (필요 시) 기획사 공지 검토 | MTTR 목표 **1h** (데이터 복구 별도) |
+| **P0** | 오버셀·중복 결제·`COMPLETED` without payment 등 **정합성 깨짐 가능** · Primary DB 장애 · 전면 5xx 급증 | **배포 중지** + 롤백 검토 · write 트래픽 차단 · IC 소집 | **팀 전체** Slack + (필요 시) 운영 주체 공지 검토 | MTTR 목표 **1h** (데이터 복구 별도) |
 | **P1** | 결제·웹훅 **지연** · Outbox pending 적체 · Redis 다운 · Queue depth 급증 · Write P95 > 300ms 지속 | 스케일 아웃 / Nginx limit · [failure-policy](./failure-policy.md) fail-fast · 담당 도메인 핫픽스 | **#fandrops-incident** + 담당 오너 | **4h** 내 완화 |
 | **P2** | 일부 **조회** 지연 · 캐시 hit 하락 · 비핵심 Admin 지연 | 튜닝 백로그 · 이슈 등록 | GitHub Issue만 | 다음 스프린트 |
 | **P3** | 문서·UI 오타, stg only | 일반 백로그 | 없음 | — |

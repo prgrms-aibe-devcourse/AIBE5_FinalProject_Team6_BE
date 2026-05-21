@@ -537,7 +537,7 @@ table.map tr:nth-child(even) td { background: var(--bg-subtle); }
       <a href="#s3">③ GNB</a>
       <a href="#s4">④ 아티스트 홈</a>
       <a href="#s5">⑤ 결제</a>
-      <a href="#s6_agency">⑥ 파트너 오피스</a>
+      <a href="#s6_agency">⑥ 아티스트 스튜디오</a>
       <a href="#s6">⑦ Admin</a>
       <a href="#s7">⑧ 매핑표</a>
       </div>
@@ -554,7 +554,7 @@ table.map tr:nth-child(even) td { background: var(--bg-subtle); }
     <a href="01_service_intro.html">01 서비스</a>
     <a href="02_research.html">02 리서치</a>
     <a href="03_planning.html">03 Not Scope · KPI</a>
-    <a href="requirements/mvp-functional-requirements.md">§3 기능 요구사항</a>
+    <a href="requirements/mvp-functional-requirements-v2.md">§1 기능 요구사항</a>
     <a href="api/mvp-api-spec.md">MVP API</a>
     <a href="erd/erd-design.md">ERD</a>
     <a href="architecture/architecture.md">아키텍처</a>
@@ -566,7 +566,7 @@ table.map tr:nth-child(even) td { background: var(--bg-subtle); }
     <span><i style="background:var(--bg-subtle); border:1px dashed var(--border)"></i> Admin 백오피스</span>
     <span><span class="badge link">바로가기</span> GNB 요약·탐색</span>
     <span><span class="badge core">핵심</span> 실제 팬 경험 화면</span>
-    <span class="fid">Fxx-xx = 기능 ID (§3 기준)</span>
+    <span class="fid">Fxx-xx = 기능 ID (§1 기준)</span>
   </div>
 
   <!-- ARCHITECTURE OVERVIEW -->
@@ -650,10 +650,10 @@ table.map tr:nth-child(even) td { background: var(--bg-subtle); }
 
     <div class="post-login">
       <div class="side-flow">
-        <div class="hdr outline">기획사 (Agency)</div>
+        <div class="hdr outline">운영 주체 (Agency)</div>
         <div class="node">
           <strong>입점 신청서 작성 (폼)</strong>
-          * 사업자등록번호(business_registration_number) 및 대표자명(ceo_name) 필수 입력.<br />
+          * 운영 주체 명칭(회사·활동명), 사업자등록번호(business_registration_number)·대표자명(representative_name) 등 — MVP에서는 <strong>필수 권장</strong>(1인 크리에이터는 개인사업자 번호 안내, 미등록 시 Admin 예외 심사).<br />
           * 양식 유효성 검증 적용 및 갱신.<br />
           * 비동기 펜딩 상태(isSubmitting) 로딩 스피너 및 버튼 비활성화 상태 인터랙션.<br />
           * 제출 완료 시: "검토 후 이메일로 결과를 안내드립니다" 안내 노출.
@@ -661,8 +661,8 @@ table.map tr:nth-child(even) td { background: var(--bg-subtle); }
         </div>
         <div class="v-arrow"></div>
         <div class="node">
-          <strong>승인 완료 시 기획사 계정 생성</strong>
-          기획사 파트너 오피스 권한 부여 및 메일 알림
+          <strong>승인 완료 시 운영 계정 생성</strong>
+          아티스트 스튜디오 권한 부여 및 메일 알림
           <span class="fid">F02-02</span>
         </div>
       </div>
@@ -793,7 +793,7 @@ table.map tr:nth-child(even) td { background: var(--bg-subtle); }
     </div>
 
     <p class="sub-label" style="margin:0 0 10px; color:var(--text-muted); font-size:12px;">
-      §3 F03-01 탭 순서: 피드 · 아티스트 · 굿즈투표 · 미디어 · 공지사항 · 스케줄 (출석 체크는 피드 내 이벤트 배너로 연동)
+      §1 F03-01 탭 순서: 피드 · 아티스트 · 굿즈투표 · 미디어 · 공지사항 · 스케줄 (출석 체크는 피드 내 이벤트 배너로 연동)
     </p>
     <div class="artist-tabs" style="grid-template-columns: repeat(6, 1fr);">
       <div>
@@ -896,16 +896,16 @@ table.map tr:nth-child(even) td { background: var(--bg-subtle); }
     </div>
   </section>
 
-  <!-- S6_AGENCY PARTNER OFFICE -->
+  <!-- S6_AGENCY OFFICE -->
   <section class="section artist-space" id="s6_agency">
     <div class="section-header">
       <span class="section-num">⑥</span>
-      <span class="section-title" style="color:var(--text-primary)">기획사 파트너 오피스 (B2B)</span>
-      <span class="section-sub">B2B 파트너 관리 시스템</span>
+      <span class="section-title" style="color:var(--text-primary)">아티스트 스튜디오 (B2B)</span>
+      <span class="section-sub">B2B 아티스트 운영 관리 시스템</span>
     </div>
     
     <div class="callout" style="margin-bottom: 1.5rem;">
-      <strong>기획사 오피스 인터랙션:</strong> 아티스트 프로필 원형 미리보기(FileReader), 공지-캘린더 연동 슬라이드 토글, 옵션 동적 추가(최대 6개), 다중 드래그앤드롭 상품 이미지 업로드 등 최신 모던 어드민 UI 요소가 적용되었습니다.
+      <strong>아티스트 스튜디오 인터랙션:</strong> 아티스트 프로필 원형 미리보기(FileReader), 공지-캘린더 연동 슬라이드 토글, 옵션 동적 추가(최대 6개), 다중 드래그앤드롭 상품 이미지 업로드 등 최신 모던 어드민 UI 요소가 적용되었습니다.
     </div>
 
     <div class="agency-tabs">
@@ -1022,7 +1022,7 @@ table.map tr:nth-child(even) td { background: var(--bg-subtle); }
       <div>
         <div class="hdr secondary">입점 심사</div>
         <div class="node" style="margin-top:6px">
-          Agency 입점 신청서 검토 · 승인/반려 (business_registration_number, ceo_name 등 검증)
+          운영 입점 신청서 검토 · 승인/반려 (business_registration_number, representative_name 등 검증)
           <span class="fid">F02-02</span>
         </div>
       </div>
@@ -1052,7 +1052,7 @@ table.map tr:nth-child(even) td { background: var(--bg-subtle); }
     </div>
 
     <div class="callout warn">
-      <strong>F-ID 가이드:</strong> 기능 ID·탭 구성의 SSOT는 <a href="requirements/mvp-functional-requirements.md">mvp-functional-requirements.md (§3)</a>입니다. 본 IA는 해당 표와 동기화합니다.
+      <strong>F-ID 가이드:</strong> 기능 ID·탭 구성의 SSOT는 <a href="requirements/mvp-functional-requirements-v2.md">mvp-functional-requirements-v2.md (§1)</a>입니다. 본 IA는 해당 표와 동기화합니다.
     </div>
 
     <div class="map-wrap">
@@ -1084,16 +1084,16 @@ table.map tr:nth-child(even) td { background: var(--bg-subtle); }
           <tr><td>15</td><td>결제창</td><td>⑤ 결제</td><td>F06-01~03</td><td>Fan</td></tr>
           <tr><td>16</td><td>마이페이지</td><td>③ MY PAGE</td><td>F07-01, 02</td><td>Fan</td></tr>
           <tr><td>17</td><td>알림센터</td><td>③ HOME</td><td>F03-04</td><td>Fan</td></tr>
-          <tr><td>18</td><td>기획사 입점 신청</td><td>② 로그인 후 진입</td><td>F02-01</td><td>Agency</td></tr>
+          <tr><td>18</td><td>운영 입점 신청</td><td>② 로그인 후 진입</td><td>F02-01</td><td>Agency</td></tr>
           <tr><td>19</td><td>Admin 백오피스</td><td>⑦ Admin</td><td>F02-02, F04-03, F05, F08-02</td><td>Admin</td></tr>
           <tr><td>20</td><td>재입고 알림 신청</td><td>③ STORE</td><td>F04-05</td><td>Fan</td></tr>
-          <tr><td>21</td><td>기획사 통합 대시보드</td><td>⑥ 파트너 오피스</td><td>F08-02</td><td>Agency</td></tr>
-          <tr><td>22</td><td>아티스트 & 멤버 관리</td><td>⑥ 파트너 오피스</td><td>F02-03</td><td>Agency</td></tr>
-          <tr><td>23</td><td>아티스트 일정 관리</td><td>⑥ 파트너 오피스</td><td>F03-05, F05-01</td><td>Agency</td></tr>
-          <tr><td>24</td><td>공지사항 운영 & 자동 연동</td><td>⑥ 파트너 오피스</td><td>F03-01, 04, 05</td><td>Agency</td></tr>
-          <tr><td>25</td><td>굿즈 투표 관리 & 강제 종료</td><td>⑥ 파트너 오피스</td><td>F03-08</td><td>Agency</td></tr>
-          <tr><td>26</td><td>상품 & 드롭스 다중 등록</td><td>⑥ 파트너 오피스</td><td>F04-01, 02</td><td>Agency</td></tr>
-          <tr><td>27</td><td>홈 배너 제어 & 이미지 관리</td><td>⑥ 파트너 오피스</td><td>F04-03</td><td>Agency</td></tr>
+          <tr><td>21</td><td>운영 통합 대시보드</td><td>⑥ 아티스트 스튜디오</td><td>F08-02</td><td>Agency</td></tr>
+          <tr><td>22</td><td>아티스트 & 멤버 관리</td><td>⑥ 아티스트 스튜디오</td><td>F02-03</td><td>Agency</td></tr>
+          <tr><td>23</td><td>아티스트 일정 관리</td><td>⑥ 아티스트 스튜디오</td><td>F03-05, F05-01</td><td>Agency</td></tr>
+          <tr><td>24</td><td>공지사항 운영 & 자동 연동</td><td>⑥ 아티스트 스튜디오</td><td>F03-01, 04, 05</td><td>Agency</td></tr>
+          <tr><td>25</td><td>굿즈 투표 관리 & 강제 종료</td><td>⑥ 아티스트 스튜디오</td><td>F03-08</td><td>Agency</td></tr>
+          <tr><td>26</td><td>상품 & 드롭스 다중 등록</td><td>⑥ 아티스트 스튜디오</td><td>F04-01, 02</td><td>Agency</td></tr>
+          <tr><td>27</td><td>홈 배너 제어 & 이미지 관리</td><td>⑥ 아티스트 스튜디오</td><td>F04-03</td><td>Agency</td></tr>
         </tbody>
       </table>
     </div>

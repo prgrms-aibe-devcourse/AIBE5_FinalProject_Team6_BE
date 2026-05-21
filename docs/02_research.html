@@ -380,7 +380,7 @@ body {
       <strong>굿즈·결제 정합성</strong>이라는 특수성을 동시에 다루기 어렵습니다.
     </p>
     <p class="body-text">
-      우리는 실제 팬 커뮤니티와 기획사 운영 사례를 분석하여,
+      우리는 실제 팬 커뮤니티와 B2B 운영 사례를 분석하여,
       기술적으로 해결 가능한 페인포인트와 그렇지 않은 것을 <strong>솔직하게 구분</strong>했습니다.
       이 문서는 FANDROPS의 기능 범위가 어떤 현실 문제에서 출발했는지를 담습니다.
     </p>
@@ -392,7 +392,7 @@ body {
       </div>
       <div class="two-col-item">
         <div class="two-col-label">우리가 보는 기회</div>
-        <div class="two-col-text"><strong>중소형 기획사 + 오픈런 특화</strong><br>팬덤 특수성을 설계 1순위로 둔 플랫폼</div>
+        <div class="two-col-text"><strong>소규모 운영 주체 + 오픈런 특화</strong><br>기획사·1인 크리에이터·매니저 — 팬덤 특수성을 설계 1순위로 둔 플랫폼</div>
       </div>
     </div>
   </div>
@@ -418,7 +418,7 @@ body {
           <div class="pain-title">드롭 오픈 순간 서버 다운</div>
           <div class="pain-desc">
             위버스·멜론 등 기존 플랫폼은 굿즈·콘서트 오픈 순간 반복적으로 다운됩니다.
-            팬들은 새로고침을 반복하다 연결이 끊기고, 기획사는 기회를 날립니다.
+            팬들은 새로고침을 반복하다 연결이 끊기고, 운영자는 기회를 날립니다.
             평소의 <strong>100×–1,000×에 달하는 스파이크</strong>를 앞단에서 흡수하지 못하는 구조적 문제입니다.
           </div>
           <div class="pain-tag-row">
@@ -434,7 +434,7 @@ body {
           <div class="pain-desc">
             드롭스·상품 API에 비정상 호출이 몰리면 정상 팬이 불리해집니다.
             <strong>완전 차단은 불가능</strong>하므로, Rate Limiting·대기열·429로 <strong>피해 최소화</strong>가 목표입니다.
-            <br><span style="font-size:12.5px;color:var(--text-muted);">콘서트·팬미팅은 <a href="requirements/mvp-functional-requirements.md" class="doc-link">외부 예매(F05)</a>만.</span>
+            <br><span style="font-size:12.5px;color:var(--text-muted);">콘서트·팬미팅은 <a href="requirements/mvp-functional-requirements-v2.md" class="doc-link">외부 예매(F05)</a>만.</span>
           </div>
           <div class="pain-tag-row">
             <span class="ptag ptag-scope">구현 — Bucket4j · 대기열 depth</span>
@@ -535,16 +535,14 @@ body {
       <div class="pain-item">
         <div class="pain-icon">✨</div>
         <div>
-          <div class="pain-title">팬 유입을 유도할 인터랙티브 요소 부재</div>
+          <div class="pain-title">팬덤 서비스의 체류 구조 — 아티스트가 메인 콘텐츠</div>
           <div class="pain-desc">
-            플랫폼에 처음 들어온 팬이 서비스에 머물 이유가 없습니다.
-            메인 화면 진입 시 <strong>'이달의 아이돌 뽑기'</strong> 알럿을 노출하고,
-            투표 결과를 실시간 랭킹으로 보여줍니다.
-            몇 강 토너먼트 형식으로 운영할지는 추후 결정하며, 우선 랭킹 집계 구조를 설계합니다.
+            일반 이커머스와 달리 팬덤 플랫폼의 중심은 <strong>아티스트(그룹·멤버)</strong>입니다.
+            팬은 특정 아티스트를 팔로우한 뒤 그 아티스트 공간(피드·굿즈투표·일정·드롭스) 안에서 오래 머무르는 것이 자연스러운 사용 패턴입니다.
+            메인 화면의 범용 참여형 이벤트보다, <strong>아티스트 단위 커뮤니티·커머스</strong>가 체류와 재방문을 만든다는 전제로 MVP를 설계합니다.
           </div>
           <div class="pain-tag-row">
-            <span class="ptag ptag-limit">Not Scope — <a href="requirements/mvp-functional-requirements.md#mvp에-없는-기능-본-표-미등재" class="doc-link">§3</a></span>
-            <span class="ptag ptag-partial">토너먼트 단계 수 — 추후 결정</span>
+            <span class="ptag ptag-scope">MVP — F03-01 아티스트 홈 · F03-08 굿즈투표</span>
           </div>
         </div>
       </div>
@@ -636,7 +634,7 @@ body {
 
     <p class="body-text">
       위 페인포인트를 해결하기 위해 도출된 핵심 기능 요구사항입니다.
-      SSOT: <a href="requirements/mvp-functional-requirements.md" class="doc-link">§3</a> · <a href="04_IA.html" class="doc-link">04 IA</a> · <a href="03_planning.html" class="doc-link">03 기획</a>.
+      SSOT: <a href="requirements/mvp-functional-requirements-v2.md" class="doc-link">§1</a> · <a href="04_IA.html" class="doc-link">04 IA</a> · <a href="03_planning.html" class="doc-link">03 기획</a>.
     </p>
 
     <div class="req-derive">
@@ -659,10 +657,6 @@ body {
         <div class="req-text">스케줄 파편화 → <strong>아티스트 단위 통합 캘린더</strong>. 드롭·팬미팅·라이브 일정 통합 표시. 라이브 시작 알림 발송.</div>
       </div>
       <div class="req-derive-item">
-        <span class="req-dot">랭킹</span>
-        <div class="req-text">유입 유도 → 메인 화면 <strong>'이달의 아이돌 뽑기'</strong> 알럿 + 실시간 랭킹. (§3 미등재).</div>
-      </div>
-      <div class="req-derive-item">
         <span class="req-dot">알림</span>
         <div class="req-text">재입고·결제완료·라이브·커뮤니티 → <strong>발행(도메인 오너)</strong> / <strong>전송(표지민)</strong> 표로 고정. Kafka 필수 아님.</div>
       </div>
@@ -673,7 +667,7 @@ body {
   <aside class="related-docs">
     <span class="related-label">관련 문서</span>
     <a href="01_service_intro.html">01</a><a href="03_planning.html">03</a><a href="04_IA.html">04</a>
-    <a href="requirements/mvp-functional-requirements.md">§3</a><a href="api/mvp-api-spec.md">API</a>
+    <a href="requirements/mvp-functional-requirements-v2.md">§1</a><a href="api/mvp-api-spec.md">API</a>
     <a href="sequence/payment-flow-reason.md">결제 시퀀스</a>
   </aside>
   <div class="footer">

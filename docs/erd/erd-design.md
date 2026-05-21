@@ -1,7 +1,7 @@
 # ERD 설계 문서
 
 > **다이어그램:** [`erd.md`](./erd.md) · [`erd.png`](./erd.png)  
-> K-Pop 팬덤 **B2B2C** 플랫폼의 테이블 관계·컬럼 설계 근거. 드롭스·결제·커뮤니티·아티스트 운영 도메인을 포함한다.
+> K-Pop 팬덤 **B2B2C** 플랫폼의 테이블 관계·컬럼 설계 근거. **DB 29테이블** (`erd.md`). 드롭스·결제·커뮤니티·아티스트 운영 도메인을 포함한다.
 
 ---
 
@@ -9,10 +9,10 @@
 
 | 도메인 | 테이블 | 비고 |
 | --- | --- | --- |
-| **사용자·아티스트** | `FAN`, `AGENCY_APPLICATION`, `AGENCY_ACCOUNT`, `ARTIST_PROFILE`, `ARTIST_MEMBER`, `USER_FOLLOW` | 팬(B2C) · 입점신청(B2B) · 기획사(B2B) · 아티스트 프로필·멤버 · 팔로우(팬 가입) |
+| **사용자·아티스트** | `FAN`, `AGENCY_APPLICATION`, `AGENCY_ACCOUNT`, `ARTIST_PROFILE`, `ARTIST_MEMBER`, `USER_FOLLOW` | 팬(B2C) · 입점신청(B2B) · **운영 주체(B2B)** · 아티스트 프로필·멤버 · 팔로우(팬 가입) |
 | **커뮤니티** | `ARTIST_FEED`, `FEED_IMAGE`, `ARTIST_NOTICE`, `COMMENT`, `FEED_LIKE`, `COMMENT_LIKE` | 피드 · 피드 다중 이미지 · 공지 · 댓글(대댓글) · 피드/댓글 좋아요 |
 | **커머스** | `PRODUCT`, `INVENTORY`, `INVENTORY_HISTORY`, `CART`, `CART_ITEM`, `ORDER`, `ORDER_ITEM`, `PAYMENT`, `RESTOCK_ALERT` | 상품·재고·재고 이력·**장바구니(RDB)** ·주문·결제 — [ADR-003](../adr/ADR-003-cart-storage-rdb-phase1.md) |
-| **투표·일정** | `VOTE`, `ARTIST_SCHEDULE` | 이달의 아이돌 투표 · 아티스트 스케줄(일정) 및 공지 연동 캘린더 |
+| **일정** | `ARTIST_SCHEDULE` | 아티스트 스케줄(일정) 및 공지 연동 캘린더 |
 | **출석 체크** | `ATTENDANCE_EVENT`, `ATTENDANCE_LOG` | 출석 체크 이벤트 관리 및 팬 출석 기록 |
 | **굿즈 투표** | `GOODS_VOTE`, `GOODS_VOTE_OPTION`, `GOODS_VOTE_RECORD` | 굿즈 디자인/콘셉트 이미지 선택지 투표 및 기록 |
 | **운영·알림** | `BANNER`, `NOTIFICATION` | 메인/스토어 배너 · 팬 알림함 |
@@ -99,16 +99,50 @@ ERD:    PAYMENT.payment_key (Unique Index)
 
 ## 4. AGENCY_ACCOUNT · ARTIST_PROFILE · ARTIST_MEMBER · FAN
 
+> **용어 (`AGENCY_*`)**  
+> DB·API 식별자(`AGENCY_ACCOUNT`, `agency_id`, `ROLE_AGENCY` 등)는 **그대로 유지**한다.  
+> **`AGENCY_*`는 법인 기획사만이 아니라, 아티스트 공간을 운영하는 B2B 주체(기획사·1인 크리에이터·매니저)** 를 가리킨다.  
+> 화면·IA·기능 명세 등 사용자에게 보이는 문서에서는 **아티스트 스튜디오**, **운영 주체**, **운영자** 등 상위 개념을 쓴다.
+
 ### 설계 결정
 
 * **`FAN`**: `email`, `nickname`, `auth_provider`(`LOCAL` \| `KAKAO` \| `GOOGLE`), `provider_id`(소셜 시), `password_hash`(로컬 가입 시), `created_at`. 소셜 `providerToken`은 저장하지 않는다 ([mvp-api § Auth](../api/mvp-api-spec.md#auth--fan-계정)).
   * **`is_allow_notification` (신규 컬럼)**: 마이페이지 글로벌 알림(푸시 온/오프) 수신 설정을 저장하는 BOOLEAN 타입 컬럼.
-* **`AGENCY_APPLICATION` (신규 테이블)**: 기획사의 플랫폼 입점 신청 정보를 영속화하기 위한 심사용 테이블.
+* **`AGENCY_APPLICATION` (신규 테이블)**: 운영 주체의 플랫폼 입점 신청 정보를 영속화하기 위한 심사용 테이블.
   * `company_name`, `business_registration_number`, `representative_name`, `contact_email`, `contact_phone`, `introduction`, `target_artist_name`을 저장.
+  * `applied_at`(신청 일시), `reviewed_at`(심사 완료 일시)로 심사 SLA·보관 기간([data-retention §2.6](./data-retention-and-audit-policy.md#26-커뮤니티--계정-정환철--표지민)) 산정.
   * `status` 기본값 `PENDING` 이며, 최종 승인(`APPROVED`) 시점에 `AGENCY_ACCOUNT` 로그인 계정과 `ARTIST_PROFILE`이 자동으로 개설됨. 반려 시 `reject_reason`을 필수로 기록.
-* **`AGENCY_ACCOUNT`**: 기획사(B2B). `login_id`, `password_hash`, `company_name`, `contact_email`, `status`, `invitation_token`, `token_expired_at`, `role` 기본 `ROLE_PARTNER`. 입점 심사 완료 후 생성되는 로그인/권한 계정.
+
+### 입점 신청 (`AGENCY_APPLICATION`) — 운영 주체 유형별 필드 매핑
+
+입점은 **`POST /b2b/apply` · `AGENCY_APPLICATION` · 승인 시 `AGENCY_ACCOUNT`** 한 경로로 처리한다. DB/API 식별자가 `Agency`/`AGENCY_*`여도 **법인 기획사·1인 크리에이터·매니저** 모두 동일 테이블·동일 API를 쓴다. 유형별 차이는 **화면 라벨·검증 규칙** 수준이며, MVP에서 `operator_type` 컬럼은 두지 않는다(Admin 심사·`introduction`·`target_artist_name`으로 구분).
+
+| 필드 (API) | 법인 기획사 | 1인 크리에이터 | 매니저 |
+| --- | --- | --- | --- |
+| `company_name` | 법인·레이블명 | **활동명**(본인 브랜드) | **매니지먼트·대행사명** |
+| `representative_name` | 대표자명 | **본인 실명** | 담당자·대표명 |
+| `business_registration_number` | 법인 사업자등록번호 | **개인사업자 번호** 권장(없으면 정책·Admin 예외 심사) | 소속 법인·매니지먼트 사업자번호 |
+| `contact_email` / `contact_phone` | 담당자 연락처 | 본인 연락처 | 담당자 연락처 |
+| `introduction` | 회사·소속 아티스트 소개 | 활동·채널 소개 | 대행 범위·소속 아티스트 소개 |
+| `target_artist_name` | 신규·기존 **그룹/유닛명** | 본인 활동명과 **동일해도 됨** | **소속 아티스트명** |
+
+**승인 후 매핑**
+
+| 신청 필드 | 생성 엔티티 | 비고 |
+| --- | --- | --- |
+| `company_name` | `AGENCY_ACCOUNT.company_name` | 운영 주체 표시명(회사·활동명·매니지먼트명) |
+| (승인 시 Admin/시스템 입력) | `ARTIST_PROFILE.name` | 보통 `target_artist_name`과 동일·유사 |
+| — | `ARTIST_PROFILE.agency_id` | 항상 승인된 `AGENCY_ACCOUNT.id` FK |
+
+**`business_registration_number` (MVP 정책)**
+
+* **권장:** 입점 폼에서 **필수** — 정산·세무·분쟁 대비([data-lifecycle §3.6](./data-lifecycle.md#36-운영-주체-입점-신청-b2b)).
+* **1인 크리에이터:** 안내 문구에 **「개인사업자 등록 번호 입력 가능」** 명시. 미등록 신청자는 `PENDING` 유지 후 Admin이 서류 보완 요청·반려·예외 승인.
+* **구현:** ERD 컬럼 추가 없이 nullable 허용 + API/프론트 validation·Admin 심사 UI만 조정 가능. 유형별 분기가 필요해지면 이후 `operator_type` enum 추가를 검토한다.
+
+* **`AGENCY_ACCOUNT`**: 운영 주체(B2B) 로그인 계정. `login_id`, `password_hash`, `company_name`(회사명·활동명·매니지먼트 명칭), `contact_email`, `status`, `invitation_token`, `token_expired_at`, `role` 기본 `ROLE_AGENCY`. 입점 심사 완료 후 생성되는 로그인/권한 계정.
 * **`ARTIST_PROFILE`**: 아티스트 공간을 구성하는 앵커 엔티티 (`artist_id`).
-  * `partner_id` FK → `AGENCY_ACCOUNT`.
+  * `agency_id` FK → `AGENCY_ACCOUNT`.
   * `name`, `joined_at`.
   * **`fan_count` (성능 최적화 집계 필드)**: 스토어 아티스트 정렬 및 배너 노출 기준이 팬 수이기 때문에, 트래픽 집중 시 매번 COUNT 쿼리를 실행하는 성능 이슈를 예방하고자 추가. `USER_FOLLOW`의 INSERT/DELETE 트랜잭션 시점에 애플리케이션 레벨에서 값을 원자적으로 업데이트(+1 / -1)한다.
   * **`homepage_url`, `youtube_url`, `instagram_url`**: 프로필 탭의 외부 아웃링크를 저장하기 위한 컬럼.
@@ -118,7 +152,7 @@ ERD:    PAYMENT.payment_key (Unique Index)
 
 ### 근거
 
-B2B2C에서 기획사-아티스트-멤버 계층을 DB에 명시해야 커뮤니티(`ARTIST_FEED`)·커머스(`PRODUCT`)·투표(`VOTE`)가 동일한 `artist_id`로 묶인다.
+B2B2C에서 운영 주체–아티스트–멤버 계층을 DB에 명시해야 커뮤니티(`ARTIST_FEED`)·커머스(`PRODUCT`)·굿즈 투표(`GOODS_VOTE`)가 동일한 `artist_id`로 묶인다.
 
 ---
 
@@ -166,7 +200,7 @@ B2B2C에서 기획사-아티스트-멤버 계층을 DB에 명시해야 커뮤니
 ### 5.5. ARTIST_NOTICE (공지)와 일정 자동 연동
 
 * `type` 컬럼(`GENERAL | LIVE | EVENT | DROP`)이 추가되었다.
-* 기획사가 어드민에서 공지 등록 시 `type`을 `LIVE`, `EVENT`, `DROP` 중 하나로 설정할 경우, 서버 비즈니스 로직에 의해 아래 `ARTIST_SCHEDULE`에 데이터가 자동으로 INSERT되어 일정 탭에도 노출되도록 구현한다.
+* 운영자(아티스트 스튜디오)가 공지 등록 시 `type`을 `LIVE`, `EVENT`, `DROP` 중 하나로 설정할 경우, 서버 비즈니스 로직에 의해 아래 `ARTIST_SCHEDULE`에 데이터가 자동으로 INSERT되어 일정 탭에도 노출되도록 구현한다.
 
 ---
 
@@ -188,12 +222,11 @@ B2B2C에서 기획사-아티스트-멤버 계층을 DB에 명시해야 커뮤니
 
 ---
 
-## 7. USER_FOLLOW · VOTE
+## 7. USER_FOLLOW
 
 | 테이블 | 설계 포인트 |
 | --- | --- |
-| `USER_FOLLOW` | 팬(`fan_id`)이 아티스트(`artist_id`)를 팔로우. `followed_at`. **팬 가입(F01-04)** 의 DB 표현 — 커뮤니티 쓰기(댓글·좋아요)·투표·구매 전 선행 조건. UK 권장: `(fan_id, artist_id)` |
-| `VOTE` | **이달의 아이돌** 랭킹 투표. `fan_id`, `artist_id`, `round`, `month`, `voted_at`. MVP는 아티스트 단위 월간 투표만 진행 |
+| `USER_FOLLOW` | 팬(`fan_id`)이 아티스트(`artist_id`)를 팔로우. `followed_at`. **팬 가입(F01-04)** 의 DB 표현 — 커뮤니티 쓰기(댓글·좋아요)·굿즈 투표·구매 전 선행 조건. UK 권장: `(fan_id, artist_id)` |
 
 ---
 
@@ -310,6 +343,7 @@ WAITING | PROCESSING | DONE | EXPIRED
 ### 설계 결정
 
 * **`GOODS_VOTE`**: 굿즈 디자인/콘셉트 이미지 선택 투표를 생성하고 마감 기한을 관리한다.
+  * **개설 권한:** `POST /artists/{id}/goods-votes`는 **`ROLE_AGENCY` 운영 계정**(아티스트 스튜디오)만. `ARTIST_MEMBER`는 피드·댓글 등 콘텐츠 작성용.
   * `artist_id` FK, `title`, `ends_at`, `is_active`.
   * **애플리케이션 검증:** 투표 요청 시 `ends_at`이 지나지 않았는지, `is_active=true` 상태인지를 체크하여 비정상 투표를 제한한다.
 * **`GOODS_VOTE_OPTION`**: 투표에 등록된 이미지 및 텍스트 선택지 정보와 득표 현황을 관리한다.

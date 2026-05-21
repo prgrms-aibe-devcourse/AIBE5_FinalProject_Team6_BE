@@ -3,20 +3,20 @@
 K-Pop 팬덤 커머스 / 예약 플랫폼 — **MVP 핵심 도메인** HTTP API
 
 > **포트폴리오:** [01](../01_service_intro.html) · [02](../02_research.html) · [03](../03_planning.html) · [04 IA](../04_IA.html)  
-> **관련 문서:** [MVP 기능 요구사항 §3](../requirements/mvp-functional-requirements.md) · [API 계약](./api-contract.md) · [ERD](../erd/erd-design.md) · [결제·주문 시퀀스](../sequence/payment-flow-reason.md) · [불변조건·상태 머신](../state/invariants-and-state-machines.md) · [장애 정책](../operations/failure-policy.md) · [아키텍처](../architecture/architecture.md)
+> **관련 문서:** [MVP 기능 요구사항 §1](../requirements/mvp-functional-requirements-v2.md#1-mvp-기능-요구사항-인벤토리) · [API 계약](./api-contract.md) · [ERD](../erd/erd-design.md) · [결제·주문 시퀀스](../sequence/payment-flow-reason.md) · [불변조건·상태 머신](../state/invariants-and-state-machines.md) · [장애 정책](../operations/failure-policy.md) · [아키텍처](../architecture/architecture.md)
 
 ---
 
 ## 문서 범위
 
-본 명세는 [mvp-functional-requirements.md](../requirements/mvp-functional-requirements.md) **§3 기능 목록에 등재된 F-ID만** 다룬다.
+본 명세는 [mvp-functional-requirements-v2.md](../requirements/mvp-functional-requirements-v2.md) **§1 기능 목록에 등재된 F-ID만** 다룬다.
 
 | F 그룹 | 포함 |
 | --- | --- |
 | F01~F08 (표 등재분) | Auth, 입점, 커뮤니티, 상시·드롭스 상품, 장바구니·주문, 행사·외부 티켓, 결제 E2E, 마이페이지, Admin 모니터링 |
 | 미등재 | 고객센터, 신고·제재 Admin, 쿠폰·정산, 인앱 좌석 예매, 자체 라이브·영상 업로드 |
 
-Gradle 모듈·담당자: [architecture.md § 도메인 오너십](../architecture/architecture.md#도메인-오너십--모듈-매핑) · F-scope: [requirements § 오너십](../requirements/mvp-functional-requirements.md#도메인-오너십-f-scope).
+Gradle 모듈·담당자: [architecture.md § 도메인 오너십](../architecture/architecture.md#도메인-오너십--모듈-매핑) · F-scope: [architecture § 도메인 오너십](../architecture/architecture.md#도메인-오너십--모듈-매핑).
 
 ### F-ID → API 색인
 
@@ -31,7 +31,7 @@ Gradle 모듈·담당자: [architecture.md § 도메인 오너십](../architectu
 | F03-02~03 | `/feeds`, `/comments`, `.../likes` (`FEED_LIKE`/`COMMENT_LIKE`) | `community` |
 | F03-04 | `/fans/me/notifications`, 이벤트 발행 | `notification` / 각 도메인 |
 | F03-05~06 | `/calendar`, `/lives`, `PATCH .../start` | `community` |
-| F03-07~08 | `/attendance-events/.../check-in` (피드 배너), `/goods-votes`, `/ranking/votes` | `community` |
+| F03-07~08 | `/attendance-events/.../check-in` (피드 배너), `/goods-votes` | `community` |
 | F04-01 | `POST /products` (상시), `?type=regular` | `order` |
 | F04-02 | `POST /products` (드롭스 기간), `?type=drops`, `/queue/*` | `order` · `payment` |
 | F04-03 | `/banners/main`, `/admin/main-banners` | `user` |
@@ -76,7 +76,7 @@ Gradle 모듈·담당자: [architecture.md § 도메인 오너십](../architectu
 
 `user-api` · 담당: **표지민**
 
-> `FAN`은 이메일 가입과 소셜 가입을 모두 지원한다. 비밀번호는 `password_hash`로만 저장하고, 소셜 `providerToken`은 저장하지 않는다 ([ERD §4](../erd/erd-design.md#4-partner--artist--artist_member--fan)).
+> `FAN`은 이메일 가입과 소셜 가입을 모두 지원한다. 비밀번호는 `password_hash`로만 저장하고, 소셜 `providerToken`은 저장하지 않는다 ([ERD §4](../erd/erd-design.md#4-agency_account--artist_profile--artist_member--fan)).
 
 | Method | Endpoint | 설명 | Request Body | Response |
 | --- | --- | --- | --- | --- |
@@ -89,7 +89,7 @@ Gradle 모듈·담당자: [architecture.md § 도메인 오너십](../architectu
 | POST | `/auth/token/refresh` | Access Token 재발급 | `refreshToken` | `{ accessToken, expiresIn }` |
 | GET | `/fans/me` | 내 정보 조회 | — | `{ fanId, email, nickname, isAllowNotification, createdAt }` |
 | PUT | `/fans/me` | 내 정보 수정 | `nickname` (optional), `isAllowNotification` (optional) | `{ fanId, nickname, isAllowNotification }` |
-| POST | `/b2b/apply` | 기획사 입점 신청 (F02-01) | `companyName`, `businessRegistrationNumber`, `representativeName`, `contactEmail`, `contactPhone`, `introduction`, `targetArtistName` | `201` `{ applicationId, status: "PENDING" }` |
+| POST | `/b2b/apply` | 운영 입점 신청 (F02-01) | `companyName`, `businessRegistrationNumber`, `representativeName`, `contactEmail`, `contactPhone`, `introduction`, `targetArtistName` | `201` `{ applicationId, status: "PENDING" }` |
 
 ---
 
@@ -103,7 +103,7 @@ Gradle 모듈·담당자: [architecture.md § 도메인 오너십](../architectu
 | GET | `/artists/{id}` | 아티스트 상세 · 프로필·외부 링크 (F02-03) | — | `{ id, agencyAccountId, name, joinedAt, profileImageUrl, snsLinks[], scheduleSummary[] }` |
 | POST | `/artists/{id}/follow` | 팬 가입(팔로우, `USER_FOLLOW`) + 팬 수 증가 | — | `201` `{ artistId, fanId, followedAt }` |
 | DELETE | `/artists/{id}/follow` | 팔로우 해지 | — | `204 No Content` |
-| POST | `/artists` | 아티스트 등록 (Admin) | `partnerId`, `name` | `201` `{ artistId }` |
+| POST | `/artists` | 아티스트 등록 (Admin) | `agencyId`, `name` | `201` `{ artistId }` |
 | GET | `/artists/{id}/calendar` | 드롭·팬미팅·라이브 통합 스케줄 | `?from`, `to` | `{ events: [{ type, title, startTime }] }` |
 | POST | `/artists/{id}/events` | 행사 안내·외부 예매 링크 (F05-01~03) | `title`, `type`, `venue`, `startTime`, `ticketOpenAt` (참고), `externalTicketUrls[]` (F05-02), `externalTicketUrlExpiresAt` (optional) | `201` `{ eventId }` |
 | PATCH | `/lives/{id}/start` | 라이브 시작 (상태 갱신 + 알림 이벤트 발행) | — | `{ liveId, isLive: true }` |
@@ -128,20 +128,19 @@ Gradle 모듈·담당자: [architecture.md § 도메인 오너십](../architectu
 | DELETE | `/feeds/{id}/likes` | 피드 좋아요 취소 | — | `204 No Content` |
 | POST | `/comments/{id}/likes` | 댓글 좋아요 (`COMMENT_LIKE`) | — | `201` |
 | DELETE | `/comments/{id}/likes` | 댓글 좋아요 취소 | — | `204 No Content` |
-| POST | `/ranking/votes` | 이달의 아이돌 투표 (`VOTE`) | `artistId`, `round`, `month` | `201` `{ voteId }` |
 | GET | `/artists/{id}/attendance-events` | 진행 중 출석 이벤트 (피드 배너 연동, F03-07) | — | `{ items: [{ id, startDate, endDate, rewardDesc }] }` |
 | POST | `/attendance-events/{id}/check-in` | 출석 체크 (`ATTENDANCE_LOG`) | — | `201` `{ eventId, checkedDate, streakDays }` |
 | GET | `/artists/{id}/goods-votes` | 굿즈 투표 목록 (F03-08) | `?cursor`, `size` | `{ items: [...], nextCursor }` |
-| POST | `/artists/{id}/goods-votes` | 굿즈 투표 생성 (아티스트 멤버) | `title`, `endsAt`, `options: [{ label, imageUrl }]` | `201` `{ voteId }` |
+| POST | `/artists/{id}/goods-votes` | 굿즈 투표 생성 (운영 계정 · `ROLE_AGENCY`) | `title`, `endsAt`, `options: [{ label, imageUrl }]` | `201` `{ voteId }` |
 | POST | `/goods-votes/{id}/ballots` | 굿즈 투표 참여 (`GOODS_VOTE_RECORD`, 1인 1표) | `optionId` | `201` `{ recordId }` |
 | GET | `/fans/me/activities` | 내가 남긴 댓글/좋아요 히스토리 | `?cursor`, `size` | `{ items: [...], nextCursor }` |
 | GET | `/fans/me/artists` | 가입 아티스트 목록 | `?cursor`, `size` | `{ items: [...], nextCursor }` |
 
 - 피드 작성은 이미지 업로드 URL만 받는다. 동영상 업로드는 MVP 제외.
-- 댓글/좋아요/투표는 해당 아티스트 **팬 가입(F01-04 → `USER_FOLLOW`)** 후 write 가능. 미가입 시 일부 읽기만 허용.
+- 댓글/좋아요/굿즈 투표는 해당 아티스트 **팬 가입(F01-04 → `USER_FOLLOW`)** 후 write 가능. 미가입 시 일부 읽기만 허용.
 - F03-01 아티스트 공간: `ARTIST_PROFILE` 승인 시 **앱 6탭(피드·아티스트·굿즈투표·미디어·공지사항·스케줄)** 으로 구성(출석은 피드 내 배너). 별도 `ARTIST_SPACE` 테이블 없음.
 - 출석 체크(`ATTENDANCE_EVENT`/`ATTENDANCE_LOG`)·굿즈 투표(`GOODS_VOTE`/`GOODS_VOTE_OPTION`/`GOODS_VOTE_RECORD`) API·ERD 반영. 출석은 피드 내 이벤트 배너 진입.
-- **이달의 아이돌**(`VOTE`)과 **굿즈 투표**(`GOODS_VOTE`)는 별도 기능·테이블.
+- 굿즈 투표 **개설**(`POST /artists/{id}/goods-votes`)·강제 종료는 **`ROLE_AGENCY` 운영 계정**만. 팬 투표(`POST /goods-votes/{id}/ballots`)는 팬 가입(`USER_FOLLOW`) 후.
 - 외부 티켓(F05-02~03): `http`/`https`만 허용, 만료 후 비노출.
 - **상점(Store)은 GNB 스토어 탭(F04)** — 아티스트 홈 탭 아님.
 
@@ -310,7 +309,7 @@ PG  → POST .../webhook      → payload 내 키 → tossPaymentKey로 매핑 �
 
 | Method | Endpoint | 모듈 | 담당 | 설명 |
 | --- | --- | --- | --- | --- |
-| GET | `/admin/artist-applications` | `user` | 표지민 | 입점 신청 목록 `?status=PENDING` — DB `AGENCY_APPLICATION` ([ERD §3](../erd/erd-design.md#1-기획사-입점-신청서-테이블-신규-개설)) |
+| GET | `/admin/artist-applications` | `user` | 표지민 | 입점 신청 목록 `?status=PENDING` — DB `AGENCY_APPLICATION` ([ERD §4](../erd/erd-design.md#4-agency_account--artist_profile--artist_member--fan)) |
 | PATCH | `/admin/artist-applications/{id}` | `user` | 표지민 | 승인·반려 `status` ("APPROVED | REJECTED"), `rejectReason` (반려 시 필수) |
 | GET | `/admin/monitoring` | platform | 지영재 | 주문·결제·재고 모니터링 `?from`, `to` |
 | GET | `/admin/main-banners` | `user` | 표지민 | 메인 배너 목록 (F04-03) |

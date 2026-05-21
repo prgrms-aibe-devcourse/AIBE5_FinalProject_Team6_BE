@@ -267,9 +267,9 @@ ORDER.status = RESERVED AND reserved_at + payment-timeout < now()
 
 전송: **표지민** (`notification`)
 
-### 7.4 B2B 기획사 입점 신청 (AGENCY_APPLICATION)
+### 7.4 B2B 운영 입점 신청 (AGENCY_APPLICATION)
 
-기획사의 플랫폼 입점 신청서(`AGENCY_APPLICATION`) 상태 머신 및 불변조건입니다.
+운영 주체의 플랫폼 입점 신청서(`AGENCY_APPLICATION`) 상태 머신 및 불변조건입니다. (`AGENCY_*` = 기획사·1인 크리에이터·매니저 등 B2B 운영 주체 — [ERD §4](./erd/erd-design.md#4-agency_account--artist_profile--artist_member--fan))
 
 | From | Event / 조건 | To | 담당 모듈 | 비고 |
 | --- | --- | --- | --- | --- |

@@ -87,11 +87,11 @@ DB ERD에는 없음 — [erd-design §10](./erd-design.md#10-드롭스-대기열
 | --- | --- | --- |
 | Active | `sent_at` 기록 후 조회 | `PENDING` → 발행 |
 | 종료 | — (append 위주) | `published_at` 설정 / `FAILED` |
-| Purge | **1년** 후 삭제 (PII 마스킹 선행) | **30일** 후 삭제 또는 cold storage |
+| Purge | `sent_at` 기준 **1년** 후 DELETE (`is_read`와 무관, PII 마스킹 선행) | **30일** 후 삭제 또는 cold storage |
 
 ### 3.4 이벤트 · 예약 (Phase 2)
 
-MVP: [행사는 외부 티켓 링크](./erd-design.md#8-schedule--artist_schedule)만 — `reservations` / `seats` 테이블 없음.
+MVP: [행사는 외부 티켓 링크](./erd-design.md#8-artist_schedule-일정-단일화-및-공지-연동)만 — `reservations` / `seats` 테이블 없음.
 
 | 단계 | Phase 2 `reservations`, `seats` |
 | --- | --- |
@@ -109,25 +109,25 @@ MVP: [행사는 외부 티켓 링크](./erd-design.md#8-schedule--artist_schedul
 | --- | --- | --- | --- |
 | `artist_feeds`, `feed_images`, `artist_notices`, `comments` | 노출 중 | 작성자·Admin **DELETE** | 90일 후 연관 `feed_likes`·`comment_likes` 정리 |
 | `feed_likes`, `comment_likes` | 반응 중 | — | 피드·댓글 purge 시 연쇄 또는 고아 정리 |
-| `votes` (이달의 아이돌, `VOTE`) | 해당 `round`·`month` | 투표 종료 | 1년 후 원본 purge 또는 집계만 유지 |
 | `goods_votes`, `goods_vote_options`, `goods_vote_records` | `is_active`·`ends_at` 내 | 마감·비활성 | 1년 (집계 `vote_count` 유지 가능) |
 | `attendance_events`, `attendance_logs` | `is_active`·기간 내 | `is_active=false` | 1년 |
 | `user_follows` | 팔로우 중 | 언팔로우 DELETE | — |
 | `artist_schedules` (LIVE 등) | 방송·일정 중 | 종료 | 1년 |
 
-### 3.6 기획사 입점 신청 (B2B)
+### 3.6 운영 주체 입점 신청 (B2B)
 
-기획사 입점 신청(`AGENCY_APPLICATION`) 서류 데이터는 감사 및 세무/법무적 분쟁 방지를 위해 관리됩니다.
+운영 입점 신청(`AGENCY_APPLICATION`) 서류 데이터는 감사 및 세무/법무적 분쟁 방지를 위해 관리됩니다.
 
 | 데이터 | Active | 비노출·삭제 | Purge |
 | --- | --- | --- | --- |
-| `agency_applications` | PENDING 심사 중 | APPROVED (계정 자동생성) / REJECTED (반려) | 처리 완료 후 **1년** 보관 후 삭제(Purge) |
+| `agency_applications` | PENDING 심사 중 | APPROVED (계정 자동생성) / REJECTED (반려) | `reviewed_at` 기준 **1년** 보관 후 Purge |
+| `agency_accounts` | APPROVED 운영 중 | `invitation_token` 만료 정리 | 영구 메타 유지 · [보관 §2.6](./data-retention-and-audit-policy.md#26-커뮤니티--계정-정환철--표지민) |
 
 ---
 
 ## 4. 개인정보 · 마스킹 · 최소 저장
 
-FANDROPS는 **10~30대 팬(B2C)** 과 **기획사(B2B)** 를 동시에 다루므로, 팬 PII는 주문·알림에 필요한 범위만 유지한다.
+FANDROPS는 **10~30대 팬(B2C)** 과 **운영 주체(B2B)** 를 동시에 다루므로, 팬 PII는 주문·알림에 필요한 범위만 유지한다.
 
 ### 4.1 수집 최소화
 

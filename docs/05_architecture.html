@@ -486,7 +486,7 @@ code {
       <div class="stack-item">
         <div class="stack-category">Cache / 분산락</div>
         <div class="stack-name">Redis (AWS ElastiCache) + Redisson</div>
-        <div class="stack-reason">핫딜 대기열 Sorted Set, 재고 분산락, 랭킹 집계, Read 캐시. Redisson으로 <code>RLock</code> 비교 실험(Phase 3). 대기열 상태 관리는 <a href="state/invariants-and-state-machines.md#6-wait_queue-상태-머신">대기열 상태 머신 문서</a> 참조.</div>
+        <div class="stack-reason">드롭스 대기열 Sorted Set, 재고 분산락, Read 캐시·집계. Redisson으로 <code>RLock</code> 비교 실험(Phase 3). 대기열 상태 관리는 <a href="state/invariants-and-state-machines.md#6-wait_queue-상태-머신">대기열 상태 머신 문서</a> 참조.</div>
       </div>
       <div class="stack-item">
         <div class="stack-category">Migration</div>
@@ -510,7 +510,7 @@ code {
       <div class="stack-item">
         <div class="stack-category">Rate Limiting</div>
         <div class="stack-name">Bucket4j (Redis 연동)</div>
-        <div class="stack-reason">핫딜 오픈 구간 매크로·비정상 트래픽 방어(장성재 담당). Token Bucket 알고리즘을 사용하며, Redis 백엔드로 분산 환경 적용.</div>
+        <div class="stack-reason">드롭스 오픈 구간 매크로·비정상 트래픽 방어(장성재 담당). Token Bucket 알고리즘을 사용하며, Redis 백엔드로 분산 환경 적용.</div>
       </div>
       <div class="stack-item">
         <div class="stack-category">멱등성</div>
@@ -543,7 +543,7 @@ code {
       <div class="stack-item">
         <div class="stack-category">부하 테스트</div>
         <div class="stack-name">k6</div>
-        <div class="stack-reason">핫딜 동시 ~1k 스파이크 시나리오 재현. 오버셀 0 검증, 락 전략 비교표 작성.</div>
+        <div class="stack-reason">드롭스 동시 ~1k 스파이크 시나리오 재현. 오버셀 0 검증, 락 전략 비교표 작성.</div>
       </div>
       <div class="stack-item">
         <div class="stack-category">Cloud</div>
@@ -709,8 +709,8 @@ fandrops/<br>
       <tbody>
         <tr><td>지영재</td><td><code>apps/api-server</code> · 인프라</td><td>AWS · CI/CD · Prometheus/Grafana · k6 부하 테스트</td></tr>
         <tr><td>표지민</td><td><code>user</code> · <code>notification</code></td><td>로그인(카카오/구글) · 회원 가입 · 알림 전송 및 메일 발송</td></tr>
-        <tr><td>정환철</td><td><code>community</code></td><td>아티스트 공간 피드 · 댓글 · 캘린더 · 일정 · 랭킹 투표 · 출석체크</td></tr>
-        <tr><td>형성빈</td><td><code>order</code> · <code>inventory</code></td><td>상품 · 주문서 및 주문 접수 · 핫딜 재고 관리 (원자적 쿼리 예약)</td></tr>
+        <tr><td>정환철</td><td><code>community</code></td><td>아티스트 공간 피드 · 댓글 · 캘린더 · 일정 · 굿즈 투표 · 출석체크</td></tr>
+        <tr><td>형성빈</td><td><code>order</code> · <code>inventory</code></td><td>상품 · 주문서 및 주문 접수 · 드롭스 재고 관리 (원자적 쿼리 예약)</td></tr>
         <tr><td>장성재</td><td><code>payment</code> · 대기열</td><td>토스PG 연동 · 웹훅 수신 멱등성 · Saga 보상 트랜잭션 · Redis 대기열 및 Access Ticket · Bucket4j 레이트리밋</td></tr>
       </tbody>
     </table>

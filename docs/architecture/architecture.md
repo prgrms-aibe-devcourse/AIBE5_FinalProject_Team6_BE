@@ -1,7 +1,7 @@
 # FANDROPS 아키텍처 개요
 
 > **포트폴리오:** [01](../01_service_intro.html) · [02](../02_research.html) · [03](../03_planning.html) · [04 IA](../04_IA.html)  
-> **기능 SSOT:** [mvp-functional-requirements.md](../requirements/mvp-functional-requirements.md) (§3 F-ID)  
+> **기능 SSOT:** [mvp-functional-requirements-v2.md](../requirements/mvp-functional-requirements-v2.md) (§1 F-ID)  
 > 보조: [03_planning.html](../03_planning.html) (Not Scope · KPI · 로드맵) · [04_IA.html](../04_IA.html) (화면 흐름)
 > 상세 결정·기술 스택·호출 흐름: [ADR-001](../adr/ADR-001-multi-module-monolith.md) · 레이어별 Gradle: [ADR-002](../adr/ADR-002-per-layer-gradle-modules.md) · 장바구니 RDB: [ADR-003](../adr/ADR-003-cart-storage-rdb-phase1.md) · HTTP: [API 명세](../api/mvp-api-spec.md) · [계약](../api/api-contract.md) · 상태: [상태 머신](../state/invariants-and-state-machines.md) · 운영: [장애](../operations/failure-policy.md) · [메트릭](../operations/observability-metrics.md)
 
@@ -95,7 +95,7 @@ ArchUnit(선택): `domain` 패키지가 `org.springframework`, `jakarta.persiste
 
 ## 도메인 오너십 → 모듈 매핑
 
-> F-scope: [requirements § 오너십](../requirements/mvp-functional-requirements.md#도메인-오너십-f-scope)
+> F-scope: [architecture § 도메인 오너십](#도메인-오너십--모듈-매핑) (Gradle 모듈·담당자)
 
 | 담당자 | Gradle 모듈 | 도메인 영역 | F-scope (요약) |
 | --- | --- | --- | --- |
@@ -120,7 +120,7 @@ PR 머지 전 **해당 도메인 오너 리뷰** · API·이벤트 페이로드 
 
 ## `user` vs `community` — 왜 나뉘는가
 
-[mvp-functional-requirements.md](../requirements/mvp-functional-requirements.md) 기준 — **Gradle 모듈 = 바운디드 컨텍스트**이지, 화면 탭 1:1이 아니다.
+[mvp-functional-requirements-v2.md](../requirements/mvp-functional-requirements-v2.md) 기준 — **Gradle 모듈 = 바운디드 컨텍스트**이지, 화면 탭 1:1이 아니다.
 
 | Gradle 모듈 | 담당 | 들어가는 기능 (예시) | 들어가지 **않는** 것 |
 | --- | --- | --- | --- |
@@ -128,12 +128,12 @@ PR 머지 전 **해당 도메인 오너 리뷰** · API·이벤트 페이로드 
 | **`community`** | 정환철 | F03 전부, F05, F07-01 | Auth 발급, 주문·결제·상시/드롭스 상품 CRUD |
 | **`notification`** | 표지민 (전송) | 이메일/푸시 **발송** 어댑터 | 이벤트 **발행**(페이로드) — 발행은 각 도메인 오너 |
 
-### 피드·댓글·출석·투표·라이브가 전부 `community`인 이유
+### 피드·댓글·출석·굿즈투표·라이브가 전부 `community`인 이유
 
 명세상 이 기능들은 **F03(커뮤니티)·F05(행사/콘텐츠)** 묶음이고, 오너는 **정환철(Community / Content)** 한 명이다.  
 별도 `feed` / `comment` Gradle 모듈로 쪼개지 **않는다** — ADR-002 원칙(레이어×바운디드 컨텍스트까지만 분리).  
 
-패키지 예: `com.fandrops.community.api` · `…application.feed` · `…domain.poll` · `…domain.attendance` 처럼 **하위 패키지**로 나누고, 빌드 모듈 is `community-*` 하나로 유지한다.
+패키지 예: `com.fandrops.community.api` · `…application.feed` · `…domain.goodsvote` · `…domain.attendance` 처럼 **하위 패키지**로 나누고, 빌드 모듈 is `community-*` 하나로 유지한다.
 
 ### 경계가 헷갈리는 협업 (명세 기준)
 

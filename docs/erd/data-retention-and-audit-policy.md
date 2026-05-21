@@ -52,7 +52,7 @@
 
 ### 2.4 예약 · 좌석 — Phase 2 (Not Scope MVP)
 
-MVP는 행사 **외부 티켓 링크**만 제공([ERD §8](./erd-design.md#8-schedule--artist_schedule)). 인앱 예약 도입 시 아래를 적용한다.
+MVP는 행사 **외부 티켓 링크**만 제공([ERD §8](./erd-design.md#8-artist_schedule-일정-단일화-및-공지-연동)). 인앱 예약 도입 시 아래를 적용한다.
 
 | 데이터 | 보관 | 만료 후 |
 | --- | --- | --- |
@@ -71,15 +71,16 @@ MVP는 행사 **외부 티켓 링크**만 제공([ERD §8](./erd-design.md#8-sch
 
 | 데이터 | 보관 | 비고 |
 | --- | --- | --- |
-| **`fans`** (탈퇴 후) | **30일** 유예 → `email`·`nickname` 마스킹 (행 유지) | ERD에 `deleted_at` 없음 |
-| **`feeds`**, **`notices`**, **`comments`** | 탈퇴·운영 삭제 시 **DELETE** → **90일** 후 purge Job | `community` 모듈 |
-| **`attendance_events`**, **`attendance_checks`** | 이벤트 종료 후 **1년** | 리워드 대상자 산정 근거. 배송/지급 자동화는 별도 정책 |
-| **`goods_polls`**, **`goods_poll_options`**, **`votes`** | 투표 종료 후 **1년** | 굿즈 투표 집계·중복 투표 검증 |
-| **`banners`** | `is_active=false` 또는 DELETE 후 **1년** | ERD `is_active` 사용 |
-| **`agency_applications`** (입점신청) | **1년** | 심사 완료(승인/반려) 시점 | 1년 보관 후 삭제(Purge) | B2B 입점 심사 서류 보관 |
-| **`partners`** (입점) | `REJECTED`·만료 초대 **1년**, `APPROVED`는 영구 메타만 | `invitation_token` 만료 후 정리 · Admin audit |
-| **`fan_artist`** | 탈퇴 시 관계 **DELETE** | 아티스트별 가입 팬 수 집계만 유지 가능 |
-| **`notifications`** | `sent_at` 기준 **1년** 후 DELETE | 읽음 상태 없음 — [ERD §9](./erd-design.md#9-banner--restock_alert--notification-팬-알림함) |
+| **`fans`** (`FAN`, 탈퇴 후) | **30일** 유예 → `email`·`nickname` 마스킹 (행 유지) | ERD에 `deleted_at` 없음 |
+| **`artist_feeds`**, **`feed_images`**, **`artist_notices`**, **`comments`** | 탈퇴·운영 삭제 시 **DELETE** → **90일** 후 purge Job | `community` 모듈 · [ERD §5](./erd-design.md#5-커뮤니티--피드-이미지-공지-댓글-좋아요) |
+| **`feed_likes`**, **`comment_likes`** | 부모 삭제 시 연쇄 **DELETE** | 피드·댓글 purge Job과 함께 정리 |
+| **`attendance_events`**, **`attendance_logs`** | 이벤트 종료·`is_active=false` 후 **1년** | 리워드 대상자 산정 근거 · [ERD §12](./erd-design.md#12-출석-체크--attendance_event--attendance_log-신규) |
+| **`goods_votes`**, **`goods_vote_options`**, **`goods_vote_records`** | `ends_at` 마감·`is_active=false` 후 **1년** | 굿즈 투표 · [ERD §13](./erd-design.md#13-굿즈-투표--goods_vote--goods_vote_option--goods_vote_record-신규) |
+| **`banners`** | `is_active=false` 또는 DELETE 후 **1년** | ERD `is_active` 사용 · [ERD §9](./erd-design.md#9-banner--restock_alert--notification-팬-알림함) |
+| **`agency_applications`** | 심사 완료(`APPROVED` / `REJECTED`) 후 **1년** | 1년 보관 후 Purge · B2B 입점 심사 서류 |
+| **`agency_accounts`** | `invitation_token` 만료 후 정리 · `APPROVED` 계정은 영구 메타 유지 | [ERD §4](./erd-design.md#4-agency_account--artist_profile--artist_member--fan) · Admin audit |
+| **`user_follows`** | 언팔로우·탈퇴 시 **DELETE** | `ARTIST_PROFILE.fan_count` 집계만 유지 가능 |
+| **`notifications`** | `sent_at` 기준 **1년** 후 DELETE (PII 마스킹 선행) | purge·보관 기준은 `sent_at`. `is_read`는 팬 알림함 조회용이며 보관 기간과 무관 · [ERD §9](./erd-design.md#9-banner--restock_alert--notification-팬-알림함) |
 
 ---
 

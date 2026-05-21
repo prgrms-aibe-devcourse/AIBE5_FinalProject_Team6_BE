@@ -69,11 +69,11 @@ Auth는 Security + `user-api` 호출 또는 공통 Principal만 사용.
 
 - [ ] F03-01 아티스트 홈 **6탭**: 피드·아티스트(프로필)·굿즈투표·미디어·공지사항·스케줄 (출석체크는 피드 내 이벤트 배너로 연동)
 - [ ] 피드·댓글(출석체크 배너 포함)·굿즈투표·라이브 = **한 모듈** `community`
-- [ ] 팬 가입(`USER_FOLLOW`)은 커뮤니티 쓰기·이달의 아이돌 투표(`VOTE`) 권한의 선행 조건
+- [ ] 팬 가입(`USER_FOLLOW`)은 커뮤니티 쓰기·굿즈 투표 권한의 선행 조건
 - [ ] MVP: 인앱 티켓 예매 **없음** — `externalTicketUrl`만
 - [ ] `PATCH /lives/{id}/start` 시 `ARTIST_SCHEDULE` 알림 이벤트 발행 (전송은 notification)
 - [ ] 출석 체크는 피드 내 이벤트 배너를 통해 진입하며, 7일 달성은 리워드 대상자 산정까지만. 실물 지급/배송은 운영 정책 또는 Commerce Phase로 넘긴다
-- [ ] 굿즈 투표는 팬 가입자만 가능하고 이미지 선택지를 지원한다
+- [ ] 굿즈 투표 **개설**은 `ROLE_AGENCY` 운영 계정만 · **참여**는 팬 가입자만, 이미지 선택지 지원
 - [ ] 스토어 상품·노출 정렬(F04-01)은 order. 메인 배너(F04-03)는 표지민 담당.
 - [ ] 목록 API: `cursor` + `hasMore` — `api-contract.md`
 - [ ] 캐시: TTL jitter + SingleFlight (핫 피드)

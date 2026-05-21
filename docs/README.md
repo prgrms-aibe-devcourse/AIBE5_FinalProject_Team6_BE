@@ -11,7 +11,7 @@
 | Data · Lifecycle | [erd/data-lifecycle.md](./erd/data-lifecycle.md) | — |
 | Sequence | [sequence/payment-flow-reason.md](./sequence/payment-flow-reason.md) | [sequence/payment-order-flow.png](./sequence/payment-order-flow.png) |
 | ADR | [ADR-001](./adr/ADR-001-multi-module-monolith.md) · [ADR-002](./adr/ADR-002-per-layer-gradle-modules.md) · [ADR-003 장바구니 RDB](./adr/ADR-003-cart-storage-rdb-phase1.md) | — |
-| **기능 요구사항 §3** | [requirements/mvp-functional-requirements.md](./requirements/mvp-functional-requirements.md) | **F-ID SSOT** |
+| **기능 요구사항 §1** | [requirements/mvp-functional-requirements-v2.md](./requirements/mvp-functional-requirements-v2.md) | **F-ID SSOT** |
 | **포트폴리오 01–05** | [01](./01_service_intro.html) · [02](./02_research.html) · [03](./03_planning.html) · [04](./04_IA.html) · [05](./05_architecture.html) | 서비스·리서치·기획·IA·아키텍처 |
 | Architecture | [architecture/architecture.md](./architecture/architecture.md) | — |
 | API (MVP) | [api/mvp-api-spec.md](./api/mvp-api-spec.md) | — |
@@ -23,7 +23,7 @@
 
 > **다이어그램 PNG** (`erd.png`, `order-state-machine.png`, `payment-order-flow.png`): 문서에서 링크하지만 **레포에 없으면** 해당 경로에 파일을 커밋한다. 없을 때는 각 `.md`의 표·Mermaid가 SSOT이다.
 
-> F-ID·기능명: [requirements §3](./requirements/mvp-functional-requirements.md) · HTTP: [mvp-api-spec](./api/mvp-api-spec.md) · DB: [ERD](./erd/erd-design.md).
+> F-ID·기능명: [requirements §1](./requirements/mvp-functional-requirements-v2.md) · HTTP: [mvp-api-spec](./api/mvp-api-spec.md) · DB: [ERD](./erd/erd-design.md).
 
 ## AI 코딩 (Claude Code)
 
