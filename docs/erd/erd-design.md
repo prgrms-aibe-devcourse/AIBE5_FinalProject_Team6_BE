@@ -213,10 +213,10 @@ B2B2C에서 기획사-아티스트-멤버 계층을 DB에 명시해야 커뮤니
 
 `banner_type`: `MAIN` \| `STORE`. `product_id` FK(스토어 배너), `title`, `image_url`, `landing_url`, `exposure_order`, `is_active`, `start_at` / `end_at`.
 
-| 종류 | 담당 (Admin CRUD · Read) |
-| --- | --- |
-| **MAIN** | `user` (표지민) — GNB 홈 메인 배너·아티스트·이벤트 홍보 (F04-03) |
-| **STORE** | `order` (형성빈) — 상품·핫딜 프로모션 (`banner_type=STORE`) |
+| 종류 | 담당 (Admin CRUD · Read)                            |
+| --- |---------------------------------------------------|
+| **MAIN** | `user` (표지민) — GNB 홈 메인 배너·아티스트·이벤트 홍보 (F04-03)   |
+| **STORE** | `order` (형성빈) — 상품·드롭스 프로모션 (`banner_type=STORE`) |
 
 비노출은 **`is_active=false`** (ERD에 `deleted_at` 없음).
 
