@@ -2,6 +2,9 @@
 # 예시: application-local.example.yml 참고 (.env 파일 사용 금지)
 
 spring:
+  config:
+    import: optional:application-local.override.yml
+
   application:
     name: fandrops-api
 
