@@ -35,6 +35,7 @@
 | Default branch | **`develop`** |
 | 이슈 템플릿 | **Feature** → `feat/<이슈번호>` · **Bug** → `fix/<이슈번호>` (예: `feat/23` — 브랜치명에 `#` 없음) |
 | PR base | **`develop`** (`main`은 릴리스·배포용) |
+| **gh `--body-file`** | `.github/ISSUE_TEMPLATE/*.md` · `pull_request_template.md` **직접 사용 금지** (YAML·빈 칸). [`auto-pr.md`](./workflows/auto-pr.md)처럼 **채운** `docs/ai/workflows/generated/*-body.md` 사용 |
 | 상세 | [`docs/contributing/git-collaboration-convention.md`](../contributing/git-collaboration-convention.md) |
 
 ---
