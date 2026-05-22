@@ -45,7 +45,6 @@ subprojects {
         add("testImplementation", "org.junit.jupiter:junit-jupiter")
         add("testRuntimeOnly", "org.junit.platform:junit-platform-launcher")
     }
-
     tasks.withType<Test> {
         useJUnitPlatform()
     }
