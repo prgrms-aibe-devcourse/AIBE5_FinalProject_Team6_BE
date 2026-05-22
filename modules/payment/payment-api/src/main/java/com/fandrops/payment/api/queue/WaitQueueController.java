@@ -1,9 +1,11 @@
 package com.fandrops.payment.api.queue;
 
 import com.fandrops.payment.application.queue.QueueJoinCommand;
+import com.fandrops.payment.application.queue.QueueJoinResult;
 import com.fandrops.payment.application.queue.QueueStatusResult;
 import com.fandrops.payment.application.queue.WaitQueueService;
-import com.fandrops.payment.domain.queue.WaitQueueEntry;
+import java.util.Arrays;
+import org.springframework.core.env.Environment;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -13,9 +15,11 @@ import org.springframework.web.bind.annotation.*;
 public class WaitQueueController {
 
     private final WaitQueueService waitQueueService;
+    private final Environment environment;
 
-    public WaitQueueController(WaitQueueService waitQueueService) {
+    public WaitQueueController(WaitQueueService waitQueueService, Environment environment) {
         this.waitQueueService = waitQueueService;
+        this.environment = environment;
     }
 
     /**
@@ -29,12 +33,12 @@ public class WaitQueueController {
             @RequestHeader(value = "X-Fan-Id", required = false) Long fanIdHeader) {
 
         Long fanId = resolveFanId(authentication, fanIdHeader);
-        WaitQueueEntry entry = waitQueueService.join(new QueueJoinCommand(fanId, productId));
+        QueueJoinResult result = waitQueueService.join(new QueueJoinCommand(fanId, productId));
 
         return ResponseEntity.ok(new QueueJoinResponse(
-                entry.getQueueId(),
-                entry.getPosition(),
-                entry.getStatus()
+                result.getQueueId(),
+                result.getPosition(),
+                result.getStatus()
         ));
     }
 
@@ -59,13 +63,17 @@ public class WaitQueueController {
 
     // TODO: user 모듈 Auth 계약 확정 후 JWT 클레임에서 fanId 추출로 교체 (표지민 협의)
     private Long resolveFanId(Authentication authentication, Long fanIdHeader) {
-        if (fanIdHeader != null) {
+        if (fanIdHeader != null && isLocalProfile()) {
             return fanIdHeader;
         }
         if (authentication != null && authentication.isAuthenticated()
                 && !"anonymousUser".equals(authentication.getPrincipal())) {
             return Long.parseLong(authentication.getName());
         }
-        throw new IllegalArgumentException("인증 정보가 없습니다. X-Fan-Id 헤더 또는 Bearer 토큰을 제공하세요.");
+        throw new IllegalArgumentException("인증 정보가 없습니다. Bearer 토큰을 제공하세요.");
+    }
+
+    private boolean isLocalProfile() {
+        return Arrays.asList(environment.getActiveProfiles()).contains("local");
     }
 }
