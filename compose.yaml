@@ -1,5 +1,31 @@
 services:
+  # AWS RDS 기준: MySQL 8.0.46
+  mysql:
+    image: mysql:8.0.46
+    environment:
+      MYSQL_DATABASE: fandrops
+      MYSQL_USER: fandrops
+      MYSQL_PASSWORD: change-me
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      # Host 3307을 사용해 로컬 PC의 기존 MySQL 3306과 충돌을 피한다.
+      - "3307:3306"
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+00:00
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
+
+volumes:
+  mysql_data:
