@@ -1,0 +1,32 @@
+# 로컬 모니터링용 Compose 오버라이드
+# 기본 개발 환경(MySQL/Redis)과 분리해 필요할 때만 실행합니다.
+#
+# 실행:
+#   docker compose -f compose.yaml -f compose.monitoring.yml up -d
+# 중단:
+#   docker compose -f compose.yaml -f compose.monitoring.yml down
+
+services:
+  prometheus:
+    image: prom/prometheus:v3.4.1
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infra/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+  grafana:
+    image: grafana/grafana:12.0.1
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./infra/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+
+volumes:
+  grafana_data:
