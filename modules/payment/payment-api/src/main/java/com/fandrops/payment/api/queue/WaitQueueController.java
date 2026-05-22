@@ -38,7 +38,7 @@ public class WaitQueueController {
         return ResponseEntity.ok(new QueueJoinResponse(
                 result.getQueueId(),
                 result.getPosition(),
-                result.getStatus()
+                ApiQueueStatus.from(result.getStatus())
         ));
     }
 
@@ -56,7 +56,7 @@ public class WaitQueueController {
 
         return ResponseEntity.ok(new QueueStatusResponse(
                 result.getPosition(),
-                result.getStatus(),
+                ApiQueueStatus.from(result.getStatus()),
                 result.getEstimatedWaitSec()
         ));
     }

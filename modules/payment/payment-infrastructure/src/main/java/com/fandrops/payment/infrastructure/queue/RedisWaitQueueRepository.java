@@ -9,13 +9,13 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Profile;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Repository;
 
 @Repository
-@ConditionalOnProperty(name = "spring.data.redis.host", matchIfMissing = false)
+@Profile("!local")
 public class RedisWaitQueueRepository implements WaitQueueRepository {
 
     private static final String ENTRIES_KEY = "queue:%d:entries";
@@ -79,6 +79,10 @@ public class RedisWaitQueueRepository implements WaitQueueRepository {
         }
 
         String statusStr = (String) fields.get(FIELD_STATUS);
+        if (statusStr == null) {
+            return Optional.empty();
+        }
+
         String queueId = (String) fields.get(FIELD_QUEUE_ID);
         String joinedAtStr = (String) fields.get(FIELD_JOINED_AT);
 
