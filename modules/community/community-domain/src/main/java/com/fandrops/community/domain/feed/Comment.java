@@ -53,6 +53,7 @@ public class Comment {
     public static Comment reconstruct(Long id, Long feedId, Long artistId, Long fanId,
                                        Long artistMemberId, Long parentId,
                                        String content, LocalDateTime createdAt) {
+        validate(fanId, artistMemberId);
         return new Comment(id, feedId, artistId, fanId, artistMemberId, parentId, content, createdAt);
     }
 

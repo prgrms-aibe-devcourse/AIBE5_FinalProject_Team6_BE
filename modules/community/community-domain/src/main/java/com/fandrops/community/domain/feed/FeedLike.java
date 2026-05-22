@@ -43,6 +43,7 @@ public class FeedLike {
 
     public static FeedLike reconstruct(Long id, Long feedId, Long fanId, Long artistMemberId,
                                         Long artistId, LocalDateTime createdAt) {
+        validateAuthor(fanId, artistMemberId);
         return new FeedLike(id, feedId, fanId, artistMemberId, artistId, createdAt);
     }
 

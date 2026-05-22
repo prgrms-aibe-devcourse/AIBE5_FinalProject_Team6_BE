@@ -12,5 +12,8 @@ public interface CommentLikeRepository {
 
     boolean existsByCommentIdAndFanId(Long commentId, Long fanId);
 
+    // 댓글 삭제 시 연계 삭제 (data-lifecycle.md §3.5)
+    void deleteByCommentId(Long commentId);
+
     void delete(CommentLike commentLike);
 }
