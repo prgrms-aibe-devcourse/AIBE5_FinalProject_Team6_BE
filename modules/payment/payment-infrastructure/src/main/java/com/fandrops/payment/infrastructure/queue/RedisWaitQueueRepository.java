@@ -3,16 +3,19 @@ package com.fandrops.payment.infrastructure.queue;
 import com.fandrops.payment.domain.queue.WaitQueueEntry;
 import com.fandrops.payment.domain.queue.WaitQueueRepository;
 import com.fandrops.payment.domain.queue.WaitQueueStatus;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.stereotype.Repository;
-
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.RedisScript;
+import org.springframework.stereotype.Repository;
 
 @Repository
-@ConditionalOnBean(StringRedisTemplate.class)
+@ConditionalOnProperty(name = "spring.data.redis.host", matchIfMissing = false)
 public class RedisWaitQueueRepository implements WaitQueueRepository {
 
     private static final String ENTRIES_KEY = "queue:%d:entries";
@@ -21,33 +24,47 @@ public class RedisWaitQueueRepository implements WaitQueueRepository {
     private static final String FIELD_STATUS = "status";
     private static final String FIELD_JOINED_AT = "joinedAt";
 
-    private final StringRedisTemplate redisTemplate;
+    // 비터미널 entry 존재 시 0, 신규 등록(ZREM→ZADD→HMSET→EXPIRE) 시 1 반환
+    private static final RedisScript<Long> JOIN_SCRIPT = RedisScript.of(
+            "local s = redis.call('HGET', KEYS[2], 'status') " +
+            "if s ~= false and s ~= 'DONE' and s ~= 'EXPIRED' then return 0 end " +
+            "redis.call('ZREM', KEYS[1], ARGV[1]) " +
+            "redis.call('ZADD', KEYS[1], ARGV[2], ARGV[1]) " +
+            "redis.call('HMSET', KEYS[2], 'queueId', ARGV[3], 'status', ARGV[4], 'joinedAt', ARGV[5]) " +
+            "redis.call('EXPIRE', KEYS[1], ARGV[6]) " +
+            "redis.call('EXPIRE', KEYS[2], ARGV[6]) " +
+            "return 1",
+            Long.class);
 
-    public RedisWaitQueueRepository(StringRedisTemplate redisTemplate) {
+    private final StringRedisTemplate redisTemplate;
+    private final long ttlSeconds;
+
+    public RedisWaitQueueRepository(
+            StringRedisTemplate redisTemplate,
+            @Value("${fandrops.payment.queue.ttl-seconds:86400}") long ttlSeconds) {
         this.redisTemplate = redisTemplate;
+        this.ttlSeconds = ttlSeconds;
     }
 
     @Override
     public WaitQueueEntry join(Long fanId, Long productId) {
-        String fanKey = fanKey(fanId, productId);
-
-        // 이미 활성 entry 존재 시 기존 entry 반환 (W-1: Terminal 재활성화 금지)
-        Optional<WaitQueueEntry> existing = findEntry(fanId, productId);
-        if (existing.isPresent() && !existing.get().getStatus().isTerminal()) {
-            return existing.get();
-        }
-
         String queueId = UUID.randomUUID().toString();
         Instant now = Instant.now();
-        double score = now.toEpochMilli();
 
-        // Sorted Set에 등록 (NX: 이미 있으면 스코어 유지)
-        redisTemplate.opsForZSet().addIfAbsent(entriesKey(productId), String.valueOf(fanId), score);
+        Long created = redisTemplate.execute(
+                JOIN_SCRIPT,
+                List.of(entriesKey(productId), fanKey(fanId, productId)),
+                String.valueOf(fanId),
+                String.valueOf(now.toEpochMilli()),
+                queueId,
+                WaitQueueStatus.WAITING.name(),
+                String.valueOf(now.toEpochMilli()),
+                String.valueOf(ttlSeconds));
 
-        // 팬 상태 Hash 저장
-        redisTemplate.opsForHash().put(fanKey, FIELD_QUEUE_ID, queueId);
-        redisTemplate.opsForHash().put(fanKey, FIELD_STATUS, WaitQueueStatus.WAITING.name());
-        redisTemplate.opsForHash().put(fanKey, FIELD_JOINED_AT, String.valueOf(now.toEpochMilli()));
+        if (created == null || created == 0L) {
+            return findEntry(fanId, productId)
+                    .orElseThrow(() -> new IllegalStateException("대기열 entry 조회 실패"));
+        }
 
         long position = getPosition(fanId, productId);
         return new WaitQueueEntry(queueId, fanId, productId, WaitQueueStatus.WAITING, position, now);
@@ -56,13 +73,15 @@ public class RedisWaitQueueRepository implements WaitQueueRepository {
     @Override
     public Optional<WaitQueueEntry> findEntry(Long fanId, Long productId) {
         String fanKey = fanKey(fanId, productId);
-        String statusStr = (String) redisTemplate.opsForHash().get(fanKey, FIELD_STATUS);
-        if (statusStr == null) {
+        Map<Object, Object> fields = redisTemplate.opsForHash().entries(fanKey);
+        if (fields.isEmpty()) {
             return Optional.empty();
         }
 
-        String queueId = (String) redisTemplate.opsForHash().get(fanKey, FIELD_QUEUE_ID);
-        String joinedAtStr = (String) redisTemplate.opsForHash().get(fanKey, FIELD_JOINED_AT);
+        String statusStr = (String) fields.get(FIELD_STATUS);
+        String queueId = (String) fields.get(FIELD_QUEUE_ID);
+        String joinedAtStr = (String) fields.get(FIELD_JOINED_AT);
+
         WaitQueueStatus status = WaitQueueStatus.valueOf(statusStr);
         Instant joinedAt = Instant.ofEpochMilli(Long.parseLong(joinedAtStr));
         long position = getPosition(fanId, productId);

@@ -2,7 +2,6 @@ package com.fandrops.payment.application.queue;
 
 import com.fandrops.payment.domain.queue.WaitQueueEntry;
 import com.fandrops.payment.domain.queue.WaitQueueRepository;
-import com.fandrops.payment.domain.queue.WaitQueueStatus;
 
 public class WaitQueueService {
 
@@ -15,17 +14,18 @@ public class WaitQueueService {
         this.waitQueueRepository = waitQueueRepository;
     }
 
-    public WaitQueueEntry join(QueueJoinCommand command) {
-        return waitQueueRepository.join(command.getFanId(), command.getProductId());
+    public QueueJoinResult join(QueueJoinCommand command) {
+        WaitQueueEntry entry = waitQueueRepository.join(command.getFanId(), command.getProductId());
+        return new QueueJoinResult(entry.getQueueId(), entry.getPosition(), entry.getStatus().name());
     }
 
     public QueueStatusResult getStatus(Long fanId, Long productId) {
         WaitQueueEntry entry = waitQueueRepository.findEntry(fanId, productId)
                 .orElseThrow(() -> new IllegalStateException("대기열에 등록되지 않은 팬입니다."));
 
-        long position = waitQueueRepository.getPosition(fanId, productId);
+        long position = entry.getPosition();
         long estimatedWaitSec = position > 0 ? position * SECONDS_PER_POSITION : 0L;
 
-        return new QueueStatusResult(position, entry.getStatus(), estimatedWaitSec);
+        return new QueueStatusResult(position, entry.getStatus().name(), estimatedWaitSec);
     }
 }

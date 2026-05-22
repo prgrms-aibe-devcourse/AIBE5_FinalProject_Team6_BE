@@ -1,18 +1,18 @@
 package com.fandrops.payment.application.queue;
 
-public class QueueStatusResult {
+public class QueueJoinResult {
 
+    private final String queueId;
     private final long position;
     private final String status;
-    private final long estimatedWaitSec;
 
-    public QueueStatusResult(long position, String status, long estimatedWaitSec) {
+    public QueueJoinResult(String queueId, long position, String status) {
+        this.queueId = queueId;
         this.position = position;
         this.status = status;
-        this.estimatedWaitSec = estimatedWaitSec;
     }
 
+    public String getQueueId() { return queueId; }
     public long getPosition() { return position; }
     public String getStatus() { return status; }
-    public long getEstimatedWaitSec() { return estimatedWaitSec; }
 }
