@@ -8,7 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -16,7 +16,7 @@ import org.springframework.stereotype.Repository;
  * 순서 보장을 위해 productId별 LinkedHashMap(삽입 순서)을 사용한다.
  */
 @Repository
-@ConditionalOnMissingBean(WaitQueueRepository.class)
+@Profile("local")
 public class LocalWaitQueueRepository implements WaitQueueRepository {
 
     // key: productId → (fanId → WaitQueueEntry)
