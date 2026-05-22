@@ -6,7 +6,7 @@
 #
 # MySQL 로컬 사용 시 (H2 대신):
 #   SPRING_PROFILES_ACTIVE=local
-#   DB_URL=jdbc:mysql://localhost:3306/fandrops
+#   DB_URL=jdbc:mysql://localhost:3307/fandrops?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&characterEncoding=UTF-8
 #   DB_USERNAME=fandrops
 #   DB_PASSWORD=change-me
 #
