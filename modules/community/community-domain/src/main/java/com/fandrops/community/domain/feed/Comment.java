@@ -2,6 +2,7 @@ package com.fandrops.community.domain.feed;
 
 import com.fandrops.community.domain.feed.exception.FeedDomainException;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 
 public class Comment {
@@ -17,7 +18,7 @@ public class Comment {
     private final LocalDateTime createdAt;
 
     private Comment(Long feedId, Long artistId, Long fanId, Long artistMemberId,
-                    Long parentId, String content) {
+                    Long parentId, String content, Clock clock) {
         validate(fanId, artistMemberId);
         this.feedId = feedId;
         this.artistId = artistId;
@@ -25,7 +26,7 @@ public class Comment {
         this.artistMemberId = artistMemberId;
         this.parentId = parentId;
         this.content = content;
-        this.createdAt = LocalDateTime.now();
+        this.createdAt = LocalDateTime.now(clock);
     }
 
     private Comment(Long id, Long feedId, Long artistId, Long fanId, Long artistMemberId,
@@ -41,13 +42,13 @@ public class Comment {
     }
 
     public static Comment createByFan(Long feedId, Long artistId, Long fanId,
-                                      Long parentId, String content) {
-        return new Comment(feedId, artistId, fanId, null, parentId, content);
+                                      Long parentId, String content, Clock clock) {
+        return new Comment(feedId, artistId, fanId, null, parentId, content, clock);
     }
 
     public static Comment createByArtistMember(Long feedId, Long artistId,
-                                                Long artistMemberId, Long parentId, String content) {
-        return new Comment(feedId, artistId, null, artistMemberId, parentId, content);
+                                                Long artistMemberId, Long parentId, String content, Clock clock) {
+        return new Comment(feedId, artistId, null, artistMemberId, parentId, content, clock);
     }
 
     public static Comment reconstruct(Long id, Long feedId, Long artistId, Long fanId,

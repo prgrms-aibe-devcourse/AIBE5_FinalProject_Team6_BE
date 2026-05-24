@@ -1,5 +1,6 @@
 package com.fandrops.community.domain.feed;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 
 public class FeedImage {
@@ -9,10 +10,10 @@ public class FeedImage {
     private final String imageUrl;
     private final LocalDateTime createdAt;
 
-    private FeedImage(Long feedId, String imageUrl) {
+    private FeedImage(Long feedId, String imageUrl, Clock clock) {
         this.feedId = feedId;
         this.imageUrl = imageUrl;
-        this.createdAt = LocalDateTime.now();
+        this.createdAt = LocalDateTime.now(clock);
     }
 
     private FeedImage(Long id, Long feedId, String imageUrl, LocalDateTime createdAt) {
@@ -22,8 +23,8 @@ public class FeedImage {
         this.createdAt = createdAt;
     }
 
-    public static FeedImage create(Long feedId, String imageUrl) {
-        return new FeedImage(feedId, imageUrl);
+    public static FeedImage create(Long feedId, String imageUrl, Clock clock) {
+        return new FeedImage(feedId, imageUrl, clock);
     }
 
     public static FeedImage reconstruct(Long id, Long feedId, String imageUrl, LocalDateTime createdAt) {

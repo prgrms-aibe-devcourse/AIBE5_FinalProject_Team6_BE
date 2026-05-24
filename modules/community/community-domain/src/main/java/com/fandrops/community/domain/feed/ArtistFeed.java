@@ -1,5 +1,7 @@
 package com.fandrops.community.domain.feed;
 
+import com.fandrops.community.domain.feed.exception.FeedDomainException;
+
 import java.time.Clock;
 import java.time.LocalDateTime;
 
@@ -50,7 +52,7 @@ public class ArtistFeed {
 
     public void decrementLikeCount() {
         if (this.likeCount <= 0) {
-            throw new IllegalStateException("likeCount가 이미 0입니다.");
+            throw new FeedDomainException("likeCount is already 0");
         }
         this.likeCount--;
     }
@@ -61,7 +63,7 @@ public class ArtistFeed {
 
     public void decrementCommentCount() {
         if (this.commentCount <= 0) {
-            throw new IllegalStateException("commentCount가 이미 0입니다.");
+            throw new FeedDomainException("commentCount is already 0");
         }
         this.commentCount--;
     }

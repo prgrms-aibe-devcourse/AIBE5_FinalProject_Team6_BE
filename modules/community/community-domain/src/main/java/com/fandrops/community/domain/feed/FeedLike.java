@@ -2,6 +2,7 @@ package com.fandrops.community.domain.feed;
 
 import com.fandrops.community.domain.feed.exception.FeedDomainException;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 
 public class FeedLike {
@@ -14,13 +15,13 @@ public class FeedLike {
     private final Long artistId;
     private final LocalDateTime createdAt;
 
-    private FeedLike(Long feedId, Long fanId, Long artistMemberId, Long artistId) {
+    private FeedLike(Long feedId, Long fanId, Long artistMemberId, Long artistId, Clock clock) {
         validateAuthor(fanId, artistMemberId);
         this.feedId = feedId;
         this.fanId = fanId;
         this.artistMemberId = artistMemberId;
         this.artistId = artistId;
-        this.createdAt = LocalDateTime.now();
+        this.createdAt = LocalDateTime.now(clock);
     }
 
     private FeedLike(Long id, Long feedId, Long fanId, Long artistMemberId,
@@ -33,12 +34,12 @@ public class FeedLike {
         this.createdAt = createdAt;
     }
 
-    public static FeedLike byFan(Long feedId, Long fanId) {
-        return new FeedLike(feedId, fanId, null, null);
+    public static FeedLike byFan(Long feedId, Long fanId, Clock clock) {
+        return new FeedLike(feedId, fanId, null, null, clock);
     }
 
-    public static FeedLike byArtistMember(Long feedId, Long artistMemberId, Long artistId) {
-        return new FeedLike(feedId, null, artistMemberId, artistId);
+    public static FeedLike byArtistMember(Long feedId, Long artistMemberId, Long artistId, Clock clock) {
+        return new FeedLike(feedId, null, artistMemberId, artistId, clock);
     }
 
     public static FeedLike reconstruct(Long id, Long feedId, Long fanId, Long artistMemberId,
