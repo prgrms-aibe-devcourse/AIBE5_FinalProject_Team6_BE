@@ -1,5 +1,6 @@
 package com.fandrops.community.domain.feed;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 
 public class CommentLike {
@@ -9,10 +10,10 @@ public class CommentLike {
     private final Long fanId;
     private final LocalDateTime createdAt;
 
-    private CommentLike(Long commentId, Long fanId) {
+    private CommentLike(Long commentId, Long fanId, Clock clock) {
         this.commentId = commentId;
         this.fanId = fanId;
-        this.createdAt = LocalDateTime.now();
+        this.createdAt = LocalDateTime.now(clock);
     }
 
     private CommentLike(Long id, Long commentId, Long fanId, LocalDateTime createdAt) {
@@ -22,8 +23,8 @@ public class CommentLike {
         this.createdAt = createdAt;
     }
 
-    public static CommentLike create(Long commentId, Long fanId) {
-        return new CommentLike(commentId, fanId);
+    public static CommentLike create(Long commentId, Long fanId, Clock clock) {
+        return new CommentLike(commentId, fanId, clock);
     }
 
     public static CommentLike reconstruct(Long id, Long commentId, Long fanId, LocalDateTime createdAt) {
