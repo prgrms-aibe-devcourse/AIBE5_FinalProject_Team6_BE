@@ -5,6 +5,7 @@ import com.fandrops.user.application.exception.*;
 import com.fandrops.user.application.port.*;
 import com.fandrops.user.domain.AuthProvider;
 import com.fandrops.user.domain.Fan;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
