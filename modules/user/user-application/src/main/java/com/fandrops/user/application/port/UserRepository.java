@@ -5,8 +5,7 @@ import com.fandrops.user.domain.Fan;
 
 import java.util.Optional;
 
-public interface
-UserRepository {
+public interface UserRepository {
     Fan save(Fan fan);
     Optional<Fan> findByEmail(String email);
     Optional<Fan> findById(Long id);

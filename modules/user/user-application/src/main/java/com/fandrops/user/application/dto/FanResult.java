@@ -8,7 +8,7 @@ public record FanResult(
         Long fanId,
         String email,
         String nickname,
-        boolean isAllowNotification,
+        boolean allowNotification,
         LocalDateTime createdAt
 ) {
     public static FanResult from(Fan fan) {
@@ -16,7 +16,7 @@ public record FanResult(
                 fan.getId(),
                 fan.getEmail(),
                 fan.getNickname(),
-                fan.isAllowNotification(),
+                fan.isAllowNotification(),  // Fan getter는 Java bean 관례상 is 유지
                 fan.getCreatedAt()
         );
     }

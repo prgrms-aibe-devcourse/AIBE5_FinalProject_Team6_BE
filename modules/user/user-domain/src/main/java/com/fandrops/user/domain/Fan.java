@@ -11,7 +11,7 @@ public class Fan {
     private final AuthProvider authProvider;
     private final String providerId;      // 소셜 가입 시만 존재, 로컬이면 null
     private String passwordHash;          // 로컬 가입 시만 존재, 소셜이면 null
-    private boolean isAllowNotification;
+    private boolean allowNotification;
     private final LocalDateTime createdAt;
 
     // providerToken 은 저장하지 않는다 (ERD §4)
@@ -23,7 +23,7 @@ public class Fan {
         this.authProvider = builder.authProvider;
         this.providerId = builder.providerId;
         this.passwordHash = builder.passwordHash;
-        this.isAllowNotification = builder.isAllowNotification;
+        this.allowNotification = builder.isAllowNotification;
         this.createdAt = builder.createdAt;
     }
 
@@ -35,8 +35,8 @@ public class Fan {
         this.nickname = nickname;
     }
 
-    public void updateNotificationConsent(boolean isAllowNotification) {
-        this.isAllowNotification = isAllowNotification;
+    public void updateNotificationConsent(boolean allowNotification) {
+        this.allowNotification = allowNotification;
     }
 
     public void changePasswordHash(String newPasswordHash) {
@@ -53,7 +53,7 @@ public class Fan {
     public AuthProvider getAuthProvider() { return authProvider; }
     public String getProviderId() { return providerId; }
     public String getPasswordHash() { return passwordHash; }
-    public boolean isAllowNotification() { return isAllowNotification; }
+    public boolean isAllowNotification() { return allowNotification; }
     public LocalDateTime getCreatedAt() { return createdAt; }
 
     public static class Builder {

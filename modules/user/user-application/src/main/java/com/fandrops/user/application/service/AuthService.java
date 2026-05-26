@@ -172,6 +172,9 @@ public class AuthService {
         if (userInfo.nickname() != null && !userInfo.nickname().isBlank()) {
             return userInfo.nickname();
         }
-        return userInfo.email().split("@")[0];
+        if (userInfo.email() != null) {
+            return userInfo.email().split("@")[0];
+        }
+        throw new IllegalStateException("소셜 계정에서 닉네임 또는 이메일 정보를 제공받지 못했습니다.");
     }
 }
