@@ -65,6 +65,10 @@ public class AgencyApplication {
                 && (rejectReason == null || rejectReason.isBlank())) {
             throw new IllegalArgumentException("REJECTED 신청서는 rejectReason이 필수입니다.");
         }
+        // 심사 완료 상태에는 reviewedAt 필수
+        if (status.isTerminal() && reviewedAt == null) {
+            throw new IllegalArgumentException("심사 완료 신청서는 reviewedAt이 필수입니다.");
+        }
         return new AgencyApplication(id, companyName, businessRegistrationNumber,
                 representativeName, contactEmail, contactPhone, introduction,
                 targetArtistName, status, rejectReason, appliedAt, reviewedAt);
@@ -73,6 +77,7 @@ public class AgencyApplication {
     // 불변조건 AA-3: 승인 시 AGENCY_ACCOUNT + ARTIST_PROFILE 연쇄 생성은 ApplicationService 책임
     public void approve(LocalDateTime reviewedAt) {
         validateNotTerminal();
+        Objects.requireNonNull(reviewedAt, "심사 일시는 필수입니다.");
         this.status = AgencyApplicationStatus.APPROVED;
         this.reviewedAt = reviewedAt;
     }
@@ -83,6 +88,7 @@ public class AgencyApplication {
         if (rejectReason == null || rejectReason.isBlank()) {
             throw new IllegalArgumentException("반려 사유는 필수입니다.");
         }
+        Objects.requireNonNull(reviewedAt, "심사 일시는 필수입니다.");
         this.status = AgencyApplicationStatus.REJECTED;
         this.rejectReason = rejectReason;
         this.reviewedAt = reviewedAt;
