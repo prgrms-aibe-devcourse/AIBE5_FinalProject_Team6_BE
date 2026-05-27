@@ -52,11 +52,14 @@ jobs:
             echo "Docker 이미 설치됨: $(docker --version)"
           fi
 
-          # docker compose v2 플러그인 별도 확인 (docker만 있고 plugin 없을 수 있음)
+          # docker compose v2 플러그인 별도 확인 (AL2023 repo에 docker-compose-plugin 없음)
           if ! docker compose version &>/dev/null 2>&1; then
-            echo "docker-compose-plugin 설치 중..."
-            dnf install -y docker-compose-plugin
-            echo "docker-compose-plugin 설치 완료"
+            echo "Docker Compose v2 설치 중 (CLI plugin 방식)..."
+            mkdir -p /usr/local/lib/docker/cli-plugins
+            curl -SL "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64" \
+              -o /usr/local/lib/docker/cli-plugins/docker-compose
+            chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+            echo "설치 완료: $(docker compose version)"
           else
             echo "docker compose 이미 설치됨: $(docker compose version)"
           fi
