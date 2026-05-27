@@ -38,6 +38,10 @@ public class InventoryHistory {
                 deltaQty, qtyBefore, qtyAfter, referenceId, refType, changedAt);
     }
 
+    // TODO: Clock 주입 패턴으로 통일 필요
+    //   - community 모듈(commit 23bed49)은 Clock을 팩토리 파라미터로 항상 요구하는 패턴 사용
+    //   - 맞추려면 of()·Inventory.reserve/confirm/restore/increase 모두 Clock 파라미터 추가 필요
+    //   - 팀 컨벤션 확정 후 일괄 적용 (PR 리뷰 P3)
     public static InventoryHistory of(Long inventoryId, InventoryChangeType changeType,
                                       int deltaQty, int qtyBefore, int qtyAfter,
                                       Long referenceId, InventoryRefType refType) {
