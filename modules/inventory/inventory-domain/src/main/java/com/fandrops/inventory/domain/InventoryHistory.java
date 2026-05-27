@@ -33,8 +33,15 @@ public class InventoryHistory {
 
     public static InventoryHistory of(Long inventoryId, InventoryChangeType changeType,
                                       int deltaQty, int qtyBefore, int qtyAfter,
+                                      Long referenceId, InventoryRefType refType, LocalDateTime changedAt) {
+        return new InventoryHistory(null, inventoryId, changeType,
+                deltaQty, qtyBefore, qtyAfter, referenceId, refType, changedAt);
+    }
+
+    public static InventoryHistory of(Long inventoryId, InventoryChangeType changeType,
+                                      int deltaQty, int qtyBefore, int qtyAfter,
                                       Long referenceId, InventoryRefType refType) {
-        return new InventoryHistory(null, inventoryId, changeType, deltaQty,
-                qtyBefore, qtyAfter, referenceId, refType, LocalDateTime.now());
+        return of(inventoryId, changeType, deltaQty, qtyBefore, qtyAfter,
+                referenceId, refType, LocalDateTime.now());
     }
 }
