@@ -60,6 +60,25 @@ class InventoryTest {
             assertThrows(InvalidInventoryStateException.class,
                 () -> Inventory.reconstitute(1L, PRODUCT_ID, 100, 50, 99, 0));
         }
+
+        @Test
+        @DisplayName("음수값 조합이 불변식을 통과해도 InvalidInventoryStateException")
+        void reconstitute_negativeValuesBypassInvariant() {
+            // -10 - (-20) = 10 으로 불변식은 성립하지만 음수 필드가 존재
+            assertThrows(InvalidInventoryStateException.class,
+                () -> Inventory.reconstitute(1L, PRODUCT_ID, -10, -20, 10, 0));
+        }
+
+        @Test
+        @DisplayName("각 필드가 음수이면 InvalidInventoryStateException")
+        void reconstitute_negativeFields() {
+            assertThrows(InvalidInventoryStateException.class,
+                () -> Inventory.reconstitute(1L, PRODUCT_ID, -1, 0, -1, 0));
+            assertThrows(InvalidInventoryStateException.class,
+                () -> Inventory.reconstitute(1L, PRODUCT_ID, 100, -1, 101, 0));
+            assertThrows(InvalidInventoryStateException.class,
+                () -> Inventory.reconstitute(1L, PRODUCT_ID, 100, 110, -10, 0));
+        }
     }
 
     @Nested
