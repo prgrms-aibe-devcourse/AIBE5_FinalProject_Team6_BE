@@ -1,10 +1,15 @@
-# 로컬 모니터링용 Compose 오버라이드
+# 모니터링 Compose 오버라이드 (로컬 + EC2 공용)
 # 기본 개발 환경(MySQL/Redis)과 분리해 필요할 때만 실행합니다.
 #
-# 실행:
+# [로컬] 실행:
 #   docker compose -f compose.yaml -f compose.monitoring.yml up -d
-# 중단:
+# [로컬] 중단:
 #   docker compose -f compose.yaml -f compose.monitoring.yml down
+#
+# [EC2] 실행 (레포 루트에서):
+#   docker compose -f compose.monitoring.yml up -d
+# [EC2] 중단:
+#   docker compose -f compose.monitoring.yml down
 
 services:
   prometheus:
@@ -13,6 +18,10 @@ services:
       - "9090:9090"
     volumes:
       - ./infra/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    extra_hosts:
+      # Linux(EC2)에서 host.docker.internal → 호스트 머신으로 라우팅
+      # Mac/Windows는 기본 지원되므로 이 설정이 있어도 무관
+      - "host.docker.internal:host-gateway"
 
   grafana:
     image: grafana/grafana:12.0.1
