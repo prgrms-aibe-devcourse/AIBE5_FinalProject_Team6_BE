@@ -107,7 +107,7 @@ public class Inventory {
     }
 
     private static void validatePositiveQty(int qty) {
-        if (qty <= 0) throw new InvalidInventoryStateException("qty must be positive: " + qty);
+        if (qty <= 0) throw new InvalidInventoryStateException("qty는 양수여야 합니다: " + qty);
     }
 
 }
