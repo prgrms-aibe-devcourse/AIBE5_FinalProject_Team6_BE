@@ -43,6 +43,7 @@ public class Inventory {
     }
 
     // I-1, I-2: OUT_OF_STOCK(ERR_4004) vs RESERVE_FAILED(ERR_4005) 분리
+    // qtyBefore/qtyAfter = availableQty 기준
     public InventoryHistory reserve(int qty, Long orderId) {
         validatePositiveQty(qty);
         if (availableQty == 0) {
@@ -58,6 +59,7 @@ public class Inventory {
     }
 
     // I-1, I-3: reservedQty 음수 방지 가드 + COMPLETED 주문만 totalQty 영구 차감
+    // qtyBefore/qtyAfter = totalQty 기준
     public InventoryHistory confirm(int qty, Long orderId) {
         validatePositiveQty(qty);
         if (reservedQty < qty) {
@@ -71,6 +73,7 @@ public class Inventory {
     }
 
     // I-1: reservedQty 음수 방지 가드 + Saga 보상, 사용자 취소 시 선점 해제
+    // qtyBefore/qtyAfter = availableQty 기준
     public InventoryHistory restore(int qty, Long orderId) {
         validatePositiveQty(qty);
         if (reservedQty < qty) {
@@ -83,7 +86,7 @@ public class Inventory {
         return InventoryHistory.of(id, InventoryChangeType.RELEASE, qty, before, availableQty, orderId, InventoryRefType.ORDER);
     }
 
-    // 재입고
+    // 재입고. qtyBefore/qtyAfter = totalQty 기준
     public InventoryHistory increase(int qty, Long restockId) {
         validatePositiveQty(qty);
         int before = totalQty;
