@@ -49,9 +49,18 @@ jobs:
             systemctl enable --now docker
             echo "Docker 설치 완료"
           else
-            echo "이미 설치됨: $(docker --version)"
+            echo "Docker 이미 설치됨: $(docker --version)"
           fi
-          # 소켓 권한 확인 (sudo 없이 동작하도록)
+
+          # docker compose v2 플러그인 별도 확인 (docker만 있고 plugin 없을 수 있음)
+          if ! docker compose version &>/dev/null 2>&1; then
+            echo "docker-compose-plugin 설치 중..."
+            dnf install -y docker-compose-plugin
+            echo "docker-compose-plugin 설치 완료"
+          else
+            echo "docker compose 이미 설치됨: $(docker compose version)"
+          fi
+
           usermod -aG docker ec2-user 2>/dev/null || true
 
           echo "=== [2/4] 설정 파일 다운로드 ==="
