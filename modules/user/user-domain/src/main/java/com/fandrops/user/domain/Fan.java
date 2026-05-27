@@ -1,0 +1,94 @@
+package com.fandrops.user.domain;
+
+import java.time.LocalDateTime;
+import java.util.Objects;
+
+public class Fan {
+
+    private final Long id;
+    private final String email;
+    private String nickname;
+    private final AuthProvider authProvider;
+    private final String providerId;      // 소셜 가입 시만 존재, 로컬이면 null
+    private String passwordHash;          // 로컬 가입 시만 존재, 소셜이면 null
+    private boolean allowNotification;
+    private final LocalDateTime createdAt;
+
+    // providerToken 은 저장하지 않는다 (ERD §4)
+
+    private Fan(Builder builder) {
+        this.id = builder.id;
+        this.email = builder.email;
+        this.nickname = builder.nickname;
+        this.authProvider = builder.authProvider;
+        this.providerId = builder.providerId;
+        this.passwordHash = builder.passwordHash;
+        this.allowNotification = builder.allowNotification;
+        this.createdAt = builder.createdAt;
+    }
+
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    public void updateNickname(String nickname) {
+        this.nickname = nickname;
+    }
+
+    public void updateNotificationConsent(boolean allowNotification) {
+        this.allowNotification = allowNotification;
+    }
+
+    public void changePasswordHash(String newPasswordHash) {
+        this.passwordHash = newPasswordHash;
+    }
+
+    public boolean isLocalAccount() {
+        return AuthProvider.LOCAL == this.authProvider;
+    }
+
+    public Long getId() { return id; }
+    public String getEmail() { return email; }
+    public String getNickname() { return nickname; }
+    public AuthProvider getAuthProvider() { return authProvider; }
+    public String getProviderId() { return providerId; }
+    // 인증·영속화 전용 — API 응답 DTO(FanResult)에 절대 포함하지 말 것
+    public String getPasswordHash() { return passwordHash; }
+    public boolean isAllowNotification() { return allowNotification; }
+    public LocalDateTime getCreatedAt() { return createdAt; }
+
+    public static class Builder {
+        private Long id;
+        private String email;
+        private String nickname;
+        private AuthProvider authProvider;
+        private String providerId;
+        private String passwordHash;
+        private boolean allowNotification = true;
+        private LocalDateTime createdAt;
+
+        public Builder id(Long id) { this.id = id; return this; }
+        public Builder email(String email) { this.email = email; return this; }
+        public Builder nickname(String nickname) { this.nickname = nickname; return this; }
+        public Builder authProvider(AuthProvider authProvider) { this.authProvider = authProvider; return this; }
+        public Builder providerId(String providerId) { this.providerId = providerId; return this; }
+        public Builder passwordHash(String passwordHash) { this.passwordHash = passwordHash; return this; }
+        public Builder allowNotification(boolean allowNotification) { this.allowNotification = allowNotification; return this; }
+        public Builder createdAt(LocalDateTime createdAt) { this.createdAt = createdAt; return this; }
+
+        public Fan build() {
+            Objects.requireNonNull(authProvider, "authProvider는 필수입니다");
+            Objects.requireNonNull(nickname, "nickname은 필수입니다");
+
+            if (authProvider == AuthProvider.LOCAL) {
+                Objects.requireNonNull(email, "로컬 계정은 email이 필수입니다");
+                Objects.requireNonNull(passwordHash, "로컬 계정은 passwordHash가 필수입니다");
+            } else {
+                Objects.requireNonNull(providerId, "소셜 계정은 providerId가 필수입니다");
+                // 소셜 계정은 email이 null일 수 있음 (카카오 이메일 미동의 등)
+            }
+
+            return new Fan(this);
+        }
+    }
+}
