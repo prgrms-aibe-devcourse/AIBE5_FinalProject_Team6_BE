@@ -163,8 +163,7 @@ class InventoryTest {
         @Test
         @DisplayName("availableQty == 0 이면 OutOfStockException")
         void reserve_outOfStock() {
-            Inventory inventory = Inventory.create(PRODUCT_ID, 5);
-            inventory.reserve(5, ORDER_ID);
+            inventory.reserve(100, ORDER_ID);
 
             assertThrows(OutOfStockException.class, () -> inventory.reserve(1, ORDER_ID));
         }
@@ -173,6 +172,14 @@ class InventoryTest {
         @DisplayName("availableQty > 0 but < qty 이면 ReserveFailedException")
         void reserve_reserveFailed() {
             assertThrows(ReserveFailedException.class, () -> inventory.reserve(101, ORDER_ID));
+        }
+
+        @Test
+        @DisplayName("availableQty=1, qty=2 이면 OutOfStockException이 아닌 ReserveFailedException (경계값)")
+        void reserve_partialStockThrowsReserveFailed() {
+            inventory.reserve(99, ORDER_ID); // availableQty = 1
+
+            assertThrows(ReserveFailedException.class, () -> inventory.reserve(2, ORDER_ID));
         }
 
         @Test
@@ -239,6 +246,14 @@ class InventoryTest {
         void confirm_negativeOrZeroQty() {
             assertThrows(InvalidInventoryStateException.class, () -> inventory.confirm(0, ORDER_ID));
             assertThrows(InvalidInventoryStateException.class, () -> inventory.confirm(-1, ORDER_ID));
+        }
+
+        @Test
+        @DisplayName("정상 확정 시 I-2 불변식 유지(availableQty = totalQty - reservedQty)")
+        void confirm_invariantI2() {
+            inventory.confirm(20, ORDER_ID);
+
+            assertEquals(inventory.getTotalQty() - inventory.getReservedQty(), inventory.getAvailableQty());
         }
     }
 
