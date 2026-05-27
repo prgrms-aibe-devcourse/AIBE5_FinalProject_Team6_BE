@@ -23,7 +23,7 @@ public class Fan {
         this.authProvider = builder.authProvider;
         this.providerId = builder.providerId;
         this.passwordHash = builder.passwordHash;
-        this.allowNotification = builder.isAllowNotification;
+        this.allowNotification = builder.allowNotification;
         this.createdAt = builder.createdAt;
     }
 
@@ -63,7 +63,7 @@ public class Fan {
         private AuthProvider authProvider;
         private String providerId;
         private String passwordHash;
-        private boolean isAllowNotification = true;
+        private boolean allowNotification = true;
         private LocalDateTime createdAt;
 
         public Builder id(Long id) { this.id = id; return this; }
@@ -72,7 +72,7 @@ public class Fan {
         public Builder authProvider(AuthProvider authProvider) { this.authProvider = authProvider; return this; }
         public Builder providerId(String providerId) { this.providerId = providerId; return this; }
         public Builder passwordHash(String passwordHash) { this.passwordHash = passwordHash; return this; }
-        public Builder isAllowNotification(boolean isAllowNotification) { this.isAllowNotification = isAllowNotification; return this; }
+        public Builder allowNotification(boolean allowNotification) { this.allowNotification = allowNotification; return this; }
         public Builder createdAt(LocalDateTime createdAt) { this.createdAt = createdAt; return this; }
 
         public Fan build() {

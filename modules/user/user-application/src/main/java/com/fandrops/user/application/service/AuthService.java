@@ -9,8 +9,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.UUID;
+
 @Service
-@Transactional
 public class AuthService {
 
     private final UserRepository userRepository;
@@ -20,6 +21,7 @@ public class AuthService {
     private final PasswordResetTokenStore passwordResetTokenStore;
     private final OAuthClient oAuthClient;
     private final EmailNotificationPort emailNotificationPort;
+    private final String dummyPasswordHash;
 
     public AuthService(
             UserRepository userRepository,
@@ -36,9 +38,11 @@ public class AuthService {
         this.passwordResetTokenStore = passwordResetTokenStore;
         this.oAuthClient = oAuthClient;
         this.emailNotificationPort = emailNotificationPort;
+        this.dummyPasswordHash = passwordEncoder.encode("dummy");
     }
 
     // F01-01: 이메일 회원가입
+    @Transactional
     public AuthTokenResult signUp(SignUpCommand command) {
         if (!command.termsAgreed()) {
             throw new IllegalArgumentException("이용약관에 동의해야 합니다.");
@@ -59,16 +63,18 @@ public class AuthService {
         return issueTokens(saved.getId());
     }
 
-    // F01-02: 이메일 로그인
+    // F01-02: 이메일 로그인 (DB read만 — 트랜잭션 불필요, 커넥션 즉시 반납)
     public AuthTokenResult login(LoginCommand command) {
-        Fan fan = userRepository.findByEmail(command.email())
-                .orElseThrow(() -> new InvalidCredentialsException("이메일 또는 비밀번호가 일치하지 않습니다."));
+        Fan fan = userRepository.findByEmail(command.email()).orElse(null);
 
-        if (!fan.isLocalAccount()) {
-            throw new InvalidCredentialsException("소셜 로그인 계정입니다. 카카오 또는 구글로 로그인해 주세요.");
-        }
+        // 타이밍 공격 방어: 미가입 이메일에도 항상 bcrypt 실행해 응답 시간 평준화
+        String hashToCheck = (fan != null && fan.isLocalAccount())
+                ? fan.getPasswordHash()
+                : dummyPasswordHash;
+        boolean matches = passwordEncoder.matches(command.password(), hashToCheck);
 
-        if (!passwordEncoder.matches(command.password(), fan.getPasswordHash())) {
+        // User Enumeration 방어: 소셜 계정 여부를 외부에 노출하지 않음
+        if (fan == null || !fan.isLocalAccount() || !matches) {
             throw new InvalidCredentialsException("이메일 또는 비밀번호가 일치하지 않습니다.");
         }
 
@@ -76,6 +82,7 @@ public class AuthService {
     }
 
     // F01-03: 소셜 로그인·가입 (Authorization Code 방식, upsert)
+    // 외부 HTTP 호출 포함 — 트랜잭션 없음 (커넥션 풀 고갈 방지)
     public AuthTokenResult socialLogin(SocialLoginCommand command) {
         OAuthUserInfo userInfo = oAuthClient.getUserInfo(command.provider(), command.code());
 
@@ -101,12 +108,12 @@ public class AuthService {
         return issueTokens(fan.getId());
     }
 
-    // 로그아웃: Redis에서 Refresh 토큰 삭제
+    // 로그아웃: Redis만 사용 — 트랜잭션 불필요
     public void logout(String refreshToken) {
         refreshTokenStore.delete(refreshToken);
     }
 
-    // Access Token 재발급 (Refresh Token Rotation)
+    // Access Token 재발급 (Refresh Token Rotation) — Redis만 사용
     public AuthTokenResult refreshAccessToken(String refreshToken) {
         Long fanId = refreshTokenStore.findFanIdByToken(refreshToken)
                 .orElseThrow(() -> new InvalidTokenException("유효하지 않은 리프레시 토큰입니다."));
@@ -115,7 +122,8 @@ public class AuthService {
         return issueTokens(fanId);
     }
 
-    // 비밀번호 재설정 요청 — 이메일 존재 여부를 외부에 노출하지 않기 위해 항상 정상 처리
+    // 비밀번호 재설정 요청 — 이메일 발송 포함, 트랜잭션 없음 (커넥션 풀 고갈 방지)
+    // 이메일 존재 여부를 외부에 노출하지 않기 위해 항상 정상 처리
     public void requestPasswordReset(String email) {
         userRepository.findByEmail(email)
                 .filter(Fan::isLocalAccount)
@@ -126,16 +134,18 @@ public class AuthService {
     }
 
     // 비밀번호 재설정 확인
+    @Transactional
     public void confirmPasswordReset(String token, String newPassword) {
         Long fanId = passwordResetTokenStore.findFanIdByToken(token)
                 .orElseThrow(() -> new InvalidTokenException("유효하지 않거나 만료된 재설정 토큰입니다."));
 
+        // 토큰 선삭제: Redis 장애 시에도 토큰 재사용 불가
+        passwordResetTokenStore.delete(token);
+
         Fan fan = userRepository.findById(fanId)
                 .orElseThrow(() -> new FanNotFoundException("존재하지 않는 팬입니다."));
-
         fan.changePasswordHash(passwordEncoder.encode(newPassword));
         userRepository.save(fan);
-        passwordResetTokenStore.delete(token);
     }
 
     // 내 정보 조회
@@ -147,6 +157,7 @@ public class AuthService {
     }
 
     // 내 정보 수정
+    @Transactional
     public FanResult updateMyInfo(UpdateFanCommand command) {
         Fan fan = userRepository.findById(command.fanId())
                 .orElseThrow(() -> new FanNotFoundException("존재하지 않는 팬입니다."));
@@ -172,9 +183,7 @@ public class AuthService {
         if (userInfo.nickname() != null && !userInfo.nickname().isBlank()) {
             return userInfo.nickname();
         }
-        if (userInfo.email() != null) {
-            return userInfo.email().split("@")[0];
-        }
-        throw new IllegalStateException("소셜 계정에서 닉네임 또는 이메일 정보를 제공받지 못했습니다.");
+        // 이메일 로컬파트 노출 대신 랜덤 닉네임 생성 (개인정보 보호)
+        return "fan_" + UUID.randomUUID().toString().replace("-", "").substring(0, 8);
     }
 }

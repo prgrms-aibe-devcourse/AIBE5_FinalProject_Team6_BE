@@ -60,6 +60,11 @@ public class AgencyApplication {
             String rejectReason, LocalDateTime appliedAt, LocalDateTime reviewedAt) {
         Objects.requireNonNull(id, "id는 필수입니다");
         Objects.requireNonNull(status, "status는 필수입니다");
+        // AA-2: REJECTED 상태에는 rejectReason 필수
+        if (status == AgencyApplicationStatus.REJECTED
+                && (rejectReason == null || rejectReason.isBlank())) {
+            throw new IllegalArgumentException("REJECTED 신청서는 rejectReason이 필수입니다.");
+        }
         return new AgencyApplication(id, companyName, businessRegistrationNumber,
                 representativeName, contactEmail, contactPhone, introduction,
                 targetArtistName, status, rejectReason, appliedAt, reviewedAt);
