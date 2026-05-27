@@ -26,6 +26,7 @@ public class Inventory {
     }
 
     public static Inventory create(Long productId, int initialQty) {
+        if (productId == null) throw new InvalidInventoryStateException("productId는 null일 수 없습니다");
         validatePositiveQty(initialQty);
         return new Inventory(null, productId, initialQty, 0, initialQty, 0);
     }

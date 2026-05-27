@@ -109,6 +109,12 @@ class InventoryTest {
             assertThrows(InvalidInventoryStateException.class, () -> Inventory.create(PRODUCT_ID, 0));
             assertThrows(InvalidInventoryStateException.class, () -> Inventory.create(PRODUCT_ID, -1));
         }
+
+        @Test
+        @DisplayName("productId가 null이면 InvalidInventoryStateException")
+        void create_nullProductId() {
+            assertThrows(InvalidInventoryStateException.class, () -> Inventory.create(null, 100));
+        }
     }
 
     @Nested
