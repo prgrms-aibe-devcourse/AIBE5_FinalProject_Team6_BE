@@ -5,6 +5,8 @@ import com.fandrops.inventory.domain.exception.OutOfStockException;
 import com.fandrops.inventory.domain.exception.ReserveFailedException;
 import org.junit.jupiter.api.*;
 
+import java.time.LocalDateTime;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 
@@ -14,6 +16,51 @@ class InventoryTest {
     private static final Long PRODUCT_ID = 1L;
     private static final Long ORDER_ID = 10L;
     private static final Long RESTOCK_ID = 20L;
+
+    @Nested
+    @DisplayName("InventoryHistory.of() — changedAt 주입")
+    class InventoryHistoryOf {
+
+        @Test
+        @DisplayName("changedAt 오버로드는 주입된 시각을 그대로 사용")
+        void of_withFixedTime() {
+            LocalDateTime fixed = LocalDateTime.of(2024, 1, 15, 10, 0, 0);
+            InventoryHistory history = InventoryHistory.of(
+                    1L, InventoryChangeType.RESERVE, 10, 100, 90, ORDER_ID, InventoryRefType.ORDER, fixed);
+
+            assertEquals(fixed, history.getChangedAt());
+        }
+
+        @Test
+        @DisplayName("changedAt 없는 오버로드는 현재 시각을 사용")
+        void of_withoutTime_usesNow() {
+            LocalDateTime before = LocalDateTime.now();
+            InventoryHistory history = InventoryHistory.of(
+                    1L, InventoryChangeType.RESERVE, 10, 100, 90, ORDER_ID, InventoryRefType.ORDER);
+            LocalDateTime after = LocalDateTime.now();
+
+            assertFalse(history.getChangedAt().isBefore(before));
+            assertFalse(history.getChangedAt().isAfter(after));
+        }
+    }
+
+    @Nested
+    @DisplayName("reconstitute()")
+    class Reconstitute {
+
+        @Test
+        @DisplayName("availableQty == totalQty - reservedQty 이면 정상 생성")
+        void reconstitute_validInvariant() {
+            assertDoesNotThrow(() -> Inventory.reconstitute(1L, PRODUCT_ID, 100, 30, 70, 0));
+        }
+
+        @Test
+        @DisplayName("availableQty != totalQty - reservedQty 이면 InvalidInventoryStateException")
+        void reconstitute_brokenInvariant() {
+            assertThrows(InvalidInventoryStateException.class,
+                () -> Inventory.reconstitute(1L, PRODUCT_ID, 100, 50, 99, 0));
+        }
+    }
 
     @Nested
     @DisplayName("create()")
@@ -35,6 +82,13 @@ class InventoryTest {
             Inventory inventory = Inventory.create(PRODUCT_ID, 100);
 
             assertNull(inventory.getId());
+        }
+
+        @Test
+        @DisplayName("initialQty <= 0 이면 InvalidInventoryStateException")
+        void create_negativeOrZeroQty() {
+            assertThrows(InvalidInventoryStateException.class, () -> Inventory.create(PRODUCT_ID, 0));
+            assertThrows(InvalidInventoryStateException.class, () -> Inventory.create(PRODUCT_ID, -1));
         }
     }
 
@@ -84,7 +138,8 @@ class InventoryTest {
         @Test
         @DisplayName("availableQty == 0 이면 OutOfStockException")
         void reserve_outOfStock() {
-            Inventory inventory = Inventory.create(PRODUCT_ID, 0);
+            Inventory inventory = Inventory.create(PRODUCT_ID, 5);
+            inventory.reserve(5, ORDER_ID);
 
             assertThrows(OutOfStockException.class, () -> inventory.reserve(1, ORDER_ID));
         }
@@ -100,6 +155,13 @@ class InventoryTest {
         void reserve_exactAvailableQty() {
             assertDoesNotThrow(() -> inventory.reserve(100, ORDER_ID));
             assertEquals(0, inventory.getAvailableQty());
+        }
+
+        @Test
+        @DisplayName("qty <= 0 이면 InvalidInventoryStateException")
+        void reserve_negativeOrZeroQty() {
+            assertThrows(InvalidInventoryStateException.class, () -> inventory.reserve(0, ORDER_ID));
+            assertThrows(InvalidInventoryStateException.class, () -> inventory.reserve(-1, ORDER_ID));
         }
     }
 
@@ -145,6 +207,13 @@ class InventoryTest {
         @DisplayName("reservedQty < qty 이면 InvalidInventoryStateException")
         void confirm_invalidState() {
             assertThrows(InvalidInventoryStateException.class, () -> inventory.confirm(21, ORDER_ID));
+        }
+
+        @Test
+        @DisplayName("qty <= 0 이면 InvalidInventoryStateException")
+        void confirm_negativeOrZeroQty() {
+            assertThrows(InvalidInventoryStateException.class, () -> inventory.confirm(0, ORDER_ID));
+            assertThrows(InvalidInventoryStateException.class, () -> inventory.confirm(-1, ORDER_ID));
         }
     }
 
@@ -200,6 +269,13 @@ class InventoryTest {
         void restore_invalidState() {
             assertThrows(InvalidInventoryStateException.class, () -> inventory.restore(31, ORDER_ID));
         }
+
+        @Test
+        @DisplayName("qty <= 0 이면 InvalidInventoryStateException")
+        void restore_negativeOrZeroQty() {
+            assertThrows(InvalidInventoryStateException.class, () -> inventory.restore(0, ORDER_ID));
+            assertThrows(InvalidInventoryStateException.class, () -> inventory.restore(-1, ORDER_ID));
+        }
     }
 
     @Nested
@@ -245,6 +321,13 @@ class InventoryTest {
             assertEquals(150, history.getQtyAfter());
             assertEquals(RESTOCK_ID, history.getReferenceId());
             assertEquals(InventoryRefType.RESTOCK, history.getRefType());
+        }
+
+        @Test
+        @DisplayName("qty <= 0 이면 InvalidInventoryStateException")
+        void increase_negativeOrZeroQty() {
+            assertThrows(InvalidInventoryStateException.class, () -> inventory.increase(0, RESTOCK_ID));
+            assertThrows(InvalidInventoryStateException.class, () -> inventory.increase(-1, RESTOCK_ID));
         }
     }
 
