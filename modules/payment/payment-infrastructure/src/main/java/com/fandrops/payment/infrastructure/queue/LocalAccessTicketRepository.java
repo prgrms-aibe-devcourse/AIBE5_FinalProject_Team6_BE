@@ -41,8 +41,13 @@ public class LocalAccessTicketRepository implements AccessTicketRepository {
 
     @Override
     public boolean isValid(String token, Long fanId, Long productId) {
-        TokenEntry entry = store.get(storeKey(fanId, productId));
-        if (entry == null || !Instant.now().isBefore(entry.expiresAt)) {
+        String key = storeKey(fanId, productId);
+        TokenEntry entry = store.get(key);
+        if (entry == null) {
+            return false;
+        }
+        if (!Instant.now().isBefore(entry.expiresAt)) {
+            store.remove(key); // [P2] 만료 항목 즉시 정리
             return false;
         }
         return entry.token.equals(token);

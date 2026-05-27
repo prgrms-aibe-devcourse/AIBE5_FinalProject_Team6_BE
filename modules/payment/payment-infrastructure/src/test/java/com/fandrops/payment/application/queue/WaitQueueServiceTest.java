@@ -1,11 +1,8 @@
-package com.fandrops.payment.infrastructure.queue;
+package com.fandrops.payment.application.queue;
 
-import com.fandrops.payment.application.queue.QueueAdvanceResult;
-import com.fandrops.payment.application.queue.QueueJoinCommand;
-import com.fandrops.payment.application.queue.QueueJoinResult;
-import com.fandrops.payment.application.queue.QueueStatusResult;
-import com.fandrops.payment.application.queue.WaitQueueService;
 import com.fandrops.payment.domain.queue.WaitQueueStatus;
+import com.fandrops.payment.infrastructure.queue.LocalAccessTicketRepository;
+import com.fandrops.payment.infrastructure.queue.LocalWaitQueueRepository;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -111,7 +108,6 @@ class WaitQueueServiceTest {
     @Test
     @DisplayName("Q-1: 만료된 Access Ticket은 isValid false 반환")
     void q1_expiredAccessTicket_isInvalid() {
-        // TTL=0 으로 즉시 만료 토큰 발급
         LocalAccessTicketRepository expiredTicketRepo = new LocalAccessTicketRepository(0L);
         WaitQueueService svc = new WaitQueueService(repository, expiredTicketRepo);
 
@@ -139,7 +135,7 @@ class WaitQueueServiceTest {
         service.join(new QueueJoinCommand(FAN_ID, PRODUCT_ID));
         service.advanceQueue(PRODUCT_ID, 1, 10);
 
-        service.exit(FAN_ID, PRODUCT_ID); // 무시
+        service.exit(FAN_ID, PRODUCT_ID);
 
         QueueStatusResult status = service.getStatus(FAN_ID, PRODUCT_ID);
         assertThat(status.getStatus()).isEqualTo(WaitQueueStatus.PROCESSING.name());
@@ -152,7 +148,6 @@ class WaitQueueServiceTest {
         List<QueueAdvanceResult> advanced = service.advanceQueue(PRODUCT_ID, 1, 10);
         String token = advanced.get(0).getAccessToken();
 
-        // threshold를 미래로 설정 → 현재 processingStartAt보다 크므로 만료 대상
         List<Long> expired = service.expireTimeouts(PRODUCT_ID, Instant.now().plusSeconds(60));
 
         assertThat(expired).containsExactly(FAN_ID);
@@ -167,8 +162,7 @@ class WaitQueueServiceTest {
         for (long i = 1; i <= 3; i++) {
             service.join(new QueueJoinCommand(i, PRODUCT_ID));
         }
-        // fan 1을 PROCESSING으로 전이 → fan 2가 1번, fan 3이 2번
-        service.advanceQueue(PRODUCT_ID, 1, 10);
+        service.advanceQueue(PRODUCT_ID, 1, 10); // fan 1 → PROCESSING
 
         assertThat(service.getStatus(2L, PRODUCT_ID).getPosition()).isEqualTo(1L);
         assertThat(service.getStatus(3L, PRODUCT_ID).getPosition()).isEqualTo(2L);

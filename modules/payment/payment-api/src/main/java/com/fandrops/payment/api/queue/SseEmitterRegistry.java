@@ -7,24 +7,27 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 @Component
 public class SseEmitterRegistry {
 
-    private static final long SSE_TIMEOUT_MS = 60_000L;
-
     // key: "productId:fanId" → SseEmitter
     private final ConcurrentHashMap<String, SseEmitter> emitters = new ConcurrentHashMap<>();
 
+    @Value("${fandrops.queue.sse-timeout-ms:60000}")
+    private long sseTimeoutMs;
+
     public SseEmitter register(Long productId, Long fanId) {
         String key = key(productId, fanId);
-        SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
+        SseEmitter emitter = new SseEmitter(sseTimeoutMs);
         emitters.put(key, emitter);
-        emitter.onCompletion(() -> emitters.remove(key));
-        emitter.onTimeout(() -> emitters.remove(key));
-        emitter.onError(e -> emitters.remove(key));
+        // [P1] 재연결 시 이전 Emitter의 콜백이 새 Emitter를 삭제하지 않도록 값 비교 제거
+        emitter.onCompletion(() -> emitters.remove(key, emitter));
+        emitter.onTimeout(() -> emitters.remove(key, emitter));
+        emitter.onError(e -> emitters.remove(key, emitter));
         return emitter;
     }
 

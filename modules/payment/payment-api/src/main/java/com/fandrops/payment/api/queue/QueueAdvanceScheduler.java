@@ -7,12 +7,16 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component
 public class QueueAdvanceScheduler {
+
+    private static final Logger log = LoggerFactory.getLogger(QueueAdvanceScheduler.class);
 
     private final WaitQueueService waitQueueService;
     private final SseEmitterRegistry registry;
@@ -66,8 +70,10 @@ public class QueueAdvanceScheduler {
                     registry.sendToFan(productId, fanId,
                             QueueStreamEvent.waiting(status.getPosition(), status.getEstimatedWaitSec()));
                 }
-            } catch (Exception ignored) {
-                // 이탈하거나 entry가 없는 경우 무시
+            } catch (IllegalStateException e) {
+                // 이탈하거나 entry가 없는 정상 케이스 — 무시
+            } catch (Exception e) {
+                log.warn("[QueueScheduler] 순번 푸시 실패 productId={} fanId={}", productId, fanId, e);
             }
         }
     }
