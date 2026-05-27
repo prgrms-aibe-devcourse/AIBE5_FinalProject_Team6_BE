@@ -129,6 +129,32 @@ class AgencyApplicationTest {
     }
 
     @Test
+    @DisplayName("reconstitute — REJECTED 상태에서 rejectReason 없으면 예외 (AA-2)")
+    void reconstitute_rejected_without_reason_throws() {
+        assertThrows(IllegalArgumentException.class, () ->
+                AgencyApplication.reconstitute(
+                        1L, "HYBE", "123-45-67890", "방시혁",
+                        "contact@hybe.com", "02-1234-5678", "소개", "BTS",
+                        AgencyApplicationStatus.REJECTED, null,
+                        LocalDateTime.now(ZoneOffset.UTC), LocalDateTime.now(ZoneOffset.UTC)
+                )
+        );
+    }
+
+    @Test
+    @DisplayName("reconstitute — 종료 상태에서 reviewedAt 없으면 예외")
+    void reconstitute_terminal_without_reviewedAt_throws() {
+        assertThrows(IllegalArgumentException.class, () ->
+                AgencyApplication.reconstitute(
+                        1L, "HYBE", "123-45-67890", "방시혁",
+                        "contact@hybe.com", "02-1234-5678", "소개", "BTS",
+                        AgencyApplicationStatus.APPROVED, null,
+                        LocalDateTime.now(ZoneOffset.UTC), null
+                )
+        );
+    }
+
+    @Test
     @DisplayName("필수 필드 없이 build하면 즉시 예외가 발생한다 (Fail-Fast)")
     void build_without_required_field_throws() {
         assertThrows(NullPointerException.class, () ->
