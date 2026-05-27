@@ -47,6 +47,9 @@ management:
   metrics:
     tags:
       application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true  # histogram_quantile(P95) 활성화
   health:
     redis:
       enabled: true
