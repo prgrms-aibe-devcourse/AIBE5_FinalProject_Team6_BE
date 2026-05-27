@@ -5,6 +5,7 @@ import com.fandrops.user.application.exception.*;
 import com.fandrops.user.application.port.*;
 import com.fandrops.user.domain.AuthProvider;
 import com.fandrops.user.domain.Fan;
+import com.fandrops.user.domain.UserRole;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -71,7 +72,7 @@ class AuthServiceTest {
         when(passwordEncoder.encode("pass")).thenReturn("hashed");
         Fan saved = Fan.builder().id(1L).email("new@email.com").nickname("nick").authProvider(AuthProvider.LOCAL).passwordHash("hashed").build();
         when(userRepository.save(any(Fan.class))).thenReturn(saved);
-        when(jwtProvider.generateAccessToken(1L)).thenReturn("access");
+        when(jwtProvider.generateAccessToken(1L, UserRole.FAN)).thenReturn("access");
         when(jwtProvider.generateRefreshToken(1L)).thenReturn("refresh");
         when(jwtProvider.getAccessTokenExpiresIn()).thenReturn(1800L);
 
@@ -125,7 +126,7 @@ class AuthServiceTest {
         Fan fan = Fan.builder().id(2L).email("local@email.com").nickname("nick").authProvider(AuthProvider.LOCAL).passwordHash("hash").build();
         when(userRepository.findByEmail("local@email.com")).thenReturn(Optional.of(fan));
         when(passwordEncoder.matches("correct", "hash")).thenReturn(true);
-        when(jwtProvider.generateAccessToken(2L)).thenReturn("access");
+        when(jwtProvider.generateAccessToken(2L, UserRole.FAN)).thenReturn("access");
         when(jwtProvider.generateRefreshToken(2L)).thenReturn("refresh");
         when(jwtProvider.getAccessTokenExpiresIn()).thenReturn(1800L);
 
@@ -156,7 +157,7 @@ class AuthServiceTest {
         when(userRepository.findByEmail(anyString())).thenReturn(Optional.empty());
         Fan existingFan = Fan.builder().id(3L).email("existing@email.com").nickname("nick").authProvider(AuthProvider.KAKAO).providerId("kakao-id").build();
         when(userRepository.findByProviderAndProviderId(AuthProvider.KAKAO, "kakao-id")).thenReturn(Optional.of(existingFan));
-        when(jwtProvider.generateAccessToken(3L)).thenReturn("access");
+        when(jwtProvider.generateAccessToken(3L, UserRole.FAN)).thenReturn("access");
         when(jwtProvider.generateRefreshToken(3L)).thenReturn("refresh");
         when(jwtProvider.getAccessTokenExpiresIn()).thenReturn(1800L);
 
@@ -174,7 +175,7 @@ class AuthServiceTest {
         when(userRepository.findByProviderAndProviderId(AuthProvider.GOOGLE, "google-id")).thenReturn(Optional.empty());
         Fan saved = Fan.builder().id(4L).email("new@email.com").nickname("fan_abc12345").authProvider(AuthProvider.GOOGLE).providerId("google-id").build();
         when(userRepository.save(any(Fan.class))).thenReturn(saved);
-        when(jwtProvider.generateAccessToken(4L)).thenReturn("access");
+        when(jwtProvider.generateAccessToken(4L, UserRole.FAN)).thenReturn("access");
         when(jwtProvider.generateRefreshToken(4L)).thenReturn("refresh");
         when(jwtProvider.getAccessTokenExpiresIn()).thenReturn(1800L);
 
@@ -196,7 +197,7 @@ class AuthServiceTest {
     @DisplayName("Refresh Token Rotation — 구 토큰 삭제 후 신규 토큰 발급")
     void refreshAccessToken_rotation_deletesOldAndIssuesNew() {
         when(refreshTokenStore.findFanIdByToken("old-token")).thenReturn(Optional.of(5L));
-        when(jwtProvider.generateAccessToken(5L)).thenReturn("new-access");
+        when(jwtProvider.generateAccessToken(5L, UserRole.FAN)).thenReturn("new-access");
         when(jwtProvider.generateRefreshToken(5L)).thenReturn("new-refresh");
         when(jwtProvider.getAccessTokenExpiresIn()).thenReturn(1800L);
 
