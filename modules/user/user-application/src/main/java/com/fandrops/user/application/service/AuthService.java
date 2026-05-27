@@ -5,6 +5,7 @@ import com.fandrops.user.application.exception.*;
 import com.fandrops.user.application.port.*;
 import com.fandrops.user.domain.AuthProvider;
 import com.fandrops.user.domain.Fan;
+import com.fandrops.user.domain.UserRole;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -60,7 +61,7 @@ public class AuthService {
                 .build();
 
         Fan saved = userRepository.save(fan);
-        return issueTokens(saved.getId());
+        return issueTokens(saved.getId(), UserRole.FAN);
     }
 
     // F01-02: 이메일 로그인 (DB read만 — 트랜잭션 불필요, 커넥션 즉시 반납)
@@ -78,7 +79,7 @@ public class AuthService {
             throw new InvalidCredentialsException("이메일 또는 비밀번호가 일치하지 않습니다.");
         }
 
-        return issueTokens(fan.getId());
+        return issueTokens(fan.getId(), UserRole.FAN);
     }
 
     // F01-03: 소셜 로그인·가입 (Authorization Code 방식, upsert)
@@ -105,7 +106,7 @@ public class AuthService {
                     return userRepository.save(newFan);
                 });
 
-        return issueTokens(fan.getId());
+        return issueTokens(fan.getId(), UserRole.FAN);
     }
 
     // 로그아웃: Redis만 사용 — 트랜잭션 불필요
@@ -119,7 +120,7 @@ public class AuthService {
                 .orElseThrow(() -> new InvalidTokenException("유효하지 않은 리프레시 토큰입니다."));
 
         refreshTokenStore.delete(refreshToken);
-        return issueTokens(fanId);
+        return issueTokens(fanId, UserRole.FAN);
     }
 
     // 비밀번호 재설정 요청 — 이메일 발송 포함, 트랜잭션 없음 (커넥션 풀 고갈 방지)
@@ -172,10 +173,10 @@ public class AuthService {
         return FanResult.from(userRepository.save(fan));
     }
 
-    private AuthTokenResult issueTokens(Long fanId) {
-        String accessToken = jwtProvider.generateAccessToken(fanId);
-        String refreshToken = jwtProvider.generateRefreshToken(fanId);
-        refreshTokenStore.save(refreshToken, fanId);
+    private AuthTokenResult issueTokens(Long userId, UserRole role) {
+        String accessToken = jwtProvider.generateAccessToken(userId, role);
+        String refreshToken = jwtProvider.generateRefreshToken(userId);
+        refreshTokenStore.save(refreshToken, userId);
         return new AuthTokenResult(accessToken, refreshToken, jwtProvider.getAccessTokenExpiresIn());
     }
 
