@@ -31,6 +31,10 @@ public class Inventory {
     }
 
     public static Inventory reconstitute(Long id, Long productId, int totalQty, int reservedQty, int availableQty, int version) {
+        if (totalQty < 0 || reservedQty < 0 || availableQty < 0) {
+            throw new InvalidInventoryStateException(
+                String.format("음수 수량 불가: totalQty=%d, reservedQty=%d, availableQty=%d", totalQty, reservedQty, availableQty));
+        }
         if (availableQty != totalQty - reservedQty) {
             throw new InvalidInventoryStateException(
                 String.format("불변식 위반: availableQty=%d, totalQty=%d, reservedQty=%d", availableQty, totalQty, reservedQty));
