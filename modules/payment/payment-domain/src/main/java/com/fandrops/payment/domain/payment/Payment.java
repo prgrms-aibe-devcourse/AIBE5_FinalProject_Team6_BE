@@ -1,0 +1,82 @@
+package com.fandrops.payment.domain.payment;
+
+import java.time.Instant;
+
+public class Payment {
+
+    private final Long id;
+    private final Long orderId;
+    private String tossPaymentKey;
+    private final long amount;
+    private String paymentMethod;
+    private PaymentStatus status;
+    private Instant paidAt;
+    private Instant failedAt;
+
+    private Payment(Long id, Long orderId, String tossPaymentKey,
+                    long amount, String paymentMethod, PaymentStatus status,
+                    Instant paidAt, Instant failedAt) {
+        this.id = id;
+        this.orderId = orderId;
+        this.tossPaymentKey = tossPaymentKey;
+        this.amount = amount;
+        this.paymentMethod = paymentMethod;
+        this.status = status;
+        this.paidAt = paidAt;
+        this.failedAt = failedAt;
+    }
+
+    public static Payment create(Long orderId, long amount) {
+        if (orderId == null) {
+            throw new IllegalArgumentException("orderId는 null일 수 없습니다");
+        }
+        if (amount <= 0) {
+            throw new IllegalArgumentException("amount는 0보다 커야 합니다");
+        }
+        return new Payment(null, orderId, null, amount, null, PaymentStatus.PENDING, null, null);
+    }
+
+    public static Payment reconstitute(Long id, Long orderId, String tossPaymentKey,
+                                       long amount, String paymentMethod, PaymentStatus status,
+                                       Instant paidAt, Instant failedAt) {
+        return new Payment(id, orderId, tossPaymentKey, amount, paymentMethod, status, paidAt, failedAt);
+    }
+
+    // PENDING → SUCCESS (P-2: paidAt NOT NULL)
+    public void confirm(String tossPaymentKey, String paymentMethod, Instant paidAt) {
+        if (status.isTerminal()) {
+            throw new IllegalStateException("이미 종료된 결제 상태입니다: " + status);
+        }
+        if (tossPaymentKey == null || tossPaymentKey.isBlank()) {
+            throw new IllegalArgumentException("tossPaymentKey는 null이거나 빈 값일 수 없습니다");
+        }
+        if (paidAt == null) {
+            throw new IllegalArgumentException("paidAt은 null일 수 없습니다");
+        }
+        this.tossPaymentKey = tossPaymentKey;
+        this.paymentMethod = paymentMethod;
+        this.status = PaymentStatus.SUCCESS;
+        this.paidAt = paidAt;
+    }
+
+    // PENDING → FAILED (P-3: failedAt NOT NULL)
+    public void fail(Instant failedAt) {
+        if (status.isTerminal()) {
+            throw new IllegalStateException("이미 종료된 결제 상태입니다: " + status);
+        }
+        if (failedAt == null) {
+            throw new IllegalArgumentException("failedAt은 null일 수 없습니다");
+        }
+        this.status = PaymentStatus.FAILED;
+        this.failedAt = failedAt;
+    }
+
+    public Long getId() { return id; }
+    public Long getOrderId() { return orderId; }
+    public String getTossPaymentKey() { return tossPaymentKey; }
+    public long getAmount() { return amount; }
+    public String getPaymentMethod() { return paymentMethod; }
+    public PaymentStatus getStatus() { return status; }
+    public Instant getPaidAt() { return paidAt; }
+    public Instant getFailedAt() { return failedAt; }
+}

@@ -96,6 +96,19 @@ ERD:    PAYMENT.payment_key (Unique Index)
 ```
 
 
+### 테이블 스키마
+
+| 컬럼 | 타입 | 제약 | 설명 |
+| --- | --- | --- | --- |
+| `id` | BIGINT | PK, AUTO_INCREMENT | 내부 식별자 |
+| `order_id` | BIGINT | NOT NULL, FK → ORDER.id | 주문 참조 (1:1) |
+| `payment_key` | VARCHAR | UNIQUE | `tossPaymentKey` 저장 — 멱등성 보장 (P-1) |
+| `amount` | BIGINT | NOT NULL | 결제 금액 — confirm 시 PG 금액 대조용 |
+| `method` | VARCHAR | | 결제수단 (토스 PG 반환 문자열, e.g. 카드) |
+| `status` | VARCHAR | NOT NULL | `PENDING` / `SUCCESS` / `FAILED` |
+| `paid_at` | TIMESTAMP | | SUCCESS 시 기록 (P-2) |
+| `failed_at` | TIMESTAMP | | FAILED 시 기록 (P-3) |
+
 | `status`  | 의미                          |
 | --------- | --------------------------- |
 | `PENDING` | 결제 세션 생성                    |
