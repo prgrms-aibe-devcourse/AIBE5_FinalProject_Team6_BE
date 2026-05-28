@@ -44,6 +44,26 @@ public class ArtistFeedRepositoryAdapter implements ArtistFeedRepository {
         jpaRepository.deleteById(feed.getId());
     }
 
+    @Override
+    public void incrementLikeCount(Long feedId) {
+        jpaRepository.incrementLikeCount(feedId);
+    }
+
+    @Override
+    public void decrementLikeCount(Long feedId) {
+        jpaRepository.decrementLikeCount(feedId);
+    }
+
+    @Override
+    public void incrementCommentCount(Long feedId) {
+        jpaRepository.incrementCommentCount(feedId);
+    }
+
+    @Override
+    public void decrementCommentCount(Long feedId) {
+        jpaRepository.decrementCommentCount(feedId);
+    }
+
     private ArtistFeedJpaEntity toJpa(ArtistFeed feed) {
         return new ArtistFeedJpaEntity(
                 feed.getId(),

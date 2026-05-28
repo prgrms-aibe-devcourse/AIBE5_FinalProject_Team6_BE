@@ -44,7 +44,10 @@ CREATE TABLE feed_like
     created_at        DATETIME(6) NOT NULL,
     PRIMARY KEY (id),
     UNIQUE KEY uq_feed_like_fan (fan_id, feed_id),
-    UNIQUE KEY uq_feed_like_artist (artist_member_id, feed_id)
+    UNIQUE KEY uq_feed_like_artist (artist_member_id, feed_id),
+    CONSTRAINT chk_feed_like_author CHECK (
+        (fan_id IS NOT NULL) != (artist_member_id IS NOT NULL)
+    )
 );
 
 -- /fans/me/activities 팬 좋아요 이력 커서 페이징: fan_id 필터 + id DESC 정렬
@@ -72,8 +75,10 @@ CREATE TABLE comment
     )
 );
 
-CREATE INDEX idx_comment_feed_cursor ON comment (feed_id, id);
-CREATE INDEX idx_comment_fan_cursor  ON comment (fan_id, id DESC);
+CREATE INDEX idx_comment_feed_cursor    ON comment (feed_id, id);
+-- parent_id IS NULL 최상위 댓글 커서 페이징: feed_id 필터 + parent_id NULL 조건 + id 정렬
+CREATE INDEX idx_comment_feed_toplevel ON comment (feed_id, parent_id, id);
+CREATE INDEX idx_comment_fan_cursor    ON comment (fan_id, id DESC);
 
 -- ============================================================
 

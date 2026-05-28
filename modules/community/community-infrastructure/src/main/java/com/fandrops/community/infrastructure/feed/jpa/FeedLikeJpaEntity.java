@@ -5,6 +5,7 @@ import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.Check;
 
 import java.time.LocalDateTime;
 
@@ -14,6 +15,7 @@ import java.time.LocalDateTime;
                 @UniqueConstraint(name = "uq_feed_like_fan",    columnNames = {"fan_id", "feed_id"}),
                 @UniqueConstraint(name = "uq_feed_like_artist", columnNames = {"artist_member_id", "feed_id"})
         })
+@Check(constraints = "(fan_id IS NOT NULL) != (artist_member_id IS NOT NULL)")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor

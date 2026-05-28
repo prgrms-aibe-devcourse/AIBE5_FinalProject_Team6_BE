@@ -4,6 +4,7 @@ import com.fandrops.community.domain.feed.Comment;
 import com.fandrops.community.domain.feed.repository.CommentRepository;
 import com.fandrops.community.infrastructure.feed.jpa.CommentJpaEntity;
 import com.fandrops.community.infrastructure.feed.jpa.CommentJpaRepository;
+import com.fandrops.community.infrastructure.feed.jpa.CommentLikeJpaRepository;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Repository;
 
@@ -14,9 +15,12 @@ import java.util.Optional;
 public class CommentRepositoryAdapter implements CommentRepository {
 
     private final CommentJpaRepository jpaRepository;
+    private final CommentLikeJpaRepository commentLikeJpaRepository;
 
-    public CommentRepositoryAdapter(CommentJpaRepository jpaRepository) {
+    public CommentRepositoryAdapter(CommentJpaRepository jpaRepository,
+                                    CommentLikeJpaRepository commentLikeJpaRepository) {
         this.jpaRepository = jpaRepository;
+        this.commentLikeJpaRepository = commentLikeJpaRepository;
     }
 
     @Override
@@ -60,6 +64,7 @@ public class CommentRepositoryAdapter implements CommentRepository {
 
     @Override
     public void delete(Comment comment) {
+        commentLikeJpaRepository.deleteByCommentId(comment.getId());
         jpaRepository.deleteById(comment.getId());
     }
 
