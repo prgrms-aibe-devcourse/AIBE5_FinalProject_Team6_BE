@@ -38,11 +38,15 @@ jobs:
             --region ap-northeast-2
           echo "로그 그룹 보관 기간: 30일 설정 완료"
 
-      - name: Agent 설정 파일 → S3 업로드
+      - name: 설정 파일 → S3 업로드
         run: |
           BUCKET="${{ secrets.S3_BUCKET }}"
           aws s3 cp infra/cloudwatch/amazon-cloudwatch-agent.json \
             "s3://$BUCKET/deploy/amazon-cloudwatch-agent.json"
+          aws s3 cp infra/cloudwatch/rsyslog-fandrops.conf \
+            "s3://$BUCKET/deploy/rsyslog-fandrops.conf"
+          aws s3 cp infra/cloudwatch/logrotate-fandrops \
+            "s3://$BUCKET/deploy/logrotate-fandrops"
           aws s3 cp infra/cloudwatch/journald-retention.conf \
             "s3://$BUCKET/deploy/journald-retention.conf"
           echo "S3 업로드 완료"
@@ -55,16 +59,24 @@ jobs:
           COMMANDS=$(jq -n \
             --arg bucket "$BUCKET" \
             '[
-              "echo \"=== [1/4] CloudWatch Agent 설치 ===\"",
-              "dnf install -y amazon-cloudwatch-agent 2>/dev/null || yum install -y amazon-cloudwatch-agent",
+              "echo \"=== [1/6] CloudWatch Agent 설치 ===\"",
+              "dnf install -y amazon-cloudwatch-agent",
 
-              "echo \"=== [2/4] Agent 설정 파일 다운로드 ===\"",
+              "echo \"=== [2/6] 로그 디렉터리 생성 ===\"",
+              "mkdir -p /var/log/fandrops",
+
+              "echo \"=== [3/6] rsyslog fandrops 설정 ===\"",
+              ("aws s3 cp s3://" + $bucket + "/deploy/rsyslog-fandrops.conf /etc/rsyslog.d/fandrops.conf"),
+              "systemctl restart rsyslog",
+
+              "echo \"=== [4/6] logrotate 설정 ===\"",
+              ("aws s3 cp s3://" + $bucket + "/deploy/logrotate-fandrops /etc/logrotate.d/fandrops"),
+
+              "echo \"=== [5/6] CloudWatch Agent 설정 및 시작 ===\"",
               ("aws s3 cp s3://" + $bucket + "/deploy/amazon-cloudwatch-agent.json /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json"),
-
-              "echo \"=== [3/4] Agent 시작 ===\"",
               "/opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json",
 
-              "echo \"=== [4/4] journald 로컬 보관 기간 설정 ===\"",
+              "echo \"=== [6/6] journald 로컬 보관 기간 설정 ===\"",
               "mkdir -p /etc/systemd/journald.conf.d",
               ("aws s3 cp s3://" + $bucket + "/deploy/journald-retention.conf /etc/systemd/journald.conf.d/fandrops.conf"),
               "systemctl restart systemd-journald",
@@ -139,6 +151,7 @@ jobs:
           echo "✅ CloudWatch Logs Agent 설치 완료"
           echo ""
           echo "로그 그룹: /fandrops/prod (보관 30일)"
+          echo "로컬 로그 파일: /var/log/fandrops/app.log (7일 logrotate)"
           echo "로컬 journal 보관: 7일"
           echo ""
           echo "AWS 콘솔 → CloudWatch → 로그 그룹 → /fandrops/prod 에서 확인하세요."
