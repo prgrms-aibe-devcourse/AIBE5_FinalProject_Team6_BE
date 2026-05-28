@@ -1,0 +1,58 @@
+package com.fandrops.order.api;
+
+import com.fandrops.order.api.dto.ApiError;
+import com.fandrops.order.api.dto.ApiResponse;
+import com.fandrops.order.domain.exception.AccessTicketInvalidException;
+import com.fandrops.order.domain.exception.OrderNotFoundException;
+import com.fandrops.order.domain.exception.OutOfStockException;
+import com.fandrops.order.domain.exception.ReserveConflictException;
+import java.util.UUID;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+/** order-api 예외 → HTTP 응답 변환 핸들러. */
+@RestControllerAdvice(basePackages = "com.fandrops.order.api")
+public class OrderExceptionHandler {
+
+    @ExceptionHandler(AccessTicketInvalidException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAccessTicketInvalid(AccessTicketInvalidException e) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ApiResponse.error(
+                        new ApiError("INVALID_QUEUE_TICKET", e.getMessage(), false),
+                        UUID.randomUUID().toString()));
+    }
+
+    @ExceptionHandler(OutOfStockException.class)
+    public ResponseEntity<ApiResponse<Void>> handleOutOfStock(OutOfStockException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error(
+                        new ApiError("OUT_OF_STOCK", e.getMessage(), false),
+                        UUID.randomUUID().toString()));
+    }
+
+    @ExceptionHandler(ReserveConflictException.class)
+    public ResponseEntity<ApiResponse<Void>> handleReserveConflict(ReserveConflictException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error(
+                        new ApiError("RESERVE_FAILED", e.getMessage(), true),
+                        UUID.randomUUID().toString()));
+    }
+
+    @ExceptionHandler(OrderNotFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> handleOrderNotFound(OrderNotFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.error(
+                        new ApiError("ORDER_NOT_FOUND", e.getMessage(), false),
+                        UUID.randomUUID().toString()));
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ApiResponse<Void>> handleIllegalArgument(IllegalArgumentException e) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(
+                        new ApiError("INVALID_REQUEST", e.getMessage(), false),
+                        UUID.randomUUID().toString()));
+    }
+}
