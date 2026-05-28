@@ -31,6 +31,12 @@ services:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SMTP_ENABLED=true
+      - GF_SMTP_HOST=smtp.gmail.com:587
+      - GF_SMTP_USER=xxjyj1022@gmail.com
+      - GF_SMTP_PASSWORD=${GMAIL_APP_PASSWORD}
+      - GF_SMTP_FROM_ADDRESS=xxjyj1022@gmail.com
+      - GF_SMTP_FROM_NAME=FANDROPS Grafana
     volumes:
       - ./infra/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
       - grafana_data:/var/lib/grafana
