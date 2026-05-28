@@ -1,17 +1,13 @@
 {
   "logs": {
     "logs_collected": {
-      "journald": {
+      "files": {
         "collect_list": [
           {
+            "file_path": "/var/log/fandrops/app.log",
             "log_group_name": "/fandrops/prod",
             "log_stream_name": "{instance_id}",
-            "filters": [
-              {
-                "type": "include",
-                "expression": "SYSLOG_IDENTIFIER=fandrops"
-              }
-            ]
+            "timezone": "UTC"
           }
         ]
       }
