@@ -54,6 +54,11 @@ public class FeedLikeRepositoryAdapter implements FeedLikeRepository {
     }
 
     @Override
+    public void deleteByFeedId(Long feedId) {
+        jpaRepository.deleteByFeedId(feedId);
+    }
+
+    @Override
     public void delete(FeedLike feedLike) {
         jpaRepository.deleteById(feedLike.getId());
     }

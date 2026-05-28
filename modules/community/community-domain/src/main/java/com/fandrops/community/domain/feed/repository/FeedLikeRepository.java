@@ -21,5 +21,8 @@ public interface FeedLikeRepository {
     // /fans/me/activities — 팬 좋아요 이력 커서 페이징
     List<FeedLike> findByFanId(Long fanId, Long cursorId, int size);
 
+    // 피드 삭제 시 연계 삭제 (data-lifecycle.md §3.5)
+    void deleteByFeedId(Long feedId);
+
     void delete(FeedLike feedLike);
 }

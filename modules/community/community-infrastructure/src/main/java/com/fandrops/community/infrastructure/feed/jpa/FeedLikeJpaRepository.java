@@ -20,4 +20,6 @@ public interface FeedLikeJpaRepository extends JpaRepository<FeedLikeJpaEntity, 
     List<FeedLikeJpaEntity> findByFanIdOrderByIdDesc(Long fanId, Pageable pageable);
 
     List<FeedLikeJpaEntity> findByFanIdAndIdLessThanOrderByIdDesc(Long fanId, Long id, Pageable pageable);
+
+    void deleteByFeedId(Long feedId);
 }

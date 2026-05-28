@@ -1,5 +1,6 @@
 -- ============================================================
 -- F03-02 Community Feed 테이블 (ERD §5)
+-- FK 의도적 생략: MSA 전환 대비 + 앱 레벨 cascade로 정합성 보장
 -- ============================================================
 
 CREATE TABLE artist_feed
@@ -22,7 +23,7 @@ CREATE INDEX idx_artist_feed_artist_cursor ON artist_feed (artist_id, id DESC);
 CREATE TABLE feed_image
 (
     id         BIGINT        NOT NULL AUTO_INCREMENT,
-    feed_id    BIGINT        NOT NULL,
+    feed_id    BIGINT        NOT NULL,  -- FK 생략: 앱 레벨 cascade (FeedImageRepository.deleteByFeedId)
     image_url  VARCHAR(2048) NOT NULL,
     created_at DATETIME(6)   NOT NULL,  -- 등록 순서 = 표시 순서 (ERD §5.1)
     PRIMARY KEY (id)
@@ -36,7 +37,7 @@ CREATE INDEX idx_feed_image_feed_created ON feed_image (feed_id, created_at);
 CREATE TABLE feed_like
 (
     id                BIGINT      NOT NULL AUTO_INCREMENT,
-    feed_id           BIGINT      NOT NULL,
+    feed_id           BIGINT      NOT NULL,  -- FK 생략: 앱 레벨 cascade (FeedLikeRepository.deleteByFeedId)
     fan_id            BIGINT      NULL,
     artist_member_id  BIGINT      NULL,
     artist_id         BIGINT      NULL,
@@ -46,16 +47,19 @@ CREATE TABLE feed_like
     UNIQUE KEY uq_feed_like_artist (artist_member_id, feed_id)
 );
 
+-- /fans/me/activities 팬 좋아요 이력 커서 페이징: fan_id 필터 + id DESC 정렬
+CREATE INDEX idx_feed_like_fan_cursor ON feed_like (fan_id, id DESC);
+
 -- ============================================================
 -- ERD §5.3: fanId XOR artistMemberId 필수 — CHECK 제약 권장
 CREATE TABLE comment
 (
     id                BIGINT      NOT NULL AUTO_INCREMENT,
-    feed_id           BIGINT      NOT NULL,
+    feed_id           BIGINT      NOT NULL,  -- FK 생략: 앱 레벨 cascade (CommentRepository.deleteByFeedId)
     artist_id         BIGINT      NOT NULL,   -- 비정규화: 마이페이지 JOIN 제거 (ERD §5.3)
     fan_id            BIGINT      NULL,
     artist_member_id  BIGINT      NULL,
-    parent_id         BIGINT      NULL,        -- self FK: 대댓글
+    parent_id         BIGINT      NULL,        -- self FK 생략: 앱 레벨에서 parent.feedId == feedId 검증 예정
     content           TEXT        NOT NULL,
     created_at        DATETIME(6) NOT NULL,
     PRIMARY KEY (id),
@@ -76,7 +80,7 @@ CREATE INDEX idx_comment_fan_cursor  ON comment (fan_id, id DESC);
 CREATE TABLE comment_like
 (
     id         BIGINT      NOT NULL AUTO_INCREMENT,
-    comment_id BIGINT      NOT NULL,
+    comment_id BIGINT      NOT NULL,  -- FK 생략: 앱 레벨 cascade (CommentLikeRepository.deleteByCommentId)
     fan_id     BIGINT      NOT NULL,
     created_at DATETIME(6) NOT NULL,
     PRIMARY KEY (id),
