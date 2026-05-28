@@ -13,6 +13,9 @@ groups:
         condition: threshold
         data:
           - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
             datasourceUid: prometheus
             model:
               datasource:
@@ -24,6 +27,9 @@ groups:
               instant: true
               refId: A
           - refId: threshold
+            relativeTimeRange:
+              from: 600
+              to: 0
             datasourceUid: __expr__
             model:
               type: threshold
@@ -57,6 +63,9 @@ groups:
         condition: threshold
         data:
           - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
             datasourceUid: prometheus
             model:
               datasource:
@@ -67,6 +76,9 @@ groups:
               instant: true
               refId: A
           - refId: threshold
+            relativeTimeRange:
+              from: 600
+              to: 0
             datasourceUid: __expr__
             model:
               type: threshold
@@ -106,6 +118,9 @@ groups:
         condition: threshold
         data:
           - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
             datasourceUid: prometheus
             model:
               datasource:
@@ -121,6 +136,9 @@ groups:
               instant: true
               refId: A
           - refId: threshold
+            relativeTimeRange:
+              from: 600
+              to: 0
             datasourceUid: __expr__
             model:
               type: threshold
@@ -154,6 +172,9 @@ groups:
         condition: threshold
         data:
           - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
             datasourceUid: prometheus
             model:
               datasource:
@@ -163,6 +184,9 @@ groups:
               instant: true
               refId: A
           - refId: threshold
+            relativeTimeRange:
+              from: 600
+              to: 0
             datasourceUid: __expr__
             model:
               type: threshold
@@ -196,6 +220,9 @@ groups:
         condition: threshold
         data:
           - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
             datasourceUid: prometheus
             model:
               datasource:
@@ -207,6 +234,9 @@ groups:
               instant: true
               refId: A
           - refId: threshold
+            relativeTimeRange:
+              from: 600
+              to: 0
             datasourceUid: __expr__
             model:
               type: threshold
@@ -246,6 +276,9 @@ groups:
         condition: threshold
         data:
           - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
             datasourceUid: prometheus
             model:
               datasource:
@@ -257,6 +290,9 @@ groups:
               instant: true
               refId: A
           - refId: threshold
+            relativeTimeRange:
+              from: 600
+              to: 0
             datasourceUid: __expr__
             model:
               type: threshold
