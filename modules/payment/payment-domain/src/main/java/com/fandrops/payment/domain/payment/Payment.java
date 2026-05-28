@@ -12,10 +12,11 @@ public class Payment {
     private PaymentStatus status;
     private Instant paidAt;
     private Instant failedAt;
+    private final int version;
 
     private Payment(Long id, Long orderId, String tossPaymentKey,
                     long amount, String paymentMethod, PaymentStatus status,
-                    Instant paidAt, Instant failedAt) {
+                    Instant paidAt, Instant failedAt, int version) {
         this.id = id;
         this.orderId = orderId;
         this.tossPaymentKey = tossPaymentKey;
@@ -24,6 +25,7 @@ public class Payment {
         this.status = status;
         this.paidAt = paidAt;
         this.failedAt = failedAt;
+        this.version = version;
     }
 
     public static Payment create(Long orderId, long amount) {
@@ -33,13 +35,13 @@ public class Payment {
         if (amount <= 0) {
             throw new IllegalArgumentException("amount는 0보다 커야 합니다");
         }
-        return new Payment(null, orderId, null, amount, null, PaymentStatus.PENDING, null, null);
+        return new Payment(null, orderId, null, amount, null, PaymentStatus.PENDING, null, null, 0);
     }
 
     public static Payment reconstitute(Long id, Long orderId, String tossPaymentKey,
                                        long amount, String paymentMethod, PaymentStatus status,
-                                       Instant paidAt, Instant failedAt) {
-        return new Payment(id, orderId, tossPaymentKey, amount, paymentMethod, status, paidAt, failedAt);
+                                       Instant paidAt, Instant failedAt, int version) {
+        return new Payment(id, orderId, tossPaymentKey, amount, paymentMethod, status, paidAt, failedAt, version);
     }
 
     // PENDING → SUCCESS (P-2: paidAt NOT NULL)
@@ -49,6 +51,9 @@ public class Payment {
         }
         if (tossPaymentKey == null || tossPaymentKey.isBlank()) {
             throw new IllegalArgumentException("tossPaymentKey는 null이거나 빈 값일 수 없습니다");
+        }
+        if (paymentMethod == null || paymentMethod.isBlank()) {
+            throw new IllegalArgumentException("paymentMethod는 null이거나 빈 값일 수 없습니다");
         }
         if (paidAt == null) {
             throw new IllegalArgumentException("paidAt은 null일 수 없습니다");
@@ -79,4 +84,5 @@ public class Payment {
     public PaymentStatus getStatus() { return status; }
     public Instant getPaidAt() { return paidAt; }
     public Instant getFailedAt() { return failedAt; }
+    public int getVersion() { return version; }
 }

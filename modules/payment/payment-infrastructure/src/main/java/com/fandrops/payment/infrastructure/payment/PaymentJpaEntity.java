@@ -10,6 +10,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.time.Instant;
 
 @Entity
@@ -42,6 +43,9 @@ class PaymentJpaEntity {
     @Column(name = "failed_at")
     private Instant failedAt;
 
+    @Version
+    private int version;
+
     protected PaymentJpaEntity() {}
 
     static PaymentJpaEntity fromDomain(Payment payment) {
@@ -54,10 +58,11 @@ class PaymentJpaEntity {
         entity.status = payment.getStatus();
         entity.paidAt = payment.getPaidAt();
         entity.failedAt = payment.getFailedAt();
+        entity.version = payment.getVersion();
         return entity;
     }
 
     Payment toDomain() {
-        return Payment.reconstitute(id, orderId, paymentKey, amount, method, status, paidAt, failedAt);
+        return Payment.reconstitute(id, orderId, paymentKey, amount, method, status, paidAt, failedAt, version);
     }
 }

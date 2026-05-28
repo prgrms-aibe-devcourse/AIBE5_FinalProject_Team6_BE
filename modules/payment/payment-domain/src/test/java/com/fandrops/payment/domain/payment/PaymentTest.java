@@ -92,9 +92,16 @@ class PaymentTest {
     }
 
     @Test
-    @DisplayName("create: amount 0 이하 거부")
-    void create_rejectsNonPositiveAmount() {
+    @DisplayName("create: amount 0 거부")
+    void create_rejectsZeroAmount() {
         assertThatThrownBy(() -> Payment.create(ORDER_ID, 0L))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("create: 음수 amount 거부")
+    void create_rejectsNegativeAmount() {
+        assertThatThrownBy(() -> Payment.create(ORDER_ID, -1L))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -104,6 +111,24 @@ class PaymentTest {
         Payment payment = Payment.create(ORDER_ID, AMOUNT);
 
         assertThatThrownBy(() -> payment.confirm(TOSS_PAYMENT_KEY, "카드", null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("confirm: paymentMethod null 거부")
+    void confirm_rejectsNullPaymentMethod() {
+        Payment payment = Payment.create(ORDER_ID, AMOUNT);
+
+        assertThatThrownBy(() -> payment.confirm(TOSS_PAYMENT_KEY, null, Instant.now()))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("confirm: paymentMethod 빈값 거부")
+    void confirm_rejectsBlankPaymentMethod() {
+        Payment payment = Payment.create(ORDER_ID, AMOUNT);
+
+        assertThatThrownBy(() -> payment.confirm(TOSS_PAYMENT_KEY, "  ", Instant.now()))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
