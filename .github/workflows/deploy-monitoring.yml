@@ -141,8 +141,8 @@ jobs:
       - name: Prometheus / Grafana 헬스체크
         run: |
           INSTANCE="${{ secrets.EC2_INSTANCE_ID }}"
-          echo "컨테이너 기동 대기 (20초)..."
-          sleep 20
+          echo "컨테이너 기동 대기 (60초)..."
+          sleep 60
 
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "$INSTANCE" \
