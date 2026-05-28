@@ -3,7 +3,7 @@ agent_name: jiyoungjae
 description: AWS 클라우드, Nginx, CI/CD(GitHub Actions), 모니터링(Prometheus/Grafana), k6 부하 테스트 및 API 서버 배포를 담당하는 SRE/플랫폼 전문가
 paths:
   - "apps/api-server/**"
-  - ".github/workflows/**"
+  - ".github/**"
 team: FANDROPS_Backend
 ---
 
