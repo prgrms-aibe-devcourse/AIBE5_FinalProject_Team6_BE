@@ -209,6 +209,7 @@ ORDER {
     bigint id PK
     bigint fan_id FK
     varchar idempotency_key
+    varchar order_payment_key "서버 발급 주문 세션 키 (POST /orders 응답)"
     datetime created_at
     datetime updated_at
     string status "PENDING | RESERVED | PAID | FAILED | COMPLETED | CANCELLED"
