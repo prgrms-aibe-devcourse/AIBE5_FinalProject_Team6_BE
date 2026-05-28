@@ -53,7 +53,7 @@
 
 ## 코드 작성 전 사고 절차
 
-코드를 바로 쓰지 말고 아래 순서를 따른다.
+코드를 바로 쓰지 말고 아래 순서를 따른다. **1~4단계는 사전·진행 단계, 5단계(Retro)는 작업 완료 후 사후 단계**다.
 
 | 단계 | 행동 |
 | --- | --- |
@@ -61,6 +61,7 @@
 | **2. Plan** | 변경할 파일·메서드·DB 컬럼을 나열한다. 영향 범위(타 도메인 포트 포함)를 확인한다. |
 | **3. Execute** | Plan에서 확정한 최소 범위만 구현한다. Plan 밖 리팩터·신규 abstraction 금지. |
 | **4. Debug** | persona의 `./gradlew` 명령 실행. 테스트 실패 시 원인을 먼저 분석하고, 테스트를 수정하지 않는다. |
+| **5. Retro** | **사후(post-work) 단계** — 코딩·디버깅이 끝난 뒤 실행한다. ① SHARED·페르소나 룰이 충분히 명확했는지 자체 평가한다. ② 비효율·모호·충돌이 있었던 지시는 구체적 문구와 함께 기록한다. ③ 아래 형식으로 출력한다: `[Retro] 룰 작동: <1줄> \| 튜닝 제안: <1줄> \| SSOT 동기화 필요: <있음/없음>` |
 
 ### 복잡한 문제 처리 (동시성·상태 정합·Saga)
 
@@ -86,8 +87,6 @@
 | P0 | `docs/api/api-contract.md` | 응답 envelope, `error.code`, `retryable`, 커서 |
 | P0 | `docs/README.md` | 설계·운영 문서 **목차** (필요한 파일만 골라 열기) |
 | P0 | `docs/requirements/mvp-functional-requirements-v2.md` | **§1 F-ID·기능명 (SSOT)** · 모듈 오너십은 `architecture.md` |
-| P0 | `docs/01_service_intro.html` ~ `docs/05_architecture.html` | 포트폴리오 시리즈 (서비스→리서치→기획→IA→아키텍처) |
-| P0 | `docs/03_planning.html` · `docs/04_IA.html` | Not Scope · KPI · 로드맵 · 화면 흐름 (보조) |
 
 ---
 
@@ -95,6 +94,7 @@
 
 | 유형 | 추가로 읽을 문서 |
 | --- | --- |
+| 서비스 개요·기획·IA·화면 흐름 | `docs/01_service_intro.html` ~ `docs/05_architecture.html` (포트폴리오 시리즈 — Not Scope·KPI·로드맵·드롭스 화면 흐름 포함) |
 | HTTP API 추가·수정 | `docs/api/mvp-api-spec.md` (해당 Endpoint 섹션만) |
 | 주문·결제·재고·상태 | `docs/state/invariants-and-state-machines.md` |
 | 결제·웹훅·Saga | `docs/sequence/payment-flow-reason.md` |

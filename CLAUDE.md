@@ -28,5 +28,7 @@
 | `modules/user/**` · `modules/notification/**` | 표지민 | `@docs/ai/personas/pyojimin.md` |
 | `modules/community/**` | 정환철 | `@docs/ai/personas/junghwancheol.md` |
 | `apps/api-server/**` · `.github/**` · `compose.yaml` | 지영재 | `@docs/ai/personas/jiyoungjae.md` |
+| `apps/api-server/**/queue/**` · `apps/api-server/**/ratelimit/**` | 장성재 + 지영재 | `@docs/ai/personas/jangseongjae.md` `@docs/ai/personas/jiyoungjae.md` **(양쪽 로드)** |
+| `apps/api-server/**/security/**` · `apps/api-server/**/auth/**` | 표지민 + 지영재 | `@docs/ai/personas/pyojimin.md` `@docs/ai/personas/jiyoungjae.md` **(양쪽 로드)** |
 
 > **주의:** 이 표는 프롬프트 지시다. 자동 로드되지 않으므로 세션 시작 시 직접 `@` 로 로드해야 한다.

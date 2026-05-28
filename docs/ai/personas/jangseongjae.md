@@ -81,6 +81,9 @@ apps/api-server/**   # 대기열/RateLimit filter/config만 (지영재와 협의
 - [ ] Access Ticket **발급**은 payment Traffic Gate, **검증**은 order(형성빈) — 우회 방지 스펙은 양쪽 합의
 - [ ] RateLimit은 결제/주문 진입 보호 목적의 정책·키·응답 계약을 먼저 정의하고, Nginx/ALB 값은 지영재 리뷰를 받는다
 - [ ] `RATE_LIMITED` 응답은 `retryable: true`와 재시도 안내를 유지한다
+- [ ] SSE emitter 최대 동시 유지 수 SLO 정의 — 드롭스 오픈런 시 초과 시 `429 + retryable:true` 응답 계약 (지영재와 Nginx 값 동시 합의)
+- [ ] Access Ticket TTL 기본 **5분** (`invariants-and-state-machines.md §4`) — 드롭스 오픈런 P95 주문 생성 응답 시간 × 3 이상인지 실측 후 `application-*.yml` (`fandrops.queue.access-ticket-ttl`) 에서 조정
+- [ ] 결제 재시도 Job(`RESERVED→FAILED` 복구 스케줄러, `payment-application` 소유)과 알림 **Outbox(`outbox_events`)는 별개** — Outbox 폴러 오너는 표지민(`notification`). 혼동하지 않는다
 
 ---
 

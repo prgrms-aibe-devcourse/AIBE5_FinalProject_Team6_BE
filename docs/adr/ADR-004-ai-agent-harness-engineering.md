@@ -31,7 +31,7 @@ FANDROPS는 K-Pop 오픈런(드롭스) 트래픽 스파이크를 다루며 오�
 
 ### 2. 고급 인지 프레임워크 주입 (Cognitive Harness)
 `SHARED.md`에 AI의 행동 양식을 통제하는 메타 프롬프팅 기법을 주입했다.
-- **Superpowers 워크플로우**: 코드를 작성하기 전 무조건 **'Brainstorm → Plan → Execute → Debug'**의 4단계를 거치도록 시스템 룰을 강제했다.
+- **Superpowers 워크플로우**: 코드를 작성하기 전 무조건 **'Brainstorm → Plan → Execute → Debug → Retro'**의 5단계를 거치도록 시스템 룰을 강제했다.
 - **회의(Meeting) 모듈화**: 복잡한 아키텍처 결정 시 AI가 즉시 코딩하지 않고 SRE, 보안, 도메인 전문가 관점에서 서로 토론하여 가장 강한 반대 논리를 도출한 뒤 합의하게 만들었다.
 - **사고 트리(ToT, Tree of Thoughts)**: 문제 해결 시 가능한 해결책을 여러 갈래로 탐색하고 스스로 장단점을 평가(self-evaluate)하도록 지침을 추가했다.
 
@@ -74,3 +74,4 @@ FANDROPS는 K-Pop 오픈런(드롭스) 트래픽 스파이크를 다루며 오�
 | 멀티모듈 모놀리스 | [ADR-001](./ADR-001-multi-module-monolith.md) |
 | 레이어별 Gradle 모듈 | [ADR-002](./ADR-002-per-layer-gradle-modules.md) |
 | 장바구니 저장소 RDB | [ADR-003](./ADR-003-cart-storage-rdb-phase1.md) |
+| **AI 하네스 1차 튜닝 및 Self-Reflection 도입** | [ADR-005](./ADR-005-ai-harness-tuning-self-reflection.md) |
