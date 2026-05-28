@@ -65,9 +65,13 @@ jobs:
               "echo \"=== [2/6] 로그 디렉터리 생성 ===\"",
               "mkdir -p /var/log/fandrops",
 
-              "echo \"=== [3/6] rsyslog fandrops 설정 ===\"",
+              "echo \"=== [3/6] rsyslog 설치 + journald 전달 활성화 ===\"",
+              "dnf install -y rsyslog",
+              "mkdir -p /etc/systemd/journald.conf.d",
+              "echo -e '[Journal]\\nForwardToSyslog=yes' > /etc/systemd/journald.conf.d/forward-syslog.conf",
+              "systemctl restart systemd-journald",
               ("aws s3 cp s3://" + $bucket + "/deploy/rsyslog-fandrops.conf /etc/rsyslog.d/fandrops.conf"),
-              "systemctl restart rsyslog",
+              "systemctl enable --now rsyslog",
 
               "echo \"=== [4/6] logrotate 설정 ===\"",
               ("aws s3 cp s3://" + $bucket + "/deploy/logrotate-fandrops /etc/logrotate.d/fandrops"),
