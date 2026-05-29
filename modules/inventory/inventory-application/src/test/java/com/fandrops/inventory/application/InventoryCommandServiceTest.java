@@ -46,7 +46,6 @@ class InventoryCommandServiceTest {
         void reserve_savesInventoryAndHistory() {
             Inventory inventory = Inventory.create(PRODUCT_ID, 100);
             given(inventoryRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(inventory));
-            given(inventoryRepository.save(any())).willReturn(inventory);
 
             sut.reserve(ORDER_ID, PRODUCT_ID, 10);
 
@@ -72,9 +71,8 @@ class InventoryCommandServiceTest {
         @DisplayName("재고 확정 시 도메인 연산 후 save 호출")
         void confirm_savesInventoryAndHistory() {
             Inventory inventory = Inventory.create(PRODUCT_ID, 100);
-            inventory.reserve(20, ORDER_ID);
+            InventoryHistory ignored = inventory.reserve(20, ORDER_ID);
             given(inventoryRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(inventory));
-            given(inventoryRepository.save(any())).willReturn(inventory);
 
             sut.confirm(ORDER_ID, PRODUCT_ID, 20);
 
@@ -100,9 +98,8 @@ class InventoryCommandServiceTest {
         @DisplayName("재고 복원 시 도메인 연산 후 save 호출")
         void restore_savesInventoryAndHistory() {
             Inventory inventory = Inventory.create(PRODUCT_ID, 100);
-            inventory.reserve(30, ORDER_ID);
+            InventoryHistory ignored = inventory.reserve(30, ORDER_ID);
             given(inventoryRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(inventory));
-            given(inventoryRepository.save(any())).willReturn(inventory);
 
             sut.restore(ORDER_ID, PRODUCT_ID, 30);
 
@@ -129,7 +126,6 @@ class InventoryCommandServiceTest {
         void increase_savesInventoryAndHistory() {
             Inventory inventory = Inventory.create(PRODUCT_ID, 100);
             given(inventoryRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(inventory));
-            given(inventoryRepository.save(any())).willReturn(inventory);
 
             sut.increase(PRODUCT_ID, 50, RESTOCK_ID);
 

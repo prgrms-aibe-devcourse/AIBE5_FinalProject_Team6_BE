@@ -7,6 +7,7 @@ import com.fandrops.inventory.domain.port.InventoryHistoryRepository;
 import com.fandrops.inventory.domain.port.InventoryRepository;
 import org.springframework.transaction.annotation.Transactional;
 
+/** 재고 예약·확정·복원·증가를 단일 TX에서 처리하는 application 서비스. */
 public class InventoryCommandService {
 
     private final InventoryRepository inventoryRepository;
