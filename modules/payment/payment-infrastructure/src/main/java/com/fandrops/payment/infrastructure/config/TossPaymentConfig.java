@@ -5,6 +5,7 @@ import com.fandrops.payment.application.payment.PaymentTimeoutItemProcessor;
 import com.fandrops.payment.application.payment.PaymentTimeoutService;
 import com.fandrops.payment.application.payment.TossPaymentPort;
 import com.fandrops.payment.domain.payment.PaymentRepository;
+import jakarta.annotation.PostConstruct;
 import org.springframework.context.ApplicationEventPublisher;
 import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
@@ -21,8 +22,21 @@ import org.springframework.web.client.RestClient;
 @EnableConfigurationProperties(TossProperties.class)
 public class TossPaymentConfig {
 
+    private final TossProperties tossProperties;
+
+    public TossPaymentConfig(TossProperties tossProperties) {
+        this.tossProperties = tossProperties;
+    }
+
+    @PostConstruct
+    public void validate() {
+        if (tossProperties.getSecretKey() == null || tossProperties.getSecretKey().isBlank()) {
+            throw new IllegalStateException("toss.api.secret-key가 설정되지 않았습니다");
+        }
+    }
+
     @Bean
-    public RestClient tossRestClient(TossProperties tossProperties) {
+    public RestClient tossRestClient() {
         String credentials = Base64.getEncoder().encodeToString(
                 (tossProperties.getSecretKey() + ":").getBytes(StandardCharsets.UTF_8));
 
@@ -39,6 +53,7 @@ public class TossPaymentConfig {
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                 .build();
     }
+
 
     @Bean
     public PaymentConfirmService paymentConfirmService(PaymentRepository paymentRepository,

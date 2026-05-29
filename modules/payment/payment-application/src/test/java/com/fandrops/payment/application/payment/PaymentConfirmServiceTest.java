@@ -22,6 +22,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doThrow;
 
 @ExtendWith(MockitoExtension.class)
 class PaymentConfirmServiceTest {
@@ -102,5 +103,47 @@ class PaymentConfirmServiceTest {
 
         assertThat(result.getStatus()).isEqualTo(PaymentStatus.SUCCESS);
         verify(tossPaymentPort, never()).confirm(anyString(), anyLong(), anyLong());
+    }
+
+    @Test
+    @DisplayName("P-5: FAILED 상태 결제 재요청 → PaymentAlreadyFailedException")
+    void p5_failedPayment_throwsAlreadyFailed() {
+        Payment failedPayment = Payment.create(ORDER_ID, AMOUNT);
+        failedPayment.fail(Instant.now());
+
+        when(paymentRepository.findByTossPaymentKey(TOSS_KEY)).thenReturn(Optional.empty());
+        when(paymentRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.of(failedPayment));
+
+        assertThatThrownBy(() -> service.confirm(new PaymentConfirmCommand(ORDER_ID, TOSS_KEY, AMOUNT)))
+                .isInstanceOf(PaymentAlreadyFailedException.class);
+
+        verify(tossPaymentPort, never()).confirm(anyString(), anyLong(), anyLong());
+    }
+
+    @Test
+    @DisplayName("P-6: 금액 불일치 → IllegalArgumentException")
+    void p6_amountMismatch_throwsIllegalArgument() {
+        long wrongAmount = AMOUNT + 1_000L;
+
+        when(paymentRepository.findByTossPaymentKey(TOSS_KEY)).thenReturn(Optional.empty());
+        when(paymentRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.of(pendingPayment));
+
+        assertThatThrownBy(() -> service.confirm(new PaymentConfirmCommand(ORDER_ID, TOSS_KEY, wrongAmount)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("결제 금액 불일치");
+
+        verify(tossPaymentPort, never()).confirm(anyString(), anyLong(), anyLong());
+    }
+
+    @Test
+    @DisplayName("P-7: PG 서버 오류 → TossPaymentUnavailableException 전파")
+    void p7_pgUnavailable_propagatesException() {
+        when(paymentRepository.findByTossPaymentKey(TOSS_KEY)).thenReturn(Optional.empty());
+        when(paymentRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.of(pendingPayment));
+        doThrow(new TossPaymentUnavailableException("Toss PG 일시 오류: 500"))
+                .when(tossPaymentPort).confirm(TOSS_KEY, AMOUNT, ORDER_ID);
+
+        assertThatThrownBy(() -> service.confirm(new PaymentConfirmCommand(ORDER_ID, TOSS_KEY, AMOUNT)))
+                .isInstanceOf(TossPaymentUnavailableException.class);
     }
 }

@@ -11,7 +11,9 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import static org.assertj.core.api.Assertions.assertThatNoException;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -44,5 +46,20 @@ class PaymentTimeoutServiceTest {
         service.cancelTimedOutPayments(Duration.ofMinutes(15));
 
         verify(itemProcessor, never()).process(any());
+    }
+
+    @Test
+    @DisplayName("P-5: processor 예외 발생 시 다음 항목 계속 처리 (catch-continue)")
+    void p5_processorException_continuesNextItem() {
+        Payment p1 = Payment.create(1L, 50_000L);
+        Payment p2 = Payment.create(2L, 50_000L);
+
+        when(paymentRepository.findPendingOlderThan(any())).thenReturn(List.of(p1, p2));
+        doThrow(new RuntimeException("처리 실패")).when(itemProcessor).process(p1);
+
+        assertThatNoException().isThrownBy(() -> service.cancelTimedOutPayments(Duration.ofMinutes(15)));
+
+        verify(itemProcessor).process(p1);
+        verify(itemProcessor).process(p2);
     }
 }
