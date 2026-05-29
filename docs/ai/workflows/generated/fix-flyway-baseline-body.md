@@ -6,7 +6,7 @@
 ## 🧪 기술적 의사결정 및 검증
 
 - **선택한 기술 및 배경:**
-  PR #51(community 피드 도메인)에서 `V1__create_community_feed_tables.sql`이 처음 추가됐고, PR #63(order 도메인) 머지 후 CD 배포 시 prod RDS에 `flyway_schema_history` 테이블이 없는 상태에서 Flyway가 `FlywayException: Found non-empty schema(s) fandrops but no schema history table`을 던지며 앱 기동 거부.
+  PR #51(community 피드 도메인)에서 `V1__create_community_feed_tables.sql`이 처음 추가되면서 Flyway가 활성화됐고, 이때부터 CD 배포 시 `flyway_schema_history` 테이블이 없는 prod RDS에서 `FlywayException: Found non-empty schema(s) fandrops but no schema history table`이 반복 발생하며 앱 기동 거부.
 
   세 가지 방안 검토:
   1. **Flyway 비활성화** — 단순하나 스키마 이력 관리 포기

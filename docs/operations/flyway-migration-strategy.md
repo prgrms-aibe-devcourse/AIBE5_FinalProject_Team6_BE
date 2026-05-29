@@ -4,7 +4,7 @@
 
 ### 왜 이렇게 설정했는가
 
-PR #51(community 피드 도메인)에서 첫 번째 Flyway 마이그레이션 파일(`V1__create_community_feed_tables.sql`)이 추가됐고, 이후 PR #63(order 도메인) 머지 후 CD 배포 시 다음 오류가 발생했다.
+PR #51(community 피드 도메인)에서 첫 번째 Flyway 마이그레이션 파일(`V1__create_community_feed_tables.sql`)이 추가되면서 Flyway가 처음 활성화됐고, 이때부터 CD 배포 시 다음 오류가 반복 발생했다.
 
 ```
 FlywayException: Found non-empty schema(s) `fandrops` but no schema history table.
