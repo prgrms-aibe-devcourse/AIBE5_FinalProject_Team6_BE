@@ -73,6 +73,19 @@ available_qty = total_qty - reserved_qty
 
 `idempotency_key`로 주문 생성 멱등을 보장한다.
 
+### `order_payment_key` — 서버 발급 주문 세션 키
+
+`POST /orders` 응답의 `orderPaymentKey` 필드에 반환되는 서버 발급 UUID 기반 식별자(`"opk_" + UUID`).
+
+> **주의:** `PAYMENT.payment_key`(Toss PG가 발급하는 `tossPaymentKey`)와 **별개의 컬럼**이다.
+
+| 컬럼 | 테이블 | 발급 주체 | 용도 |
+| --- | --- | --- | --- |
+| `order_payment_key` | `ORDER` | 서버 (주문 생성 시점) | 클라이언트가 결제 세션을 식별하는 주문 키 |
+| `payment_key` | `PAYMENT` | Toss PG | PG 웹훅 멱등·환불 요청 키 |
+
+`UNIQUE` 제약으로 중복 발급을 방지한다.
+
 ### `FAILED`가 존재하는 이유
 
 Saga 보상 트랜잭션의 **트리거 기준**이 되는 상태다. 보상이 완료되면 반드시 `CANCELLED`로 전이한다.
