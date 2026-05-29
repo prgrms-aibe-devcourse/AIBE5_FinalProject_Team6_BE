@@ -6,7 +6,9 @@ import com.fandrops.payment.application.payment.PaymentTimeoutService;
 import com.fandrops.payment.application.payment.TossPaymentPort;
 import com.fandrops.payment.domain.payment.PaymentRepository;
 import jakarta.annotation.PostConstruct;
+import java.util.Arrays;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.core.env.Environment;
 import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
@@ -23,14 +25,17 @@ import org.springframework.web.client.RestClient;
 public class TossPaymentConfig {
 
     private final TossProperties tossProperties;
+    private final Environment environment;
 
-    public TossPaymentConfig(TossProperties tossProperties) {
+    public TossPaymentConfig(TossProperties tossProperties, Environment environment) {
         this.tossProperties = tossProperties;
+        this.environment = environment;
     }
 
     @PostConstruct
     public void validate() {
-        if (tossProperties.getSecretKey() == null || tossProperties.getSecretKey().isBlank()) {
+        boolean isLocal = Arrays.asList(environment.getActiveProfiles()).contains("local");
+        if (!isLocal && (tossProperties.getSecretKey() == null || tossProperties.getSecretKey().isBlank())) {
             throw new IllegalStateException("toss.api.secret-key가 설정되지 않았습니다");
         }
     }
