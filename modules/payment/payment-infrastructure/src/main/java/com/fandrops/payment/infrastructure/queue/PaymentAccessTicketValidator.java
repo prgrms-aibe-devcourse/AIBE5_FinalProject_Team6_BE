@@ -3,6 +3,7 @@ package com.fandrops.payment.infrastructure.queue;
 import com.fandrops.order.domain.port.AccessTicketValidator;
 import com.fandrops.payment.domain.queue.AccessTicketRepository;
 
+/** AccessTicketValidator 구현체. payment-domain의 AccessTicketRepository에 위임한다. */
 public class PaymentAccessTicketValidator implements AccessTicketValidator {
 
     private final AccessTicketRepository accessTicketRepository;

@@ -1,7 +1,7 @@
 ﻿dependencies {
     implementation(project(":modules:payment:payment-domain"))
     implementation(project(":modules:payment:payment-application"))
-    implementation(project(":modules:order:order-domain"))  // AccessTicketValidator 구현용
+    implementation(project(":modules:order:order-domain"))
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.springframework.boot:spring-boot-starter-web")

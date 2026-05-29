@@ -8,6 +8,7 @@ import com.fandrops.payment.infrastructure.queue.PaymentAccessTicketValidator;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+/** order-domain ↔ payment-infrastructure 교차 모듈 DI 연결. */
 @Configuration
 public class AccessTicketConfig {
 
