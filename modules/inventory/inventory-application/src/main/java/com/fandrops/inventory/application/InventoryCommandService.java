@@ -1,0 +1,57 @@
+package com.fandrops.inventory.application;
+
+import com.fandrops.inventory.application.exception.InventoryNotFoundException;
+import com.fandrops.inventory.domain.Inventory;
+import com.fandrops.inventory.domain.InventoryHistory;
+import com.fandrops.inventory.domain.port.InventoryHistoryRepository;
+import com.fandrops.inventory.domain.port.InventoryRepository;
+import org.springframework.transaction.annotation.Transactional;
+
+public class InventoryCommandService {
+
+    private final InventoryRepository inventoryRepository;
+    private final InventoryHistoryRepository inventoryHistoryRepository;
+
+    public InventoryCommandService(InventoryRepository inventoryRepository,
+                                   InventoryHistoryRepository inventoryHistoryRepository) {
+        this.inventoryRepository = inventoryRepository;
+        this.inventoryHistoryRepository = inventoryHistoryRepository;
+    }
+
+    @Transactional
+    public void reserve(Long orderId, Long productId, int qty) {
+        Inventory inventory = findByProductId(productId);
+        InventoryHistory history = inventory.reserve(qty, orderId);
+        inventoryRepository.save(inventory);
+        inventoryHistoryRepository.save(history);
+    }
+
+    @Transactional
+    public void confirm(Long orderId, Long productId, int qty) {
+        Inventory inventory = findByProductId(productId);
+        InventoryHistory history = inventory.confirm(qty, orderId);
+        inventoryRepository.save(inventory);
+        inventoryHistoryRepository.save(history);
+    }
+
+    @Transactional
+    public void restore(Long orderId, Long productId, int qty) {
+        Inventory inventory = findByProductId(productId);
+        InventoryHistory history = inventory.restore(qty, orderId);
+        inventoryRepository.save(inventory);
+        inventoryHistoryRepository.save(history);
+    }
+
+    @Transactional
+    public void increase(Long productId, int qty, Long restockId) {
+        Inventory inventory = findByProductId(productId);
+        InventoryHistory history = inventory.increase(qty, restockId);
+        inventoryRepository.save(inventory);
+        inventoryHistoryRepository.save(history);
+    }
+
+    private Inventory findByProductId(Long productId) {
+        return inventoryRepository.findByProductId(productId)
+                .orElseThrow(() -> new InventoryNotFoundException(productId));
+    }
+}
