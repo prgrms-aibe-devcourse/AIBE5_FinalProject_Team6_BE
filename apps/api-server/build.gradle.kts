@@ -18,6 +18,8 @@ dependencies {
         implementation(project(":modules:$context:$context-api"))
         implementation(project(":modules:$context:$context-infrastructure"))
     }
+    implementation(project(":modules:order:order-domain"))
+    implementation(project(":modules:payment:payment-domain"))
     implementation(project(":modules:notification:notification-application"))
     implementation(project(":modules:notification:notification-infrastructure"))
 
