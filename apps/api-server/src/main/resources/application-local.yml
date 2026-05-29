@@ -3,7 +3,9 @@
 
 spring:
   config:
-    import: optional:application-local.override.yml
+    import:
+      - optional:application-local.override.yml
+      - optional:application-local.secrets.yml
 
   application:
     name: fandrops-api

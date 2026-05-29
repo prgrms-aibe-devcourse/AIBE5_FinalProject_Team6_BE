@@ -1,20 +1,34 @@
 # =============================================================================
 # 로컬 Secret / 연결 정보 예시 (커밋용 — 실제 값 넣지 마세요)
 # =============================================================================
-# .env 파일은 사용하지 않습니다.
-# IDE Run Configuration → Environment variables 또는 OS 셸에 아래를 설정하세요.
+# 실제 값은 application-local.secrets.yml (gitignore) 에만 넣으세요.
+# IDE Run Configuration → Environment variables 또는 OS 셸에 아래를 설정해도 됩니다.
 #
-# MySQL 로컬 사용 시 (H2 대신):
-#   SPRING_PROFILES_ACTIVE=local
+# 1. DB (MySQL — docker compose up -d 후):
 #   DB_URL=jdbc:mysql://localhost:3307/fandrops?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&characterEncoding=UTF-8
 #   DB_USERNAME=fandrops
 #   DB_PASSWORD=change-me
 #
-# Redis 로컬 (docker compose up -d 후):
+# 2. Redis (docker compose up -d 후):
 #   REDIS_HOST=localhost
 #   REDIS_PORT=6379
 #
-# OAuth2 (필요 시 application-local.yml 에서 exclude 제거 후):
-#   OAUTH2_CLIENT_ID=your-client-id
-#   OAUTH2_CLIENT_SECRET=your-client-secret
+# 3. JWT:
+#   JWT_SECRET=<base64-encoded-256bit-key>
+#   # 운영 키 생성: openssl rand -base64 32
+#
+# 4. Google OAuth:
+#   GOOGLE_CLIENT_ID=<Google Cloud Console에서 발급>
+#   GOOGLE_CLIENT_SECRET=<Google Cloud Console에서 발급>
+#   GOOGLE_REDIRECT_URI=http://localhost:3000/oauth/callback/google
+#
+# 5. 카카오 OAuth (발급 후 추가):
+#   KAKAO_CLIENT_ID=<Kakao Developers에서 발급>
+#   KAKAO_CLIENT_SECRET=<Kakao Developers에서 발급>
+#   KAKAO_REDIRECT_URI=http://localhost:3000/oauth/callback/kakao
+#
+# 6. 이메일 (Gmail):
+#   MAIL_USERNAME=fandropps@gmail.com
+#   MAIL_PASSWORD=<Google 앱 비밀번호 16자리>
+#   MAIL_FROM=fandropps@gmail.com
 # =============================================================================
