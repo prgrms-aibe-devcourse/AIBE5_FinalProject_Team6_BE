@@ -9,7 +9,7 @@ import org.springframework.data.repository.query.Param;
 /** Spring Data JPA 저장소. updateStatus는 JPQL로 status만 갱신해 불필요한 items 재저장을 방지. */
 public interface OrderJpaRepository extends JpaRepository<OrderEntity, Long> {
 
-    @Modifying
+    @Modifying(clearAutomatically = true)
     @Query("UPDATE OrderEntity o SET o.status = :status WHERE o.id = :id")
     void updateStatus(@Param("id") Long id, @Param("status") OrderStatus status);
 }

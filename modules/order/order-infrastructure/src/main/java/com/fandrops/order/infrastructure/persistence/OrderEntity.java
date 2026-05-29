@@ -73,7 +73,7 @@ public class OrderEntity {
         this.items.add(item);
     }
 
-    public void setStatus(OrderStatus status) {
+    void setStatus(OrderStatus status) {
         this.status = status;
     }
 }
