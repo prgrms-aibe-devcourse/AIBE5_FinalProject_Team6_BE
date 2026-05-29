@@ -12,9 +12,6 @@ spring:
 
   autoconfigure:
     exclude:
-      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
-      - org.springframework.boot.autoconfigure.data.redis.RedisReactiveAutoConfiguration
-      - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
       - org.springframework.boot.autoconfigure.security.oauth2.client.servlet.OAuth2ClientAutoConfiguration
 
   datasource:
@@ -63,7 +60,7 @@ management:
       application: ${spring.application.name}
   health:
     redis:
-      enabled: false
+      enabled: true
 
 fandrops:
   ops:
