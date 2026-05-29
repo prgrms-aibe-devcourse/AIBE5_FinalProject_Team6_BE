@@ -121,6 +121,7 @@ ERD:    PAYMENT.payment_key (Unique Index)
 | `status` | VARCHAR | NOT NULL | `PENDING` / `SUCCESS` / `FAILED` |
 | `paid_at` | TIMESTAMP | | SUCCESS 시 기록 (P-2) |
 | `failed_at` | TIMESTAMP | | FAILED 시 기록 (P-3) |
+| `created_at` | TIMESTAMP | NOT NULL | 결제 세션 생성 시각 — 15분 타임아웃 Job 기준 (`ORDER.reserved_at`과 동일 TX) |
 
 | `status`  | 의미                          |
 | --------- | --------------------------- |
