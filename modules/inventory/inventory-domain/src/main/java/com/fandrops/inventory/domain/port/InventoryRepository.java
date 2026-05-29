@@ -8,5 +8,5 @@ public interface InventoryRepository {
 
     Optional<Inventory> findByProductId(Long productId);
 
-    Inventory save(Inventory inventory);
+    void save(Inventory inventory);
 }
