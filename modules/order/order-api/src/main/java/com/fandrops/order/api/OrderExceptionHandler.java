@@ -7,6 +7,7 @@ import com.fandrops.order.domain.exception.OrderNotFoundException;
 import com.fandrops.order.domain.exception.OutOfStockException;
 import com.fandrops.order.domain.exception.ReserveConflictException;
 import java.util.UUID;
+import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -21,7 +22,7 @@ public class OrderExceptionHandler {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(ApiResponse.error(
                         new ApiError("INVALID_QUEUE_TICKET", e.getMessage(), false),
-                        UUID.randomUUID().toString()));
+                        MDC.get("traceId") != null ? MDC.get("traceId") : UUID.randomUUID().toString()));
     }
 
     @ExceptionHandler(OutOfStockException.class)
@@ -29,7 +30,7 @@ public class OrderExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ApiResponse.error(
                         new ApiError("OUT_OF_STOCK", e.getMessage(), false),
-                        UUID.randomUUID().toString()));
+                        MDC.get("traceId") != null ? MDC.get("traceId") : UUID.randomUUID().toString()));
     }
 
     @ExceptionHandler(ReserveConflictException.class)
@@ -37,7 +38,7 @@ public class OrderExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ApiResponse.error(
                         new ApiError("RESERVE_FAILED", e.getMessage(), true),
-                        UUID.randomUUID().toString()));
+                        MDC.get("traceId") != null ? MDC.get("traceId") : UUID.randomUUID().toString()));
     }
 
     @ExceptionHandler(OrderNotFoundException.class)
@@ -45,7 +46,7 @@ public class OrderExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(ApiResponse.error(
                         new ApiError("ORDER_NOT_FOUND", e.getMessage(), false),
-                        UUID.randomUUID().toString()));
+                        MDC.get("traceId") != null ? MDC.get("traceId") : UUID.randomUUID().toString()));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
@@ -53,6 +54,14 @@ public class OrderExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.error(
                         new ApiError("INVALID_REQUEST", e.getMessage(), false),
-                        UUID.randomUUID().toString()));
+                        MDC.get("traceId") != null ? MDC.get("traceId") : UUID.randomUUID().toString()));
+    }
+
+    @ExceptionHandler(NumberFormatException.class)
+    public ResponseEntity<ApiResponse<Void>> handleNumberFormat(NumberFormatException e) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(
+                        new ApiError("INVALID_REQUEST", "유효하지 않은 인증 정보입니다.", false),
+                        MDC.get("traceId") != null ? MDC.get("traceId") : UUID.randomUUID().toString()));
     }
 }

@@ -7,9 +7,11 @@ import com.fandrops.order.application.OrderService;
 import com.fandrops.order.application.dto.CreateOrderCommand;
 import com.fandrops.order.application.dto.CreateOrderResult;
 import com.fandrops.order.application.dto.OrderItemCommand;
+import jakarta.validation.Valid;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
+import org.slf4j.MDC;
 import org.springframework.core.env.Environment;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -35,12 +37,12 @@ public class OrderController {
 
     @PostMapping
     public ResponseEntity<ApiResponse<CreateOrderResponse>> createOrder(
-            @RequestBody CreateOrderRequest request,
+            @Valid @RequestBody CreateOrderRequest request,
             Authentication authentication,
             @RequestHeader(value = "X-Fan-Id", required = false) Long fanIdHeader) {
 
         Long fanId = resolveFanId(authentication, fanIdHeader);
-        String traceId = UUID.randomUUID().toString();
+        String traceId = MDC.get("traceId") != null ? MDC.get("traceId") : UUID.randomUUID().toString();
 
         List<OrderItemCommand> itemCommands = request.getItems().stream()
                 .map(item -> new OrderItemCommand(item.getProductId(), item.getQuantity()))
