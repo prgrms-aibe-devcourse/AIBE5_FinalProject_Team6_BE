@@ -24,8 +24,11 @@ public class UserRepositoryImpl implements UserRepository {
         try {
             return fanJpaRepository.save(FanJpaEntity.from(fan)).toDomain();
         } catch (DataIntegrityViolationException e) {
-            // (auth_provider, provider_id) UNIQUE 제약 위반 — 소셜 계정 동시 가입 경쟁 조건
-            throw new IllegalStateException("이미 등록된 소셜 계정입니다.", e);
+            String msg = e.getMessage() != null ? e.getMessage() : "";
+            if (msg.contains("uq_fan_auth_provider_id")) {
+                throw new IllegalStateException("이미 등록된 소셜 계정입니다.", e);
+            }
+            throw e;
         }
     }
 

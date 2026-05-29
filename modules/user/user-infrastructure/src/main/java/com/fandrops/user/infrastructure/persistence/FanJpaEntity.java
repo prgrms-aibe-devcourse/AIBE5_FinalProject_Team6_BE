@@ -17,6 +17,7 @@ public class FanJpaEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(nullable = true) // 소셜 로그인 시 이메일 미제공 허용 (카카오 동의 미선택 등)
     private String email;
 
     @Column(nullable = false)

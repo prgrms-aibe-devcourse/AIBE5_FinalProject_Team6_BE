@@ -4,6 +4,7 @@ import com.fandrops.user.application.dto.OAuthUserInfo;
 import com.fandrops.user.application.port.OAuthClient;
 import com.fandrops.user.domain.AuthProvider;
 import com.fandrops.user.infrastructure.config.OAuthProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
@@ -46,11 +47,19 @@ public class OAuthClientImpl implements OAuthClient {
                 .retrieve()
                 .body(GoogleTokenResponse.class);
 
+        if (tokenResponse == null || tokenResponse.accessToken() == null) {
+            throw new IllegalStateException("Google 토큰 응답이 비어 있습니다.");
+        }
+
         GoogleUserInfo userInfo = restClient.get()
                 .uri(google.userInfoUri())
-                .header("Authorization", "Bearer " + tokenResponse.access_token())
+                .header("Authorization", "Bearer " + tokenResponse.accessToken())
                 .retrieve()
                 .body(GoogleUserInfo.class);
+
+        if (userInfo == null || userInfo.id() == null) {
+            throw new IllegalStateException("Google 사용자 정보 응답이 비어 있습니다.");
+        }
 
         return new OAuthUserInfo(userInfo.id(), userInfo.email(), userInfo.name());
     }
@@ -64,6 +73,6 @@ public class OAuthClientImpl implements OAuthClient {
         return URLEncoder.encode(value, StandardCharsets.UTF_8);
     }
 
-    private record GoogleTokenResponse(String access_token) {}
+    private record GoogleTokenResponse(@JsonProperty("access_token") String accessToken) {}
     private record GoogleUserInfo(String id, String email, String name) {}
 }

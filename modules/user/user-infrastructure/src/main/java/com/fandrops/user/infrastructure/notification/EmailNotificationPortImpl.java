@@ -6,6 +6,9 @@ import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Component;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+
 @Component
 public class EmailNotificationPortImpl implements EmailNotificationPort {
 
@@ -30,7 +33,7 @@ public class EmailNotificationPortImpl implements EmailNotificationPort {
         message.setSubject("[FANDROPS] 비밀번호 재설정 안내");
         message.setText(
                 "아래 링크를 클릭하여 비밀번호를 재설정해주세요 (30분 이내 유효):\n\n"
-                + frontendUrl + "/reset-password?token=" + resetToken
+                + frontendUrl + "/reset-password?token=" + URLEncoder.encode(resetToken, StandardCharsets.UTF_8)
                 + "\n\n본인이 요청하지 않은 경우 이 메일을 무시하세요."
         );
         mailSender.send(message);
