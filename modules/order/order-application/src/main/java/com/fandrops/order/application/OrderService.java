@@ -33,6 +33,11 @@ public class OrderService {
     // 재고 부족 예외는 롤백 제외 → CANCELLED 상태가 DB에 커밋되어야 함
     @Transactional(noRollbackFor = {OutOfStockException.class, ReserveConflictException.class})
     public CreateOrderResult createOrder(CreateOrderCommand command) {
+        // 재고 예약 Saga 미구현으로 단일 상품 주문만 허용. inventory-infrastructure 완성 후 제거.
+        if (command.getItems().size() > 1) {
+            throw new IllegalArgumentException("MVP에서는 단일 상품 주문만 지원합니다");
+        }
+
         // 1. accessTicket 검증 (실패 시 AccessTicketInvalidException → 403)
         Long primaryProductId = command.getItems().get(0).getProductId();
         accessTicketValidatePort.validate(command.getAccessTicket(), command.getFanId(), primaryProductId);
