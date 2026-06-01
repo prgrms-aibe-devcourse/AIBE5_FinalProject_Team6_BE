@@ -205,7 +205,7 @@ class AuthServiceTest {
 
         InOrder inOrder = inOrder(refreshTokenStore);
         inOrder.verify(refreshTokenStore).getAndDelete("old-token");
-        inOrder.verify(refreshTokenStore).save(anyString(), eq(5L));
+        inOrder.verify(refreshTokenStore).save("new-refresh", 5L);
         assertEquals("new-access", result.accessToken());
     }
 
@@ -214,14 +214,14 @@ class AuthServiceTest {
     @Test
     @DisplayName("만료된 재설정 토큰 시 InvalidTokenException")
     void confirmPasswordReset_invalidToken_throwsInvalidTokenException() {
-        when(passwordResetTokenStore.findFanIdByToken("expired")).thenReturn(Optional.empty());
+        when(passwordResetTokenStore.getAndDelete("expired")).thenReturn(Optional.empty());
         assertThrows(InvalidTokenException.class, () -> authService.confirmPasswordReset("expired", "newPass"));
     }
 
     @Test
-    @DisplayName("비밀번호 재설정 — 토큰 선삭제 후 비밀번호 변경")
+    @DisplayName("비밀번호 재설정 — getAndDelete 원자 처리 후 비밀번호 변경")
     void confirmPasswordReset_tokenDeletedBeforePasswordChange() {
-        when(passwordResetTokenStore.findFanIdByToken("valid-token")).thenReturn(Optional.of(6L));
+        when(passwordResetTokenStore.getAndDelete("valid-token")).thenReturn(Optional.of(6L));
         Fan fan = Fan.builder().id(6L).email("fan@email.com").nickname("nick").authProvider(AuthProvider.LOCAL).passwordHash("oldHash").build();
         when(userRepository.findById(6L)).thenReturn(Optional.of(fan));
         when(passwordEncoder.encode("newPass")).thenReturn("newHash");
@@ -229,9 +229,10 @@ class AuthServiceTest {
 
         authService.confirmPasswordReset("valid-token", "newPass");
 
-        InOrder inOrder = inOrder(passwordResetTokenStore, userRepository);
-        inOrder.verify(passwordResetTokenStore).delete("valid-token");
-        inOrder.verify(userRepository).save(any(Fan.class));
+        verify(passwordResetTokenStore).getAndDelete("valid-token");
+        verify(passwordResetTokenStore, never()).findFanIdByToken(anyString());
+        verify(passwordResetTokenStore, never()).delete(anyString());
+        verify(userRepository).save(any(Fan.class));
     }
 
     // ── requestPasswordReset ────────────────────────────────────────────────

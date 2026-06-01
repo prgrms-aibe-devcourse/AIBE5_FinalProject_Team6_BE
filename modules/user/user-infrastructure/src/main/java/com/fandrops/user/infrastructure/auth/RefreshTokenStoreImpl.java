@@ -1,7 +1,6 @@
 package com.fandrops.user.infrastructure.auth;
 
 import com.fandrops.user.application.port.RefreshTokenStore;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
@@ -9,7 +8,6 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 import java.util.Optional;
 
-@Slf4j
 @Component
 public class RefreshTokenStoreImpl implements RefreshTokenStore {
 
@@ -40,7 +38,7 @@ public class RefreshTokenStoreImpl implements RefreshTokenStore {
         if (value == null) {
             return Optional.empty();
         }
-        return parseFanId(value);
+        return RedisStoreUtils.parseFanId(value);
     }
 
     @Override
@@ -54,15 +52,6 @@ public class RefreshTokenStoreImpl implements RefreshTokenStore {
         if (value == null) {
             return Optional.empty();
         }
-        return parseFanId(value);
-    }
-
-    private Optional<Long> parseFanId(String value) {
-        try {
-            return Optional.of(Long.parseLong(value));
-        } catch (NumberFormatException e) {
-            log.warn("Invalid fanId payload in Redis key: {}***", KEY_PREFIX);
-            return Optional.empty();
-        }
+        return RedisStoreUtils.parseFanId(value);
     }
 }

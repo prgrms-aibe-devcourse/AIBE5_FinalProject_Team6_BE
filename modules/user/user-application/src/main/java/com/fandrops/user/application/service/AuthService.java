@@ -118,8 +118,13 @@ public class AuthService {
     public AuthTokenResult refreshAccessToken(String refreshToken) {
         Long fanId = refreshTokenStore.getAndDelete(refreshToken)
                 .orElseThrow(() -> new InvalidTokenException("유효하지 않은 리프레시 토큰입니다."));
-
-        return issueTokens(fanId, UserRole.FAN);
+        try {
+            return issueTokens(fanId, UserRole.FAN);
+        } catch (RuntimeException e) {
+            // issueTokens 실패 시 구 토큰 복원 — 인프라 장애로 인한 영구 로그아웃 방지
+            refreshTokenStore.save(refreshToken, fanId);
+            throw e;
+        }
     }
 
     // 비밀번호 재설정 요청 — 이메일 발송 포함, 트랜잭션 없음 (커넥션 풀 고갈 방지)
@@ -133,14 +138,11 @@ public class AuthService {
                 });
     }
 
-    // 비밀번호 재설정 확인
+    // 비밀번호 재설정 확인 — GETDEL로 토큰 조회+삭제 원자 처리 (TOCTOU 방지)
     @Transactional
     public void confirmPasswordReset(String token, String newPassword) {
-        Long fanId = passwordResetTokenStore.findFanIdByToken(token)
+        Long fanId = passwordResetTokenStore.getAndDelete(token)
                 .orElseThrow(() -> new InvalidTokenException("유효하지 않거나 만료된 재설정 토큰입니다."));
-
-        // 토큰 선삭제: Redis 장애 시에도 토큰 재사용 불가
-        passwordResetTokenStore.delete(token);
 
         Fan fan = userRepository.findById(fanId)
                 .orElseThrow(() -> new FanNotFoundException("존재하지 않는 팬입니다."));
