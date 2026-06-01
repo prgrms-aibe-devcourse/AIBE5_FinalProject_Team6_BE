@@ -39,7 +39,7 @@ class PaymentWebhookServiceTest {
     void handle_done_publishes_approved_event() {
         Payment payment = Payment.create(1L, 10_000L);
         when(paymentRepository.findByTossPaymentKey("key-done")).thenReturn(Optional.empty());
-        when(paymentRepository.findByOrderId(1L)).thenReturn(Optional.of(payment));
+        when(paymentRepository.findByOrderIdForUpdate(1L)).thenReturn(Optional.of(payment));
         when(paymentRepository.save(payment)).thenReturn(payment);
 
         sut.handle(new PaymentWebhookCommand("key-done", "DONE", "카드", 10_000L, 1L, Instant.now()));
@@ -55,7 +55,7 @@ class PaymentWebhookServiceTest {
     void handle_aborted_publishes_failed_event() {
         Payment payment = Payment.create(2L, 5_000L);
         when(paymentRepository.findByTossPaymentKey("key-aborted")).thenReturn(Optional.empty());
-        when(paymentRepository.findByOrderId(2L)).thenReturn(Optional.of(payment));
+        when(paymentRepository.findByOrderIdForUpdate(2L)).thenReturn(Optional.of(payment));
         when(paymentRepository.save(payment)).thenReturn(payment);
 
         sut.handle(new PaymentWebhookCommand("key-aborted", "ABORTED", null, 5_000L, 2L, null));
@@ -71,7 +71,7 @@ class PaymentWebhookServiceTest {
     void handle_expired_publishes_failed_event() {
         Payment payment = Payment.create(3L, 3_000L);
         when(paymentRepository.findByTossPaymentKey("key-expired")).thenReturn(Optional.empty());
-        when(paymentRepository.findByOrderId(3L)).thenReturn(Optional.of(payment));
+        when(paymentRepository.findByOrderIdForUpdate(3L)).thenReturn(Optional.of(payment));
         when(paymentRepository.save(payment)).thenReturn(payment);
 
         sut.handle(new PaymentWebhookCommand("key-expired", "EXPIRED", null, 3_000L, 3L, null));
@@ -98,7 +98,7 @@ class PaymentWebhookServiceTest {
     void handle_amount_mismatch_throws_exception() {
         Payment payment = Payment.create(5L, 10_000L);
         when(paymentRepository.findByTossPaymentKey("key-mismatch")).thenReturn(Optional.empty());
-        when(paymentRepository.findByOrderId(5L)).thenReturn(Optional.of(payment));
+        when(paymentRepository.findByOrderIdForUpdate(5L)).thenReturn(Optional.of(payment));
 
         assertThatThrownBy(() ->
                 sut.handle(new PaymentWebhookCommand("key-mismatch", "DONE", "카드", 9_999L, 5L, Instant.now())))
@@ -114,7 +114,7 @@ class PaymentWebhookServiceTest {
     void handle_unknown_status_does_nothing() {
         Payment payment = Payment.create(4L, 7_000L);
         when(paymentRepository.findByTossPaymentKey("key-unknown")).thenReturn(Optional.empty());
-        when(paymentRepository.findByOrderId(4L)).thenReturn(Optional.of(payment));
+        when(paymentRepository.findByOrderIdForUpdate(4L)).thenReturn(Optional.of(payment));
 
         sut.handle(new PaymentWebhookCommand("key-unknown", "CANCELED", null, 7_000L, 4L, null));
 

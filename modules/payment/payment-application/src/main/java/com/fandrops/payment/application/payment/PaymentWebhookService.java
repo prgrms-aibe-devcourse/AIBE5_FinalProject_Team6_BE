@@ -60,7 +60,7 @@ public class PaymentWebhookService {
     }
 
     private Payment findByOrderIdAndValidateAmount(PaymentWebhookCommand command) {
-        Payment payment = paymentRepository.findByOrderId(command.getOrderId())
+        Payment payment = paymentRepository.findByOrderIdForUpdate(command.getOrderId())
                 .orElseThrow(() -> new PaymentNotFoundException(command.getOrderId()));
         if (payment.getAmount() != command.getAmount()) {
             log.error("웹훅 금액 불일치: orderId={}, dbAmount={}, webhookAmount={}",

@@ -12,9 +12,11 @@ import org.springframework.data.jpa.repository.QueryHints;
 
 interface PaymentJpaRepository extends JpaRepository<PaymentJpaEntity, Long> {
 
+    Optional<PaymentJpaEntity> findByOrderId(Long orderId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @QueryHints(@QueryHint(name = "jakarta.persistence.lock.timeout", value = "3000"))
-    Optional<PaymentJpaEntity> findByOrderId(Long orderId);
+    Optional<PaymentJpaEntity> findByOrderIdForUpdate(Long orderId);
 
     Optional<PaymentJpaEntity> findByPaymentKey(String paymentKey);
 

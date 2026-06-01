@@ -13,6 +13,9 @@ public interface PaymentRepository {
     /** tossPaymentKey(=DB payment_key) 멱등성 조회 — P-1 */
     Optional<Payment> findByTossPaymentKey(String tossPaymentKey);
 
+    /** 동시 웹훅 레이스 방지용 비관적 쓰기 락 조회 — 웹훅 처리 경로에서만 사용 */
+    Optional<Payment> findByOrderIdForUpdate(Long orderId);
+
     /** PENDING 상태이며 createdAt < threshold 인 결제 목록 — 15분 타임아웃 Job */
     List<Payment> findPendingOlderThan(Instant threshold);
 }

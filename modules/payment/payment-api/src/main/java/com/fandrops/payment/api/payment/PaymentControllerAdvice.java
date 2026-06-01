@@ -4,6 +4,7 @@ import com.fandrops.payment.application.payment.PaymentAlreadyFailedException;
 import com.fandrops.payment.application.payment.PaymentAmountMismatchException;
 import com.fandrops.payment.application.payment.PaymentConfirmFailedException;
 import com.fandrops.payment.application.payment.PaymentNotFoundException;
+import com.fandrops.payment.application.payment.PaymentLockConflictException;
 import com.fandrops.payment.application.payment.TossAuthenticationException;
 import com.fandrops.payment.application.payment.TossPaymentUnavailableException;
 import java.util.stream.Collectors;
@@ -73,5 +74,11 @@ public class PaymentControllerAdvice {
     public ResponseEntity<ErrorEnvelope> handle(TossAuthenticationException e) {
         return ResponseEntity.status(500)
                 .body(ErrorEnvelope.of("INTERNAL_ERROR", e.getMessage(), false));
+    }
+
+    @ExceptionHandler(PaymentLockConflictException.class)
+    public ResponseEntity<ErrorEnvelope> handle(PaymentLockConflictException e) {
+        return ResponseEntity.status(503)
+                .body(ErrorEnvelope.of("INTERNAL_ERROR", "일시적으로 처리할 수 없습니다. 잠시 후 재시도해 주세요.", true));
     }
 }
