@@ -231,7 +231,7 @@ PG  → POST .../webhook      → payload 내 키 → tossPaymentKey로 매핑 �
 | GET | `/fans/me/orders` | `order` | 형성빈 | 내 주문 목록 |
 | DELETE | `/orders/{id}` | `order` | 형성빈 | 주문 취소 (사용자) |
 | POST | `/payments/toss/confirm` | `payment` | 장성재 | 결제창 승인 (클라이언트 → 서버 → 토스) |
-| POST | `/payments/webhook` | `payment` | 장성재 | 토스 웹훅 (PG → 서버, **외부 비노출**) |
+| POST | `/payments/toss/webhook` | `payment` | 장성재 | 토스 웹훅 (PG → 서버, **외부 비노출**) |
 | GET | `/fans/me/payments/{id}` | `payment` | 장성재 | 결제 상세 |
 
 ### POST `/orders`
@@ -260,9 +260,34 @@ PG  → POST .../webhook      → payload 내 키 → tossPaymentKey로 매핑 �
 - `tossPaymentKey`: 토스 SDK·결제 성공 콜백의 `paymentKey` 값을 **본 API 필드명으로 매핑**해 전달한다.
 - `orderId`: `POST /orders` 응답의 `orderId`. 금액·상태 검증에 사용.
 
-### POST `/payments/webhook`
+### POST `/payments/toss/webhook`
 
-토스 payload 수신 → payload의 PG `paymentKey`를 **`tossPaymentKey`로 매핑** → `PAYMENT.payment_key` 멱등(Unique) → 주문·재고 후처리. 상세: [payment-flow-reason.md](../sequence/payment-flow-reason.md).
+Toss PG → 서버 비동기 결제 상태 수신. 상세: [payment-flow-reason.md](../sequence/payment-flow-reason.md).
+
+| 항목 | 내용 |
+| --- | --- |
+| **서명 검증** | `X-Signature-256: sha256=<hex>` 헤더 HMAC-SHA256 검증 — 불일치 시 `401` |
+| **멱등** | `tossPaymentKey` = `PAYMENT.payment_key` Unique — 동일 키 재수신 시 `200` 즉시 반환, 이벤트 재발행 없음 (P-1) |
+| **성공 처리** | `data.status = DONE` → `PAYMENT PENDING→SUCCESS`, `paid_at` 기록 → `PaymentApprovedEvent` (AFTER_COMMIT) |
+| **실패 처리** | `data.status = ABORTED \| EXPIRED` → `PAYMENT PENDING→FAILED`, `failed_at` 기록 → `PaymentFailedEvent` (AFTER_COMMIT) |
+| **기타 status** | `CANCELED` 등 → 무시 (로그만) |
+| **Response** | `200 OK` (성공·멱등 모두) / `401` (서명 실패) / `500` (파싱·처리 오류) |
+
+**요청 페이로드 (Toss 표준):**
+```json
+{
+  "eventType": "PAYMENT_STATUS_CHANGED",
+  "createdAt": "2024-01-01T09:00:00+09:00",
+  "data": {
+    "paymentKey": "<tossPaymentKey>",
+    "orderId": "<orderId>",
+    "status": "DONE | ABORTED | EXPIRED",
+    "method": "카드",
+    "totalAmount": 15000,
+    "approvedAt": "2024-01-01T09:00:00+09:00"
+  }
+}
+```
 
 ---
 
