@@ -45,4 +45,13 @@ public class RefreshTokenStoreImpl implements RefreshTokenStore {
     public void delete(String refreshToken) {
         redisTemplate.delete(KEY_PREFIX + refreshToken);
     }
+
+    @Override
+    public Optional<Long> getAndDelete(String refreshToken) {
+        String value = redisTemplate.opsForValue().getAndDelete(KEY_PREFIX + refreshToken);
+        if (value == null) {
+            return Optional.empty();
+        }
+        return Optional.of(Long.parseLong(value));
+    }
 }

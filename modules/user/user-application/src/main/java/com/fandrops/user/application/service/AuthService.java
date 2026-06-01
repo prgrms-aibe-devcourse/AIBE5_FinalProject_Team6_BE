@@ -114,12 +114,11 @@ public class AuthService {
         refreshTokenStore.delete(refreshToken);
     }
 
-    // Access Token 재발급 (Refresh Token Rotation) — Redis만 사용
+    // Access Token 재발급 (Refresh Token Rotation) — GETDEL로 조회+삭제 원자 처리
     public AuthTokenResult refreshAccessToken(String refreshToken) {
-        Long fanId = refreshTokenStore.findFanIdByToken(refreshToken)
+        Long fanId = refreshTokenStore.getAndDelete(refreshToken)
                 .orElseThrow(() -> new InvalidTokenException("유효하지 않은 리프레시 토큰입니다."));
 
-        refreshTokenStore.delete(refreshToken);
         return issueTokens(fanId, UserRole.FAN);
     }
 
