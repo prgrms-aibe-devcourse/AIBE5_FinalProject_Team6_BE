@@ -43,6 +43,9 @@ class PaymentJpaEntity {
     @Column(name = "failed_at")
     private Instant failedAt;
 
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private Instant createdAt;
+
     @Version
     private int version;
 
@@ -58,11 +61,13 @@ class PaymentJpaEntity {
         entity.status = payment.getStatus();
         entity.paidAt = payment.getPaidAt();
         entity.failedAt = payment.getFailedAt();
+        entity.createdAt = payment.getCreatedAt();
         entity.version = payment.getVersion();
         return entity;
     }
 
     Payment toDomain() {
-        return Payment.reconstitute(id, orderId, paymentKey, amount, method, status, paidAt, failedAt, version);
+        return Payment.reconstitute(id, orderId, paymentKey, amount, method, status,
+                paidAt, failedAt, createdAt, version);
     }
 }

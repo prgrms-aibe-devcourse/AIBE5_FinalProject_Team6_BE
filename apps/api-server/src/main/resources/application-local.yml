@@ -3,16 +3,15 @@
 
 spring:
   config:
-    import: optional:application-local.override.yml
+    import:
+      - optional:application-local.override.yml
+      - optional:application-local.secrets.yml
 
   application:
     name: fandrops-api
 
   autoconfigure:
     exclude:
-      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
-      - org.springframework.boot.autoconfigure.data.redis.RedisReactiveAutoConfiguration
-      - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
       - org.springframework.boot.autoconfigure.security.oauth2.client.servlet.OAuth2ClientAutoConfiguration
 
   datasource:
@@ -61,7 +60,7 @@ management:
       application: ${spring.application.name}
   health:
     redis:
-      enabled: false
+      enabled: true
 
 fandrops:
   ops:
@@ -69,3 +68,12 @@ fandrops:
       response-header-enabled: true
   feature-flags:
     enabled: false
+  order:
+    payment-timeout: PT15M
+
+toss:
+  api:
+    base-url: https://api.tosspayments.com
+    secret-key: ${TOSS_SECRET_KEY:}
+    connect-timeout: 3s
+    read-timeout: 10s
