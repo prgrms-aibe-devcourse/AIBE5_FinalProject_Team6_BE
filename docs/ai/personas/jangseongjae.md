@@ -105,7 +105,7 @@ apps/api-server/**   # 대기열/RateLimit filter/config만 (지영재와 협의
 
 **③ 최종 실패 시 DLQ 정책**
 - 재시도 횟수·주기 (예: 3회, 10분 간격).
-- Dead Letter 대상: `outbox` 테이블 `status = DEAD`.
+- Dead Letter 대상: `outbox_events` 테이블 `status = FAILED` (DLQ) — [invariants §7.3](../../state/invariants-and-state-machines.md#73-알림-파이프라인-outbox--notification).
 - 알람 연동: `outbox_dead_count > 0` → P1 Grafana Alert.
 
 ---

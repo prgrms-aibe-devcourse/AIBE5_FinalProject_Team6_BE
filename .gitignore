@@ -52,4 +52,6 @@ skills-lock.json
 **/application-local.yml
 **/application-local.override.yml
 **/application-local.secrets.yml
-\n# AI workflow generated files\ndocs/ai/workflows/generated/
+
+# AI workflow generated files
+docs/ai/workflows/generated/
