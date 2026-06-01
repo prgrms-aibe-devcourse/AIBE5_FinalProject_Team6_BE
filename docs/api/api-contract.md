@@ -1,9 +1,9 @@
 # API 계약 (공통 응답 · 페이지네이션)
 
-> **엔드포인트 목록:** [mvp-api-spec.md](./mvp-api-spec.md)  
+> **엔드포인트 목록:** [mvp-api-spec.md](./mvp-api-spec.md)
 > **장애·재시도:** [../operations/failure-policy.md](../operations/failure-policy.md) · **에러 코드 ↔ HTTP:** 본 문서 §4
 
-FANDROPS 공개 REST API(`/api/v1/**`)의 **응답 envelope·에러 코드·페이지네이션** SSOT.  
+FANDROPS 공개 REST API(`/api/v1/**`)의 **응답 envelope·에러 코드·페이지네이션** SSOT.
 `modules/common` DTO·`api-server` 예외 핸들러는 본 계약을 따른다.
 
 ---
@@ -124,7 +124,12 @@ FANDROPS 공개 REST API(`/api/v1/**`)의 **응답 envelope·에러 코드·페�
 | `PAYMENT_FAILED` | 402 | false | 결제에 실패했습니다. |
 | `DUPLICATE_PAYMENT` | 409 | false | 이미 처리된 결제입니다. |
 | `ORDER_NOT_FOUND` | 404 | false | 주문을 찾을 수 없습니다. |
-| `RATE_LIMITED` | 429 | **true** | 요청이 많습니다. 잠시 후 다시 시도해 주세요. |
+| `FEED_NOT_FOUND` | 404 | false | 피드를 찾을 수 없습니다. |
+| `COMMENT_NOT_FOUND` | 404 | false | 댓글을 찾을 수 없습니다. |
+| `ALREADY_LIKED` | 409 | false | 이미 좋아요한 항목입니다. |
+| `LIKE_NOT_FOUND` | 404 | false | 좋아요 내역을 찾을 수 없습니다. |
+| `NOT_FAN_MEMBER` | 403 | false | 팬 가입 후 이용할 수 있습니다. |
+| `RATE_LIMITED` | 429 | **true** | 요청이 많습니다. 잠시 후 다시 시도해 <br/>주세요. |
 | `INVALID_REQUEST` | 400 | false | 요청 형식이 올바르지 않습니다. |
 | `INTERNAL_ERROR` | 500 | **true** | 일시적인 오류입니다. |
 | `DB_LOCK_TIMEOUT` | 500 | **true** | 일시적인 오류입니다. |
