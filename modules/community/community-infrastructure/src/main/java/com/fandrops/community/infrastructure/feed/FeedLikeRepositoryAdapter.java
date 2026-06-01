@@ -9,6 +9,8 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Repository
 public class FeedLikeRepositoryAdapter implements FeedLikeRepository {
@@ -42,6 +44,20 @@ public class FeedLikeRepositoryAdapter implements FeedLikeRepository {
     @Override
     public boolean existsByFeedIdAndArtistMemberId(Long feedId, Long artistMemberId) {
         return jpaRepository.existsByFeedIdAndArtistMemberId(feedId, artistMemberId);
+    }
+
+    @Override
+    public Set<Long> findLikedFeedIdsByFanId(Long fanId, List<Long> feedIds) {
+        return jpaRepository.findByFanIdAndFeedIdIn(fanId, feedIds).stream()
+                .map(FeedLikeJpaEntity::getFeedId)
+                .collect(Collectors.toSet());
+    }
+
+    @Override
+    public Set<Long> findLikedFeedIdsByArtistMemberId(Long artistMemberId, List<Long> feedIds) {
+        return jpaRepository.findByArtistMemberIdAndFeedIdIn(artistMemberId, feedIds).stream()
+                .map(FeedLikeJpaEntity::getFeedId)
+                .collect(Collectors.toSet());
     }
 
     @Override
