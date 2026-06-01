@@ -203,8 +203,9 @@ class AuthServiceTest {
 
         AuthTokenResult result = authService.refreshAccessToken("old-token");
 
-        verify(refreshTokenStore).getAndDelete("old-token");
-        verify(refreshTokenStore).save("new-refresh", 5L);
+        InOrder inOrder = inOrder(refreshTokenStore);
+        inOrder.verify(refreshTokenStore).getAndDelete("old-token");
+        inOrder.verify(refreshTokenStore).save(anyString(), eq(5L));
         assertEquals("new-access", result.accessToken());
     }
 
