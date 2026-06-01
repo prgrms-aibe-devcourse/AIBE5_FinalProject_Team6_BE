@@ -58,6 +58,13 @@ management:
     redis:
       enabled: true
 
+toss:
+  api:
+    base-url: https://api.tosspayments.com
+    secret-key: ${TOSS_SECRET_KEY}
+    connect-timeout: 3s
+    read-timeout: 10s
+
 fandrops:
   ops:
     trace:
