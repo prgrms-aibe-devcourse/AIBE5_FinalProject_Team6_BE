@@ -124,6 +124,7 @@ FANDROPS 공개 REST API(`/api/v1/**`)의 **응답 envelope·에러 코드·페�
 | `PAYMENT_FAILED` | 402 | false | 결제에 실패했습니다. |
 | `DUPLICATE_PAYMENT` | 409 | false | 이미 처리된 결제입니다. |
 | `ORDER_NOT_FOUND` | 404 | false | 주문을 찾을 수 없습니다. |
+| `INVENTORY_NOT_FOUND` | 404 | false | 재고 정보를 찾을 수 없습니다. |
 | `RATE_LIMITED` | 429 | **true** | 요청이 많습니다. 잠시 후 다시 시도해 주세요. |
 | `INVALID_REQUEST` | 400 | false | 요청 형식이 올바르지 않습니다. |
 | `INTERNAL_ERROR` | 500 | **true** | 일시적인 오류입니다. |
