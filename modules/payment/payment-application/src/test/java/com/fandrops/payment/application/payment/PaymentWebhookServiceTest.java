@@ -1,6 +1,7 @@
 package com.fandrops.payment.application.payment;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -87,6 +88,22 @@ class PaymentWebhookServiceTest {
         when(paymentRepository.findByTossPaymentKey("key-done")).thenReturn(Optional.of(payment));
 
         sut.handle(new PaymentWebhookCommand("key-done", "DONE", "카드", 10_000L, 1L, Instant.now()));
+
+        verify(paymentRepository, never()).save(any());
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    @DisplayName("orderId 폴백 시 웹훅 금액이 DB 금액과 다르면 PaymentAmountMismatchException 발생")
+    void handle_amount_mismatch_throws_exception() {
+        Payment payment = Payment.create(5L, 10_000L);
+        when(paymentRepository.findByTossPaymentKey("key-mismatch")).thenReturn(Optional.empty());
+        when(paymentRepository.findByOrderId(5L)).thenReturn(Optional.of(payment));
+
+        assertThatThrownBy(() ->
+                sut.handle(new PaymentWebhookCommand("key-mismatch", "DONE", "카드", 9_999L, 5L, Instant.now())))
+                .isInstanceOf(PaymentAmountMismatchException.class)
+                .hasMessageContaining("orderId=5");
 
         verify(paymentRepository, never()).save(any());
         verify(eventPublisher, never()).publishEvent(any());

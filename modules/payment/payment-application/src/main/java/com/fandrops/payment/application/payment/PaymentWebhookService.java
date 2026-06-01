@@ -35,8 +35,7 @@ public class PaymentWebhookService {
 
         Payment payment = byTossKey.isPresent()
                 ? byTossKey.get()
-                : paymentRepository.findByOrderId(command.getOrderId())
-                        .orElseThrow(() -> new PaymentNotFoundException(command.getOrderId()));
+                : findByOrderIdAndValidateAmount(command);
 
         if (payment.getStatus() != PaymentStatus.PENDING) {
             log.info("이미 처리된 결제 상태: orderId={}, status={}", payment.getOrderId(), payment.getStatus());
@@ -58,6 +57,17 @@ public class PaymentWebhookService {
             log.warn("처리하지 않는 웹훅 status 무시: tossPaymentKey={}, tossStatus={}",
                     command.getTossPaymentKey(), command.getTossStatus());
         }
+    }
+
+    private Payment findByOrderIdAndValidateAmount(PaymentWebhookCommand command) {
+        Payment payment = paymentRepository.findByOrderId(command.getOrderId())
+                .orElseThrow(() -> new PaymentNotFoundException(command.getOrderId()));
+        if (payment.getAmount() != command.getAmount()) {
+            log.error("웹훅 금액 불일치: orderId={}, dbAmount={}, webhookAmount={}",
+                    command.getOrderId(), payment.getAmount(), command.getAmount());
+            throw new PaymentAmountMismatchException(command.getOrderId(), payment.getAmount(), command.getAmount());
+        }
+        return payment;
     }
 
     private boolean isDone(String tossStatus) {

@@ -3,7 +3,7 @@ package com.fandrops.payment.api.payment;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
-class TossWebhookRequest {
+public class TossWebhookRequest {
 
     private String eventType;
     private Data data;
@@ -14,7 +14,7 @@ class TossWebhookRequest {
     public void setData(Data data) { this.data = data; }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    static class Data {
+    public static class Data {
         private String paymentKey;
         private String orderId;
         private String status;

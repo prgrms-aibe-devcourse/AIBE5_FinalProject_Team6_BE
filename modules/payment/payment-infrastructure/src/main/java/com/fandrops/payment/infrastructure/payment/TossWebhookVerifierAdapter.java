@@ -3,6 +3,7 @@ package com.fandrops.payment.infrastructure.payment;
 import com.fandrops.payment.application.payment.TossWebhookVerifyPort;
 import com.fandrops.payment.infrastructure.config.TossProperties;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.HexFormat;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -11,14 +12,14 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 @Component
-class TossWebhookVerifierAdapter implements TossWebhookVerifyPort {
+public class TossWebhookVerifierAdapter implements TossWebhookVerifyPort {
 
     private static final Logger log = LoggerFactory.getLogger(TossWebhookVerifierAdapter.class);
     private static final String HMAC_SHA256 = "HmacSHA256";
 
     private final TossProperties tossProperties;
 
-    TossWebhookVerifierAdapter(TossProperties tossProperties) {
+    public TossWebhookVerifierAdapter(TossProperties tossProperties) {
         this.tossProperties = tossProperties;
     }
 
@@ -34,8 +35,8 @@ class TossWebhookVerifierAdapter implements TossWebhookVerifyPort {
             mac.init(new SecretKeySpec(
                     tossProperties.getSecretKey().getBytes(StandardCharsets.UTF_8), HMAC_SHA256));
             byte[] computed = mac.doFinal(rawBody.getBytes(StandardCharsets.UTF_8));
-            String computedHex = HexFormat.of().formatHex(computed);
-            return computedHex.equalsIgnoreCase(receivedHex);
+            byte[] received = HexFormat.of().parseHex(receivedHex);
+            return MessageDigest.isEqual(computed, received);
         } catch (Exception e) {
             log.error("웹훅 서명 검증 중 오류 발생", e);
             return false;
