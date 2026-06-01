@@ -44,7 +44,7 @@ public class InventoryCommandService {
     }
 
     @Transactional
-    public void increase(Long productId, int qty, Long restockId) {
+    public void increase(Long restockId, Long productId, int qty) {
         Inventory inventory = findByProductId(productId);
         InventoryHistory history = inventory.increase(qty, restockId);
         inventoryRepository.save(inventory);
