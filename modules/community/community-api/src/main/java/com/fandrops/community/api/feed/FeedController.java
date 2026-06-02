@@ -56,7 +56,13 @@ public class FeedController extends CommunityControllerSupport {
         if (viewerFanId == null && viewerArtistMemberId == null
                 && authentication != null && authentication.isAuthenticated()
                 && !"anonymousUser".equals(authentication.getPrincipal())) {
-            viewerFanId = Long.parseLong(authentication.getName());
+            if (hasArtistOrAgencyRole(authentication)) {
+                viewerArtistMemberId = Long.parseLong(authentication.getName());
+            } else if (hasFanRole(authentication)) {
+                viewerFanId = Long.parseLong(authentication.getName());
+            } else {
+                throw new IllegalStateException("지원하지 않는 role: " + authentication.getAuthorities());
+            }
         }
 
         FeedListResult result = feedService.getFeeds(artistId, cursor, size, viewerFanId, viewerArtistMemberId);
@@ -73,6 +79,17 @@ public class FeedController extends CommunityControllerSupport {
         Long artistMemberId = resolveArtistMemberId(authentication, artistMemberIdHeader);
         feedService.deleteFeed(feedId, artistMemberId);
         return ResponseEntity.noContent().build();
+    }
+
+    private static boolean hasArtistOrAgencyRole(Authentication authentication) {
+        return authentication.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ARTIST")
+                        || a.getAuthority().equals("AGENCY"));
+    }
+
+    private static boolean hasFanRole(Authentication authentication) {
+        return authentication.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("FAN"));
     }
 
     private Long resolveArtistMemberId(Authentication authentication, Long header) {
