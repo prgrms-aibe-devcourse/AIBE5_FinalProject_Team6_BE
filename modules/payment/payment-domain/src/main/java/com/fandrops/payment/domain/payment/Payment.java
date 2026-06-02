@@ -12,11 +12,12 @@ public class Payment {
     private PaymentStatus status;
     private Instant paidAt;
     private Instant failedAt;
+    private final Instant createdAt;
     private final int version;
 
     private Payment(Long id, Long orderId, String tossPaymentKey,
                     long amount, String paymentMethod, PaymentStatus status,
-                    Instant paidAt, Instant failedAt, int version) {
+                    Instant paidAt, Instant failedAt, Instant createdAt, int version) {
         this.id = id;
         this.orderId = orderId;
         this.tossPaymentKey = tossPaymentKey;
@@ -25,6 +26,7 @@ public class Payment {
         this.status = status;
         this.paidAt = paidAt;
         this.failedAt = failedAt;
+        this.createdAt = createdAt;
         this.version = version;
     }
 
@@ -35,13 +37,16 @@ public class Payment {
         if (amount <= 0) {
             throw new IllegalArgumentException("amount는 0보다 커야 합니다");
         }
-        return new Payment(null, orderId, null, amount, null, PaymentStatus.PENDING, null, null, 0);
+        return new Payment(null, orderId, null, amount, null, PaymentStatus.PENDING,
+                null, null, Instant.now(), 0);
     }
 
     public static Payment reconstitute(Long id, Long orderId, String tossPaymentKey,
                                        long amount, String paymentMethod, PaymentStatus status,
-                                       Instant paidAt, Instant failedAt, int version) {
-        return new Payment(id, orderId, tossPaymentKey, amount, paymentMethod, status, paidAt, failedAt, version);
+                                       Instant paidAt, Instant failedAt, Instant createdAt,
+                                       int version) {
+        return new Payment(id, orderId, tossPaymentKey, amount, paymentMethod,
+                status, paidAt, failedAt, createdAt, version);
     }
 
     // PENDING → SUCCESS (P-2: paidAt NOT NULL)
@@ -84,5 +89,6 @@ public class Payment {
     public PaymentStatus getStatus() { return status; }
     public Instant getPaidAt() { return paidAt; }
     public Instant getFailedAt() { return failedAt; }
+    public Instant getCreatedAt() { return createdAt; }
     public int getVersion() { return version; }
 }

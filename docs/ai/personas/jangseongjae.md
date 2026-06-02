@@ -26,7 +26,7 @@ apps/api-server/**   # 대기열/RateLimit filter/config만 (지영재와 협의
 
 ## 손대지 말 것 (기본)
 
-`modules/order/**` · `modules/inventory/**` **구현체 직접 수정** — `OrderStatePort`, `InventoryConfirmPort` 등 **호출만**.  
+`modules/order/**` · `modules/inventory/**` **구현체 직접 수정 금지** — 결제 결과는 `PaymentApprovedEvent` / `PaymentFailedEvent` **발행만**. 포트 직접 호출 금지.  
 `modules/user/**` 인증 구현체 직접 수정 금지 — Auth Principal/클레임은 표지민 계약만 사용.
 주문 상태 enum 변경은 형성빈과 **동시 PR**.
 
@@ -96,11 +96,12 @@ apps/api-server/**   # 대기열/RateLimit filter/config만 (지영재와 협의
 - 어떤 `status`에서 어떤 이벤트(timeout / webhook 실패 / PG 오류코드)가 발생했을 때 보상이 시작되는가?
 - 예: `RESERVED` 상태 + confirm 15분 초과 → Job 트리거
 
-**② 복구 API / 포트**
-- 호출할 포트 인터페이스와 시그니처를 먼저 명시한다.
-  - `OrderStatePort.cancel(orderPaymentKey)` — 주문 `CANCELLED` 전이
-  - `InventoryRestorePort.restore(orderPaymentKey)` — 재고 원복
-- 단일 TX 내에서 처리 가능한지, Saga 보상으로 분리해야 하는지 명시.
+**② 이벤트 발행 계약**
+- payment 모듈은 결과를 **이벤트로만** 전달한다. 포트 직접 호출 금지.
+  - 결제 성공: `ApplicationEventPublisher.publishEvent(new PaymentApprovedEvent(orderId))`
+  - 결제 실패·타임아웃: `ApplicationEventPublisher.publishEvent(new PaymentFailedEvent(orderId))`
+- 이벤트는 `@Transactional` 커밋 후 전달(`@TransactionalEventListener(AFTER_COMMIT)`) — 형성빈 리스너가 수신.
+- 보상 트랜잭션(RESERVED→FAILED, restore, FAILED→CANCELLED) 내부 TX 경계는 **order 모듈 소유**.
 
 **③ 최종 실패 시 DLQ 정책**
 - 재시도 횟수·주기 (예: 3회, 10분 간격).

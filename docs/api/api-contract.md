@@ -129,7 +129,8 @@ FANDROPS 공개 REST API(`/api/v1/**`)의 **응답 envelope·에러 코드·페�
 | `ALREADY_LIKED` | 409 | false | 이미 좋아요한 항목입니다. |
 | `LIKE_NOT_FOUND` | 404 | false | 좋아요 내역을 찾을 수 없습니다. |
 | `NOT_FAN_MEMBER` | 403 | false | 팬 가입 후 이용할 수 있습니다. |
-| `RATE_LIMITED` | 429 | **true** | 요청이 많습니다. 잠시 후 다시 시도해 <br/>주세요. |
+| `INVENTORY_NOT_FOUND` | 404 | false | 재고 정보를 찾을 수 없습니다. |
+| `RATE_LIMITED` | 429 | **true** | 요청이 많습니다. 잠시 후 다시 시도해 주세요. |
 | `INVALID_REQUEST` | 400 | false | 요청 형식이 올바르지 않습니다. |
 | `INTERNAL_ERROR` | 500 | **true** | 일시적인 오류입니다. |
 | `DB_LOCK_TIMEOUT` | 500 | **true** | 일시적인 오류입니다. |
