@@ -114,13 +114,17 @@ public class AuthService {
         refreshTokenStore.delete(refreshToken);
     }
 
-    // Access Token 재발급 (Refresh Token Rotation) — Redis만 사용
+    // Access Token 재발급 (Refresh Token Rotation) — GETDEL로 조회+삭제 원자 처리
     public AuthTokenResult refreshAccessToken(String refreshToken) {
-        Long fanId = refreshTokenStore.findFanIdByToken(refreshToken)
+        Long fanId = refreshTokenStore.getAndDelete(refreshToken)
                 .orElseThrow(() -> new InvalidTokenException("유효하지 않은 리프레시 토큰입니다."));
-
-        refreshTokenStore.delete(refreshToken);
-        return issueTokens(fanId, UserRole.FAN);
+        try {
+            return issueTokens(fanId, UserRole.FAN);
+        } catch (RuntimeException e) {
+            // issueTokens 실패 시 구 토큰 소실 → 재로그인 필요.
+            // Redis 장애 확률 < 토큰 재사용 방지를 우선한 의도적 선택.
+            throw new InvalidTokenException("토큰 재발급에 실패했습니다. 다시 로그인해 주세요.", e);
+        }
     }
 
     // 비밀번호 재설정 요청 — 이메일 발송 포함, 트랜잭션 없음 (커넥션 풀 고갈 방지)
@@ -134,14 +138,11 @@ public class AuthService {
                 });
     }
 
-    // 비밀번호 재설정 확인
+    // 비밀번호 재설정 확인 — GETDEL로 토큰 조회+삭제 원자 처리 (TOCTOU 방지)
     @Transactional
     public void confirmPasswordReset(String token, String newPassword) {
-        Long fanId = passwordResetTokenStore.findFanIdByToken(token)
+        Long fanId = passwordResetTokenStore.getAndDelete(token)
                 .orElseThrow(() -> new InvalidTokenException("유효하지 않거나 만료된 재설정 토큰입니다."));
-
-        // 토큰 선삭제: Redis 장애 시에도 토큰 재사용 불가
-        passwordResetTokenStore.delete(token);
 
         Fan fan = userRepository.findById(fanId)
                 .orElseThrow(() -> new FanNotFoundException("존재하지 않는 팬입니다."));

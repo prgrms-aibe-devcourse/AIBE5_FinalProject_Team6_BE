@@ -189,14 +189,14 @@ class AuthServiceTest {
     @Test
     @DisplayName("유효하지 않은 리프레시 토큰 시 InvalidTokenException")
     void refreshAccessToken_invalidToken_throwsInvalidTokenException() {
-        when(refreshTokenStore.findFanIdByToken("bad-token")).thenReturn(Optional.empty());
+        when(refreshTokenStore.getAndDelete("bad-token")).thenReturn(Optional.empty());
         assertThrows(InvalidTokenException.class, () -> authService.refreshAccessToken("bad-token"));
     }
 
     @Test
-    @DisplayName("Refresh Token Rotation — 구 토큰 삭제 후 신규 토큰 발급")
+    @DisplayName("Refresh Token Rotation — GETDEL 원자 처리 후 신규 토큰 발급")
     void refreshAccessToken_rotation_deletesOldAndIssuesNew() {
-        when(refreshTokenStore.findFanIdByToken("old-token")).thenReturn(Optional.of(5L));
+        when(refreshTokenStore.getAndDelete("old-token")).thenReturn(Optional.of(5L));
         when(jwtProvider.generateAccessToken(5L, UserRole.FAN)).thenReturn("new-access");
         when(jwtProvider.generateRefreshToken(5L)).thenReturn("new-refresh");
         when(jwtProvider.getAccessTokenExpiresIn()).thenReturn(1800L);
@@ -204,8 +204,7 @@ class AuthServiceTest {
         AuthTokenResult result = authService.refreshAccessToken("old-token");
 
         InOrder inOrder = inOrder(refreshTokenStore);
-        inOrder.verify(refreshTokenStore).findFanIdByToken("old-token");
-        inOrder.verify(refreshTokenStore).delete("old-token");
+        inOrder.verify(refreshTokenStore).getAndDelete("old-token");
         inOrder.verify(refreshTokenStore).save("new-refresh", 5L);
         assertEquals("new-access", result.accessToken());
     }
@@ -215,14 +214,14 @@ class AuthServiceTest {
     @Test
     @DisplayName("만료된 재설정 토큰 시 InvalidTokenException")
     void confirmPasswordReset_invalidToken_throwsInvalidTokenException() {
-        when(passwordResetTokenStore.findFanIdByToken("expired")).thenReturn(Optional.empty());
+        when(passwordResetTokenStore.getAndDelete("expired")).thenReturn(Optional.empty());
         assertThrows(InvalidTokenException.class, () -> authService.confirmPasswordReset("expired", "newPass"));
     }
 
     @Test
-    @DisplayName("비밀번호 재설정 — 토큰 선삭제 후 비밀번호 변경")
+    @DisplayName("비밀번호 재설정 — getAndDelete 원자 처리 후 비밀번호 변경")
     void confirmPasswordReset_tokenDeletedBeforePasswordChange() {
-        when(passwordResetTokenStore.findFanIdByToken("valid-token")).thenReturn(Optional.of(6L));
+        when(passwordResetTokenStore.getAndDelete("valid-token")).thenReturn(Optional.of(6L));
         Fan fan = Fan.builder().id(6L).email("fan@email.com").nickname("nick").authProvider(AuthProvider.LOCAL).passwordHash("oldHash").build();
         when(userRepository.findById(6L)).thenReturn(Optional.of(fan));
         when(passwordEncoder.encode("newPass")).thenReturn("newHash");
@@ -230,9 +229,10 @@ class AuthServiceTest {
 
         authService.confirmPasswordReset("valid-token", "newPass");
 
-        InOrder inOrder = inOrder(passwordResetTokenStore, userRepository);
-        inOrder.verify(passwordResetTokenStore).delete("valid-token");
-        inOrder.verify(userRepository).save(any(Fan.class));
+        verify(passwordResetTokenStore).getAndDelete("valid-token");
+        verify(passwordResetTokenStore, never()).findFanIdByToken(anyString());
+        verify(passwordResetTokenStore, never()).delete(anyString());
+        verify(userRepository).save(any(Fan.class));
     }
 
     // ── requestPasswordReset ────────────────────────────────────────────────
