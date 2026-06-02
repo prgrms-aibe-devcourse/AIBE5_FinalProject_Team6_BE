@@ -56,6 +56,10 @@ public class InventoryHistoryJpaEntity {
         this.qtyAfter = qtyAfter;
         this.referenceId = referenceId;
         this.refType = refType;
+    }
+
+    @PrePersist
+    protected void onCreate() {
         this.createdAt = LocalDateTime.now();
     }
 

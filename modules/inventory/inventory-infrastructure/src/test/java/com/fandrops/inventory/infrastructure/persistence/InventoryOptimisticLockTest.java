@@ -21,7 +21,7 @@ class InventoryOptimisticLockTest {
     private InventoryJpaRepository inventoryJpaRepository;
 
     @Test
-    @DisplayName("stale 버전으로 save 시 ObjectOptimisticLockingFailureException 발생")
+    @DisplayName("stale 버전으로 save 시 ObjectOptimisticLockingFailureException 발생 - 단일 스레드 시뮬레이션")
     void save_withStaleVersion_throwsOptimisticLockException() {
         // given - 초기 저장 (DB version=0)
         InventoryJpaEntity initial = InventoryJpaEntity.from(Inventory.create(1L, 100));

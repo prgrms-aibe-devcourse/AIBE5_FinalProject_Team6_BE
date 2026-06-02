@@ -37,7 +37,11 @@ public class InventoryCommandService {
     public void confirm(Long orderId, Long productId, int qty) {
         Inventory inventory = findByProductId(productId);
         InventoryHistory history = inventory.confirm(qty, orderId);
-        inventoryRepository.save(inventory);
+        try {
+            inventoryRepository.save(inventory);
+        } catch (OptimisticLockingFailureException e) {
+            throw new InventoryLockConflictException(productId);
+        }
         inventoryHistoryRepository.save(history);
     }
 
@@ -45,7 +49,11 @@ public class InventoryCommandService {
     public void restore(Long orderId, Long productId, int qty) {
         Inventory inventory = findByProductId(productId);
         InventoryHistory history = inventory.restore(qty, orderId);
-        inventoryRepository.save(inventory);
+        try {
+            inventoryRepository.save(inventory);
+        } catch (OptimisticLockingFailureException e) {
+            throw new InventoryLockConflictException(productId);
+        }
         inventoryHistoryRepository.save(history);
     }
 
@@ -53,7 +61,11 @@ public class InventoryCommandService {
     public void increase(Long restockId, Long productId, int qty) {
         Inventory inventory = findByProductId(productId);
         InventoryHistory history = inventory.increase(qty, restockId);
-        inventoryRepository.save(inventory);
+        try {
+            inventoryRepository.save(inventory);
+        } catch (OptimisticLockingFailureException e) {
+            throw new InventoryLockConflictException(productId);
+        }
         inventoryHistoryRepository.save(history);
     }
 
