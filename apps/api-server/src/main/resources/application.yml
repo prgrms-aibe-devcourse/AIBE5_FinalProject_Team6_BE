@@ -33,3 +33,9 @@ fandrops:
   frontend-url: ${FRONTEND_URL:http://localhost:3000}
   security:
     password-reset-token-ttl-seconds: 1800
+  ratelimit:
+    order-per-minute: 10
+    queue-join-per-minute: 5
+    payment-per-minute: 10
+    sse-max-emitters: 2000
+    window-ms: 60000

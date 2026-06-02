@@ -92,7 +92,20 @@ API 응답 예: [api-contract § PAYMENT_FAILED / retryable](../api/api-contract
 | `POST /orders` 일시 429 | write 보호 |
 | Hikari `maximum-pool-size` · slow query 알람 | [observability](./observability-metrics.md) |
 
-### 3.6 캐시 miss 폭증
+### 3.6 RateLimit 동작 상세
+
+| 레이어 | 기준 키 | 임계값 (초안) | 응답 | Retry-After |
+| --- | --- | --- | --- | --- |
+| Nginx `limit_req` (1차) | IP | 5–10 r/s (경로별) | 429 / `RATE_LIMITED` | `1` (Nginx `add_header`) |
+| Spring Filter (2차) | fanId | 5–10 req/분 (경로별) | 429 / `RATE_LIMITED` | `60` (Spring 헤더) |
+| SSE 동시 연결 (`limit_conn`) | IP | 3 연결/IP | 429 / `RATE_LIMITED` | `60` |
+| SSE emitter 상한 (Spring) | 전체 | 2000 | 429 / `RATE_LIMITED` | `60` |
+
+- **임계값 조정:** `fandrops.ratelimit.*` (`application.yml`) — k6 결과 기준 재조정
+- **오탐 대응:** `RATE_LIMITED` 비율 > 1% → Grafana Alert → 장성재·지영재 임계값 공동 조정
+- **Redis 다운 시:** Spring Filter 비활성 → Nginx 1차 방어만 동작 ([§3.1](#31-redis-다운))
+
+### 3.7 캐시 miss 폭증
 
 | 조치 | 적용 |
 | --- | --- |

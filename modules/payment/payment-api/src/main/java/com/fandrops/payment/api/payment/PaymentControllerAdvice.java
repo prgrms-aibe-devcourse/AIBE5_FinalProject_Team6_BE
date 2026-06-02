@@ -1,5 +1,6 @@
 package com.fandrops.payment.api.payment;
 
+import com.fandrops.payment.api.queue.SseCapacityExceededException;
 import com.fandrops.payment.application.payment.PaymentAlreadyFailedException;
 import com.fandrops.payment.application.payment.PaymentAmountMismatchException;
 import com.fandrops.payment.application.payment.PaymentConfirmFailedException;
@@ -7,13 +8,14 @@ import com.fandrops.payment.application.payment.PaymentNotFoundException;
 import com.fandrops.payment.application.payment.PaymentLockConflictException;
 import com.fandrops.payment.application.payment.TossAuthenticationException;
 import com.fandrops.payment.application.payment.TossPaymentUnavailableException;
+import jakarta.servlet.http.HttpServletResponse;
 import java.util.stream.Collectors;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-@RestControllerAdvice(basePackageClasses = PaymentController.class)
+@RestControllerAdvice(basePackages = "com.fandrops.payment.api")
 public class PaymentControllerAdvice {
 
     record ErrorDetail(String code, String message, boolean retryable) {}
@@ -80,5 +82,13 @@ public class PaymentControllerAdvice {
     public ResponseEntity<ErrorEnvelope> handle(PaymentLockConflictException e) {
         return ResponseEntity.status(503)
                 .body(ErrorEnvelope.of("INTERNAL_ERROR", "일시적으로 처리할 수 없습니다. 잠시 후 재시도해 주세요.", true));
+    }
+
+    @ExceptionHandler(SseCapacityExceededException.class)
+    public ResponseEntity<ErrorEnvelope> handle(SseCapacityExceededException e,
+                                                HttpServletResponse response) {
+        response.setHeader("Retry-After", "60");
+        return ResponseEntity.status(429)
+                .body(ErrorEnvelope.of("RATE_LIMITED", e.getMessage(), true));
     }
 }
