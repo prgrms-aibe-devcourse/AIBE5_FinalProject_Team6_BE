@@ -11,6 +11,8 @@ public interface FeedImageJpaRepository extends JpaRepository<FeedImageJpaEntity
     // 등록 순서 = 표시 순서 (ERD §5.1)
     List<FeedImageJpaEntity> findByFeedIdOrderByCreatedAt(Long feedId);
 
+    List<FeedImageJpaEntity> findByFeedIdInOrderByCreatedAt(List<Long> feedIds);
+
     @Modifying(clearAutomatically = true)
     @Transactional
     void deleteByFeedId(Long feedId);
