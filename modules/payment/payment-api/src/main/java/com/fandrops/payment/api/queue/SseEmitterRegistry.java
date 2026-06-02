@@ -23,7 +23,7 @@ public class SseEmitterRegistry {
     @Value("${fandrops.ratelimit.sse-max-emitters:2000}")
     private int sseMaxEmitters;
 
-    public SseEmitter register(Long productId, Long fanId) {
+    private SseEmitter register(Long productId, Long fanId) {
         String key = key(productId, fanId);
         SseEmitter emitter = new SseEmitter(sseTimeoutMs);
         emitters.put(key, emitter);
@@ -64,10 +64,6 @@ public class SseEmitterRegistry {
             }
         }
         return Collections.unmodifiableMap(result);
-    }
-
-    public boolean isFull() {
-        return emitters.size() >= sseMaxEmitters;
     }
 
     /**
