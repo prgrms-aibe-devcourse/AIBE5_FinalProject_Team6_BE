@@ -4,4 +4,5 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-validation") // @Valid
     implementation("org.springframework.boot:spring-boot-starter-security")
+    testImplementation("org.mockito:mockito-junit-jupiter")
 }
