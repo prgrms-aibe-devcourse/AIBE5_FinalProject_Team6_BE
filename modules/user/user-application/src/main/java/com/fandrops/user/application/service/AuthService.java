@@ -121,9 +121,7 @@ public class AuthService {
         try {
             return issueTokens(fanId, UserRole.FAN);
         } catch (RuntimeException e) {
-            // issueTokens 실패 시 구 토큰 복원 — 인프라 장애로 인한 영구 로그아웃 방지
-            refreshTokenStore.save(refreshToken, fanId);
-            throw e;
+            throw new InvalidTokenException("토큰 재발급에 실패했습니다. 다시 로그인해 주세요.", e);
         }
     }
 
