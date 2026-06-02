@@ -1,30 +1,28 @@
 package com.fandrops.community.api.comment;
 
 import com.fandrops.common.ApiResponse;
+import com.fandrops.community.api.CommunityControllerSupport;
+import com.fandrops.community.api.Principal;
 import com.fandrops.community.application.comment.CommentCreateCommand;
 import com.fandrops.community.application.comment.CommentResult;
 import com.fandrops.community.application.comment.CommentService;
-import com.fandrops.community.api.Principal;
 import jakarta.validation.Valid;
-import org.slf4j.MDC;
 import org.springframework.core.env.Environment;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Arrays;
 import java.util.Map;
-import java.util.UUID;
+
 @RestController
 @RequestMapping("/api/v1/feeds/{feedId}/comments")
-public class CommentController {
+public class CommentController extends CommunityControllerSupport {
 
     private final CommentService commentService;
-    private final Environment environment;
 
     public CommentController(CommentService commentService, Environment environment) {
+        super(environment);
         this.commentService = commentService;
-        this.environment = environment;
     }
 
     // POST /api/v1/feeds/{feedId}/comments
@@ -39,33 +37,10 @@ public class CommentController {
             @RequestHeader(value = "X-Artist-Member-Id", required = false) Long artistMemberIdHeader) {
 
         Principal principal = resolvePrincipals(authentication, fanIdHeader, artistMemberIdHeader);
-
         CommentResult result = commentService.createComment(new CommentCreateCommand(
                 feedId, artistId, principal.fanId(), principal.artistMemberId(), request.parentId(), request.content()));
         return ResponseEntity.status(201)
                 .body(ApiResponse.ok(Map.of("commentId", result.id()), traceId()));
     }
 
-    private Principal resolvePrincipals(Authentication authentication, Long fanIdHeader, Long artistMemberIdHeader) {
-        if (fanIdHeader != null && isLocalProfile()) {
-            return Principal.ofFan(fanIdHeader);
-        }
-        if (artistMemberIdHeader != null && isLocalProfile()) {
-            return Principal.ofArtistMember(artistMemberIdHeader);
-        }
-        if (authentication != null && authentication.isAuthenticated()
-                && !"anonymousUser".equals(authentication.getPrincipal())) {
-            return Principal.ofFan(Long.parseLong(authentication.getName()));
-        }
-        throw new IllegalArgumentException("인증 정보가 없습니다. Bearer 토큰을 제공하세요.");
-    }
-
-    private boolean isLocalProfile() {
-        return Arrays.asList(environment.getActiveProfiles()).contains("local");
-    }
-
-    private static String traceId() {
-        String id = MDC.get("traceId");
-        return id != null ? id : UUID.randomUUID().toString();
-    }
 }

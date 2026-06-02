@@ -11,9 +11,11 @@ import com.fandrops.community.application.exception.UnauthorizedException;
 import org.slf4j.MDC;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
+import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.util.UUID;
 
@@ -62,6 +64,7 @@ public class CommunityExceptionHandler {
                 .body(ApiResponse.fail("INVALID_TOKEN", e.getMessage(), false, traceId()));
     }
 
+    // JWT sub 클레임이 숫자가 아닌 경우 (토큰 위변조 · 잘못된 발급) -> 401
     @ExceptionHandler(NumberFormatException.class)
     public ResponseEntity<ApiResponse<Void>> numberFormat(NumberFormatException e) {
         return ResponseEntity.status(401)
@@ -80,6 +83,20 @@ public class CommunityExceptionHandler {
                 .map(FieldError::getDefaultMessage)
                 .findFirst()
                 .orElse("요청 형식이 올바르지 않습니다.");
+        return ResponseEntity.status(400)
+                .body(ApiResponse.fail("INVALID_REQUEST", message, false, traceId()));
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiResponse<Void>> methodArgumentTypeMismatch(MethodArgumentTypeMismatchException e) {
+        String message = "경로 변수 '" + e.getName() + "'의 형식이 올바르지 않습니다.";
+        return ResponseEntity.status(400)
+                .body(ApiResponse.fail("INVALID_REQUEST", message, false, traceId()));
+    }
+
+    @ExceptionHandler(MissingRequestHeaderException.class)
+    public ResponseEntity<ApiResponse<Void>> missingRequestHeader(MissingRequestHeaderException e) {
+        String message = "필수 헤더 '" + e.getHeaderName() + "'가 없습니다.";
         return ResponseEntity.status(400)
                 .body(ApiResponse.fail("INVALID_REQUEST", message, false, traceId()));
     }

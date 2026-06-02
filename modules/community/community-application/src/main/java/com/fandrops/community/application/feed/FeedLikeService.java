@@ -46,6 +46,9 @@ public class FeedLikeService {
             }
             feedLikeRepository.save(FeedLike.byFan(feedId, fanId, clock));
         } else {
+            if (artistMemberId == null) {
+                throw new IllegalArgumentException("인증 정보가 없습니다. Bearer 토큰을 제공하세요.");
+            }
             if (feedLikeRepository.existsByFeedIdAndArtistMemberId(feedId, artistMemberId)) {
                 throw new AlreadyLikedException("이미 좋아요를 눌렀습니다.");
             }

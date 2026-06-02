@@ -1,23 +1,21 @@
 package com.fandrops.community.api.comment;
 
+import com.fandrops.community.api.CommunityControllerSupport;
 import com.fandrops.community.application.comment.CommentLikeService;
 import org.springframework.core.env.Environment;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Arrays;
-
 @RestController
 @RequestMapping("/api/v1/comments/{commentId}/likes")
-public class CommentLikeController {
+public class CommentLikeController extends CommunityControllerSupport {
 
     private final CommentLikeService commentLikeService;
-    private final Environment environment;
 
     public CommentLikeController(CommentLikeService commentLikeService, Environment environment) {
+        super(environment);
         this.commentLikeService = commentLikeService;
-        this.environment = environment;
     }
 
     // POST /api/v1/comments/{commentId}/likes — 팬만 가능
@@ -53,9 +51,5 @@ public class CommentLikeController {
             return Long.parseLong(authentication.getName());
         }
         throw new IllegalArgumentException("인증 정보가 없습니다. Bearer 토큰을 제공하세요.");
-    }
-
-    private boolean isLocalProfile() {
-        return Arrays.asList(environment.getActiveProfiles()).contains("local");
     }
 }

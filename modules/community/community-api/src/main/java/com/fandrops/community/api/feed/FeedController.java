@@ -1,6 +1,7 @@
 package com.fandrops.community.api.feed;
 
 import com.fandrops.common.ApiResponse;
+import com.fandrops.community.api.CommunityControllerSupport;
 import com.fandrops.community.application.feed.FeedCreateCommand;
 import com.fandrops.community.application.feed.FeedListResult;
 import com.fandrops.community.application.feed.FeedResult;
@@ -8,26 +9,22 @@ import com.fandrops.community.application.feed.FeedService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
-import org.slf4j.MDC;
 import org.springframework.core.env.Environment;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Arrays;
 import java.util.Map;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/artists/{artistId}/feeds")
-public class FeedController {
+public class FeedController extends CommunityControllerSupport {
 
     private final FeedService feedService;
-    private final Environment environment;
 
     public FeedController(FeedService feedService, Environment environment) {
+        super(environment);
         this.feedService = feedService;
-        this.environment = environment;
     }
 
     @PostMapping
@@ -66,8 +63,8 @@ public class FeedController {
         return ResponseEntity.ok(ApiResponse.ok(result, traceId()));
     }
 
-    // DELETE /api/v1/feeds/{feedId} — 피드 삭제 (작성자 아티스트 멤버만)
-    @DeleteMapping("/api/v1/feeds/{feedId}")
+    // DELETE /api/v1/artists/{artistId}/feeds/{feedId} — 피드 삭제 (작성자 아티스트 멤버만)
+    @DeleteMapping("/{feedId}")
     public ResponseEntity<Void> deleteFeed(
             @PathVariable Long feedId,
             Authentication authentication,
@@ -87,14 +84,5 @@ public class FeedController {
             return Long.parseLong(authentication.getName());
         }
         throw new IllegalArgumentException("인증 정보가 없습니다. Bearer 토큰을 제공하세요.");
-    }
-
-    private boolean isLocalProfile() {
-        return Arrays.asList(environment.getActiveProfiles()).contains("local");
-    }
-
-    private static String traceId() {
-        String id = MDC.get("traceId");
-        return id != null ? id : UUID.randomUUID().toString();
     }
 }
