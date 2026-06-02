@@ -7,6 +7,8 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
@@ -14,6 +16,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 public class RateLimitFilter extends OncePerRequestFilter {
+
+    private static final Logger log = LoggerFactory.getLogger(RateLimitFilter.class);
 
     private final RateLimitService rateLimitService;
     private final RateLimitProperties props;
@@ -47,9 +51,14 @@ public class RateLimitFilter extends OncePerRequestFilter {
         }
 
         int limit = resolveLimit(group);
-        if (!rateLimitService.isAllowed(fanId, group, limit, props.getWindowMs())) {
-            rejectWith429(response);
-            return;
+        try {
+            if (!rateLimitService.isAllowed(fanId, group, limit, props.getWindowMs())) {
+                rejectWith429(response);
+                return;
+            }
+        } catch (Exception e) {
+            log.warn("RateLimit Redis 오류 — fail-open 처리", e);
+            // Redis 장애 시 통과, Nginx 1차 방어에 의존 (failure-policy.md §3.1)
         }
 
         filterChain.doFilter(request, response);
@@ -81,6 +90,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
         try {
             return Long.parseLong(auth.getName());
         } catch (NumberFormatException e) {
+            // fanId 기반 RateLimit은 FAN 전용 — ARTIST/AGENCY는 숫자가 아닌 name을 사용하므로
+            // null 반환 후 Nginx IP 기반 1차 방어에 위임한다 (의도된 설계)
             return null;
         }
     }
@@ -89,7 +100,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         response.setStatus(429);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding("UTF-8");
-        response.setHeader("Retry-After", "60");
+        response.setHeader("Retry-After", String.valueOf(props.getWindowMs() / 1000));
         ApiResponse<?> body = ApiResponse.fail(
                 "RATE_LIMITED",
                 "요청이 너무 많습니다. 잠시 후 다시 시도해주세요.",

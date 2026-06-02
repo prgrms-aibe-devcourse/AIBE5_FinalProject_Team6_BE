@@ -70,6 +70,17 @@ public class SseEmitterRegistry {
         return emitters.size() >= sseMaxEmitters;
     }
 
+    /**
+     * isFull 체크와 register를 원자적으로 수행. TOCTOU 방지.
+     * 상한 초과 시 SseCapacityExceededException을 던진다.
+     */
+    public synchronized SseEmitter registerOrReject(Long productId, Long fanId) {
+        if (emitters.size() >= sseMaxEmitters) {
+            throw new SseCapacityExceededException();
+        }
+        return register(productId, fanId);
+    }
+
     private String key(Long productId, Long fanId) {
         return productId + ":" + fanId;
     }

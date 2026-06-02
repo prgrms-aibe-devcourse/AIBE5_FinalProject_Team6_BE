@@ -78,10 +78,7 @@ public class WaitQueueController {
             @RequestHeader(value = "X-Fan-Id", required = false) Long fanIdHeader) {
 
         Long fanId = resolveFanId(authentication, fanIdHeader);
-        if (sseEmitterRegistry.isFull()) {
-            throw new SseCapacityExceededException();
-        }
-        SseEmitter emitter = sseEmitterRegistry.register(productId, fanId);
+        SseEmitter emitter = sseEmitterRegistry.registerOrReject(productId, fanId);
 
         // 연결 직후 현재 상태를 즉시 전송
         try {
