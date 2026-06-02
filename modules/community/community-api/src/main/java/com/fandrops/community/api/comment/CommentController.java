@@ -6,19 +6,24 @@ import com.fandrops.community.application.comment.CommentResult;
 import com.fandrops.community.application.comment.CommentService;
 import jakarta.validation.Valid;
 import org.slf4j.MDC;
+import org.springframework.core.env.Environment;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Arrays;
 import java.util.Map;
+import java.util.UUID;
 @RestController
 @RequestMapping("/api/v1/feeds/{feedId}/comments")
 public class CommentController {
 
     private final CommentService commentService;
+    private final Environment environment;
 
-    public CommentController(CommentService commentService) {
+    public CommentController(CommentService commentService, Environment environment) {
         this.commentService = commentService;
+        this.environment = environment;
     }
 
     // POST /api/v1/feeds/{feedId}/comments
@@ -43,20 +48,25 @@ public class CommentController {
     }
 
     private Long[] resolvePrincipals(Authentication authentication, Long fanIdHeader, Long artistMemberIdHeader) {
-        if (fanIdHeader != null) {
+        if (fanIdHeader != null && isLocalProfile()) {
             return new Long[]{fanIdHeader, null};
         }
-        if (artistMemberIdHeader != null) {
+        if (artistMemberIdHeader != null && isLocalProfile()) {
             return new Long[]{null, artistMemberIdHeader};
         }
         if (authentication != null && authentication.isAuthenticated()
                 && !"anonymousUser".equals(authentication.getPrincipal())) {
             return new Long[]{Long.parseLong(authentication.getName()), null};
         }
-        throw new IllegalArgumentException("인증 정보가 없습니다.");
+        throw new IllegalArgumentException("인증 정보가 없습니다. Bearer 토큰을 제공하세요.");
+    }
+
+    private boolean isLocalProfile() {
+        return Arrays.asList(environment.getActiveProfiles()).contains("local");
     }
 
     private static String traceId() {
-        return MDC.get("traceId");
+        String id = MDC.get("traceId");
+        return id != null ? id : UUID.randomUUID().toString();
     }
 }

@@ -1,18 +1,23 @@
 package com.fandrops.community.api.feed;
 
 import com.fandrops.community.application.feed.FeedLikeService;
+import org.springframework.core.env.Environment;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.Arrays;
 
 @RestController
 @RequestMapping("/api/v1/feeds/{feedId}/likes")
 public class FeedLikeController {
 
     private final FeedLikeService feedLikeService;
+    private final Environment environment;
 
-    public FeedLikeController(FeedLikeService feedLikeService) {
+    public FeedLikeController(FeedLikeService feedLikeService, Environment environment) {
         this.feedLikeService = feedLikeService;
+        this.environment = environment;
     }
 
     // POST /api/v1/feeds/{feedId}/likes
@@ -47,16 +52,20 @@ public class FeedLikeController {
 
     // [0]=fanId, [1]=artistMemberId — 둘 중 하나만 non-null
     private Long[] resolvePrincipals(Authentication authentication, Long fanIdHeader, Long artistMemberIdHeader) {
-        if (fanIdHeader != null) {
+        if (fanIdHeader != null && isLocalProfile()) {
             return new Long[]{fanIdHeader, null};
         }
-        if (artistMemberIdHeader != null) {
+        if (artistMemberIdHeader != null && isLocalProfile()) {
             return new Long[]{null, artistMemberIdHeader};
         }
         if (authentication != null && authentication.isAuthenticated()
                 && !"anonymousUser".equals(authentication.getPrincipal())) {
             return new Long[]{Long.parseLong(authentication.getName()), null};
         }
-        throw new IllegalArgumentException("인증 정보가 없습니다.");
+        throw new IllegalArgumentException("인증 정보가 없습니다. Bearer 토큰을 제공하세요.");
+    }
+
+    private boolean isLocalProfile() {
+        return Arrays.asList(environment.getActiveProfiles()).contains("local");
     }
 }
