@@ -123,6 +123,7 @@ Gradle 모듈·담당자: [architecture.md § 도메인 오너십](../architectu
 | POST | `/artists/{id}/notices` | 공지 작성 (아티스트 멤버) | `title`, `content`, `imageUrls[]` | `201` `{ noticeId }` |
 | POST | `/artists/{id}/feeds` | 아티스트 게시글 작성(텍스트+이미지) | `content`, `imageUrls[]` | `201` `{ feedId }` |
 | GET | `/artists/{id}/feeds` | 피드 목록 | `?cursor`, `size` | `{ items: [...], nextCursor }` |
+| DELETE | `/artists/{id}/feeds/{feedId}` | 피드 삭제 (작성자 아티스트 멤버만) | — | `204 No Content` |
 | POST | `/feeds/{id}/comments` | 댓글/답글 작성 | `content`, `parentId` (optional) | `201` `{ commentId }` |
 | POST | `/feeds/{id}/likes` | 피드 좋아요 (`FEED_LIKE`) | — | `201` |
 | DELETE | `/feeds/{id}/likes` | 피드 좋아요 취소 | — | `204 No Content` |
