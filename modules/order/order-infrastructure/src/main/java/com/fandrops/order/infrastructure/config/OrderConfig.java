@@ -1,11 +1,12 @@
 package com.fandrops.order.infrastructure.config;
 
+import com.fandrops.inventory.application.InventoryCommandService;
 import com.fandrops.order.application.OrderService;
 import com.fandrops.order.domain.port.AccessTicketValidatePort;
 import com.fandrops.order.domain.port.InventoryReservePort;
 import com.fandrops.order.domain.port.OrderRepository;
 import com.fandrops.order.domain.port.ProductPricePort;
-import com.fandrops.order.infrastructure.adapter.StubInventoryReserveAdapter;
+import com.fandrops.order.infrastructure.adapter.InventoryReserveAdapter;
 import com.fandrops.order.infrastructure.adapter.StubProductPriceAdapter;
 import com.fandrops.order.infrastructure.persistence.OrderJpaRepository;
 import com.fandrops.order.infrastructure.persistence.OrderRepositoryAdapter;
@@ -24,8 +25,8 @@ public class OrderConfig {
     // AccessTicketValidatePort 빈은 apps/api-server에서 PaymentAccessTicketValidator(payment-infrastructure)로 등록.
 
     @Bean
-    public InventoryReservePort inventoryReservePort() {
-        return new StubInventoryReserveAdapter();
+    public InventoryReservePort inventoryReservePort(InventoryCommandService inventoryCommandService) {
+        return new InventoryReserveAdapter(inventoryCommandService);
     }
 
     @Bean
