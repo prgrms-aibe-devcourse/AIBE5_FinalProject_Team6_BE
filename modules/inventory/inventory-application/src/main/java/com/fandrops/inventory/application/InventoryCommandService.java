@@ -1,10 +1,12 @@
 package com.fandrops.inventory.application;
 
+import com.fandrops.inventory.application.exception.InventoryLockConflictException;
 import com.fandrops.inventory.application.exception.InventoryNotFoundException;
 import com.fandrops.inventory.domain.Inventory;
 import com.fandrops.inventory.domain.InventoryHistory;
 import com.fandrops.inventory.domain.port.InventoryHistoryRepository;
 import com.fandrops.inventory.domain.port.InventoryRepository;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.transaction.annotation.Transactional;
 
 /** 재고 예약·확정·복원·증가를 단일 TX에서 처리하는 application 서비스. */
@@ -23,7 +25,11 @@ public class InventoryCommandService {
     public void reserve(Long orderId, Long productId, int qty) {
         Inventory inventory = findByProductId(productId);
         InventoryHistory history = inventory.reserve(qty, orderId);
-        inventoryRepository.save(inventory);
+        try {
+            inventoryRepository.save(inventory);
+        } catch (OptimisticLockingFailureException e) {
+            throw new InventoryLockConflictException(productId);
+        }
         inventoryHistoryRepository.save(history);
     }
 

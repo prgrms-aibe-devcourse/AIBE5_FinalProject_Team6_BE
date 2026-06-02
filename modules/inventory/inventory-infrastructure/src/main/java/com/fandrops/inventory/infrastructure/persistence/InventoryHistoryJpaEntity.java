@@ -43,12 +43,12 @@ public class InventoryHistoryJpaEntity {
     @Column(name = "ref_type", nullable = false)
     private InventoryRefType refType;
 
-    @Column(name = "created_at")
+    @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
-    private InventoryHistoryJpaEntity(Long id, Long inventoryId, InventoryChangeType changeType,
-                                     int qtyDelta, int qtyBefore, int qtyAfter, Long referenceId, InventoryRefType refType) {
-        this.id = id;
+    private InventoryHistoryJpaEntity(Long inventoryId, InventoryChangeType changeType,
+                                      int qtyDelta, int qtyBefore, int qtyAfter,
+                                      Long referenceId, InventoryRefType refType) {
         this.inventoryId = inventoryId;
         this.changeType = changeType;
         this.qtyDelta = qtyDelta;
@@ -61,7 +61,6 @@ public class InventoryHistoryJpaEntity {
 
     public static InventoryHistoryJpaEntity from(InventoryHistory inventoryHistory) {
         return new InventoryHistoryJpaEntity(
-            inventoryHistory.getId(),
             inventoryHistory.getInventoryId(),
             inventoryHistory.getChangeType(),
             inventoryHistory.getDeltaQty(),

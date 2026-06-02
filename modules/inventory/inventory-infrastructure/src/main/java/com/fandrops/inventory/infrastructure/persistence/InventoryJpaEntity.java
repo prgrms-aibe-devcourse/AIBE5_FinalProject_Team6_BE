@@ -44,6 +44,11 @@ public class InventoryJpaEntity {
         this.reservedQty = reservedQty;
         this.availableQty = availableQty;
         this.version = version;
+    }
+
+    @PrePersist
+    @PreUpdate
+    protected void onPersistOrUpdate() {
         this.updatedAt = LocalDateTime.now();
     }
 
