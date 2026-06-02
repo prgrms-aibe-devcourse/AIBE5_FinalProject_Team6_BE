@@ -58,8 +58,10 @@ public class FeedController extends CommunityControllerSupport {
                 && !"anonymousUser".equals(authentication.getPrincipal())) {
             if (hasArtistOrAgencyRole(authentication)) {
                 viewerArtistMemberId = Long.parseLong(authentication.getName());
-            } else {
+            } else if (hasFanRole(authentication)) {
                 viewerFanId = Long.parseLong(authentication.getName());
+            } else {
+                throw new IllegalStateException("지원하지 않는 role: " + authentication.getAuthorities());
             }
         }
 
@@ -83,6 +85,11 @@ public class FeedController extends CommunityControllerSupport {
         return authentication.getAuthorities().stream()
                 .anyMatch(a -> a.getAuthority().equals("ARTIST")
                         || a.getAuthority().equals("AGENCY"));
+    }
+
+    private static boolean hasFanRole(Authentication authentication) {
+        return authentication.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("FAN"));
     }
 
     private Long resolveArtistMemberId(Authentication authentication, Long header) {
