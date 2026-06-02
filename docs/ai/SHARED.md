@@ -156,6 +156,13 @@
 
 ---
 
+## Flyway 규칙 (공통)
+
+- **기존 migration 파일(V1~현재) 수정 금지** — Flyway 체크섬 감지로 앱 기동 거부됨
+- **신규 파일(다음 버전부터)**: `CREATE TABLE IF NOT EXISTS` 필수, 인덱스는 테이블 내부 선언 (MySQL `CREATE INDEX IF NOT EXISTS` 미지원)
+
+---
+
 ## 금지 (공통)
 
 - git config 변경, `--no-verify`, force push `main`/`develop`
