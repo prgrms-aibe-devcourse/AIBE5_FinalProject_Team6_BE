@@ -56,7 +56,11 @@ public class FeedController extends CommunityControllerSupport {
         if (viewerFanId == null && viewerArtistMemberId == null
                 && authentication != null && authentication.isAuthenticated()
                 && !"anonymousUser".equals(authentication.getPrincipal())) {
-            viewerFanId = Long.parseLong(authentication.getName());
+            if (hasArtistOrAgencyRole(authentication)) {
+                viewerArtistMemberId = Long.parseLong(authentication.getName());
+            } else {
+                viewerFanId = Long.parseLong(authentication.getName());
+            }
         }
 
         FeedListResult result = feedService.getFeeds(artistId, cursor, size, viewerFanId, viewerArtistMemberId);
@@ -73,6 +77,12 @@ public class FeedController extends CommunityControllerSupport {
         Long artistMemberId = resolveArtistMemberId(authentication, artistMemberIdHeader);
         feedService.deleteFeed(feedId, artistMemberId);
         return ResponseEntity.noContent().build();
+    }
+
+    private static boolean hasArtistOrAgencyRole(Authentication authentication) {
+        return authentication.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ARTIST")
+                        || a.getAuthority().equals("AGENCY"));
     }
 
     private Long resolveArtistMemberId(Authentication authentication, Long header) {
