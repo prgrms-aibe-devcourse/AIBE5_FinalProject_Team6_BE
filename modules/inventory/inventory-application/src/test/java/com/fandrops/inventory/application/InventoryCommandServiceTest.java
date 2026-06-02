@@ -47,30 +47,34 @@ class InventoryCommandServiceTest {
     class Reserve {
 
         @Test
-        @DisplayName("재고 예약 시 RESERVE 이력 저장")
-        void reserve_savesInventoryAndHistory() {
+        @DisplayName("Atomic Update 성공 시 RESERVE 이력 저장, save() 미호출")
+        void reserve_savesHistoryWithoutDirectSave() {
             Inventory inventory = Inventory.create(PRODUCT_ID, 100);
             given(inventoryRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(inventory));
+            given(inventoryRepository.reserveAtomic(PRODUCT_ID, 10)).willReturn(1);
 
             sut.reserve(ORDER_ID, PRODUCT_ID, 10);
 
-            verify(inventoryRepository).save(inventory);
+            verify(inventoryRepository, never()).save(any());
             ArgumentCaptor<InventoryHistory> captor = ArgumentCaptor.forClass(InventoryHistory.class);
             verify(inventoryHistoryRepository).save(captor.capture());
-            assertEquals(InventoryChangeType.RESERVE, captor.getValue().getChangeType());
-            assertEquals(ORDER_ID, captor.getValue().getReferenceId());
-            assertEquals(10, captor.getValue().getDeltaQty());
+            InventoryHistory saved = captor.getValue();
+            assertEquals(InventoryChangeType.RESERVE, saved.getChangeType());
+            assertEquals(ORDER_ID, saved.getReferenceId());
+            assertEquals(10, saved.getDeltaQty());
+            assertEquals(100, saved.getQtyBefore());
+            assertEquals(90, saved.getQtyAfter());
         }
 
         @Test
-        @DisplayName("품절 시 OutOfStockException 전파, save 미호출")
-        void reserve_outOfStock_propagatesWithoutSave() {
+        @DisplayName("Atomic Update 0 rows(재고 부족) 시 OutOfStockException, 이력 미저장")
+        void reserve_atomicUpdateZeroRows_throwsOutOfStock() {
             Inventory inventory = Inventory.create(PRODUCT_ID, 5);
-            inventory.reserve(5, ORDER_ID); // availableQty=0 셋업
             given(inventoryRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(inventory));
+            given(inventoryRepository.reserveAtomic(PRODUCT_ID, 10)).willReturn(0);
 
             assertThrows(OutOfStockException.class,
-                    () -> sut.reserve(ORDER_ID, PRODUCT_ID, 1));
+                    () -> sut.reserve(ORDER_ID, PRODUCT_ID, 10));
 
             verify(inventoryRepository, never()).save(any());
             verify(inventoryHistoryRepository, never()).save(any());
