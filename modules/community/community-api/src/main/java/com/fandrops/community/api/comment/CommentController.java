@@ -4,6 +4,7 @@ import com.fandrops.common.ApiResponse;
 import com.fandrops.community.application.comment.CommentCreateCommand;
 import com.fandrops.community.application.comment.CommentResult;
 import com.fandrops.community.application.comment.CommentService;
+import com.fandrops.community.api.Principal;
 import jakarta.validation.Valid;
 import org.slf4j.MDC;
 import org.springframework.core.env.Environment;
@@ -37,26 +38,24 @@ public class CommentController {
             @RequestHeader(value = "X-Fan-Id", required = false) Long fanIdHeader,
             @RequestHeader(value = "X-Artist-Member-Id", required = false) Long artistMemberIdHeader) {
 
-        Long[] principals = resolvePrincipals(authentication, fanIdHeader, artistMemberIdHeader);
-        Long fanId = principals[0];
-        Long artistMemberId = principals[1];
+        Principal principal = resolvePrincipals(authentication, fanIdHeader, artistMemberIdHeader);
 
         CommentResult result = commentService.createComment(new CommentCreateCommand(
-                feedId, artistId, fanId, artistMemberId, request.parentId(), request.content()));
+                feedId, artistId, principal.fanId(), principal.artistMemberId(), request.parentId(), request.content()));
         return ResponseEntity.status(201)
                 .body(ApiResponse.ok(Map.of("commentId", result.id()), traceId()));
     }
 
-    private Long[] resolvePrincipals(Authentication authentication, Long fanIdHeader, Long artistMemberIdHeader) {
+    private Principal resolvePrincipals(Authentication authentication, Long fanIdHeader, Long artistMemberIdHeader) {
         if (fanIdHeader != null && isLocalProfile()) {
-            return new Long[]{fanIdHeader, null};
+            return Principal.ofFan(fanIdHeader);
         }
         if (artistMemberIdHeader != null && isLocalProfile()) {
-            return new Long[]{null, artistMemberIdHeader};
+            return Principal.ofArtistMember(artistMemberIdHeader);
         }
         if (authentication != null && authentication.isAuthenticated()
                 && !"anonymousUser".equals(authentication.getPrincipal())) {
-            return new Long[]{Long.parseLong(authentication.getName()), null};
+            return Principal.ofFan(Long.parseLong(authentication.getName()));
         }
         throw new IllegalArgumentException("인증 정보가 없습니다. Bearer 토큰을 제공하세요.");
     }

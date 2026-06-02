@@ -1,5 +1,6 @@
 package com.fandrops.community.api.feed;
 
+import com.fandrops.community.api.Principal;
 import com.fandrops.community.application.feed.FeedLikeService;
 import org.springframework.core.env.Environment;
 import org.springframework.http.ResponseEntity;
@@ -29,11 +30,9 @@ public class FeedLikeController {
             @RequestHeader(value = "X-Fan-Id", required = false) Long fanIdHeader,
             @RequestHeader(value = "X-Artist-Member-Id", required = false) Long artistMemberIdHeader) {
 
-        Long[] principals = resolvePrincipals(authentication, fanIdHeader, artistMemberIdHeader);
-        Long fanId = principals[0];
-        Long artistMemberId = principals[1];
+        Principal principal = resolvePrincipals(authentication, fanIdHeader, artistMemberIdHeader);
 
-        feedLikeService.likeFeed(feedId, fanId, artistMemberId, artistId);
+        feedLikeService.likeFeed(feedId, principal.fanId(), principal.artistMemberId(), artistId);
         return ResponseEntity.status(201).build();
     }
 
@@ -45,22 +44,21 @@ public class FeedLikeController {
             @RequestHeader(value = "X-Fan-Id", required = false) Long fanIdHeader,
             @RequestHeader(value = "X-Artist-Member-Id", required = false) Long artistMemberIdHeader) {
 
-        Long[] principals = resolvePrincipals(authentication, fanIdHeader, artistMemberIdHeader);
-        feedLikeService.unlikeFeed(feedId, principals[0], principals[1]);
+        Principal principal = resolvePrincipals(authentication, fanIdHeader, artistMemberIdHeader);
+        feedLikeService.unlikeFeed(feedId, principal.fanId(), principal.artistMemberId());
         return ResponseEntity.noContent().build();
     }
 
-    // [0]=fanId, [1]=artistMemberId — 둘 중 하나만 non-null
-    private Long[] resolvePrincipals(Authentication authentication, Long fanIdHeader, Long artistMemberIdHeader) {
+    private Principal resolvePrincipals(Authentication authentication, Long fanIdHeader, Long artistMemberIdHeader) {
         if (fanIdHeader != null && isLocalProfile()) {
-            return new Long[]{fanIdHeader, null};
+            return Principal.ofFan(fanIdHeader);
         }
         if (artistMemberIdHeader != null && isLocalProfile()) {
-            return new Long[]{null, artistMemberIdHeader};
+            return Principal.ofArtistMember(artistMemberIdHeader);
         }
         if (authentication != null && authentication.isAuthenticated()
                 && !"anonymousUser".equals(authentication.getPrincipal())) {
-            return new Long[]{Long.parseLong(authentication.getName()), null};
+            return Principal.ofFan(Long.parseLong(authentication.getName()));
         }
         throw new IllegalArgumentException("인증 정보가 없습니다. Bearer 토큰을 제공하세요.");
     }
