@@ -26,7 +26,7 @@ public class PasswordResetTokenStoreImpl implements PasswordResetTokenStore {
      */
     private static final RedisScript<Long> GENERATE_SCRIPT = RedisScript.of(
             "local old = redis.call('GET', KEYS[1]) " +
-            "if old ~= false then redis.call('DEL', ARGV[4] .. old) end " +
+            "if old ~= false then redis.call('DEL', ARGV[4] .. old) end " + // Cluster 미지원: DEL 대상 키를 KEYS 대신 ARGV로 전달
             "redis.call('SETEX', KEYS[2], tonumber(ARGV[2]), ARGV[1]) " +
             "redis.call('SETEX', KEYS[1], tonumber(ARGV[2]), ARGV[3]) " +
             "return 1",
@@ -37,7 +37,7 @@ public class PasswordResetTokenStoreImpl implements PasswordResetTokenStore {
 
     public PasswordResetTokenStoreImpl(
             StringRedisTemplate redisTemplate,
-            @Value("${fandrops.security.password-reset-token-ttl-seconds:1800}") long passwordResetTtlSeconds) {
+            @Value("${fandrops.security.password-reset-token-ttl-seconds}") long passwordResetTtlSeconds) {
         this.redisTemplate = redisTemplate;
         this.passwordResetTtlSeconds = passwordResetTtlSeconds;
     }
@@ -66,10 +66,7 @@ public class PasswordResetTokenStoreImpl implements PasswordResetTokenStore {
 
     @Override
     public void delete(String token) {
-        String fanIdValue = redisTemplate.opsForValue().getAndDelete(KEY_PREFIX + token);
-        if (fanIdValue != null) {
-            redisTemplate.delete(FAN_KEY_PREFIX + fanIdValue);
-        }
+        getAndDelete(token); // 반환값 무시 — 로그아웃 전용
     }
 
     @Override

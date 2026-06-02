@@ -121,6 +121,8 @@ public class AuthService {
         try {
             return issueTokens(fanId, UserRole.FAN);
         } catch (RuntimeException e) {
+            // issueTokens 실패 시 구 토큰 소실 → 재로그인 필요.
+            // Redis 장애 확률 < 토큰 재사용 방지를 우선한 의도적 선택.
             throw new InvalidTokenException("토큰 재발급에 실패했습니다. 다시 로그인해 주세요.", e);
         }
     }

@@ -13,8 +13,8 @@ class RedisStoreUtils {
         try {
             return Optional.of(Long.parseLong(value));
         } catch (NumberFormatException e) {
-            log.warn("Invalid fanId payload in Redis: '{}...'",
-                    value.length() > 4 ? value.substring(0, 4) : value);
+            String preview = value.length() > 4 ? value.substring(0, 4) + "..." : value;
+            log.warn("Invalid fanId payload in Redis: '{}'", preview);
             return Optional.empty();
         }
     }
