@@ -6,4 +6,8 @@ public class ReserveConflictException extends RuntimeException {
     public ReserveConflictException(Long productId) {
         super(String.format("재고 선점에 실패했습니다. 잠시 후 다시 시도해 주세요: productId=%d", productId));
     }
+
+    public ReserveConflictException(Long productId, Throwable cause) {
+        super(String.format("재고 선점에 실패했습니다. 잠시 후 다시 시도해 주세요: productId=%d", productId), cause);
+    }
 }

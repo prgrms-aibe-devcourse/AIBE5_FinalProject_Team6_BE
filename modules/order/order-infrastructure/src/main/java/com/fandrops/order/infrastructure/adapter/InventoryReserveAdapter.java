@@ -17,9 +17,9 @@ public class InventoryReserveAdapter implements InventoryReservePort {
         try {
             inventoryCommandService.reserve(orderId, productId, quantity);
         } catch (OutOfStockException e) {
-            throw new com.fandrops.order.domain.exception.OutOfStockException(productId);
+            throw new com.fandrops.order.domain.exception.OutOfStockException(productId, e);
         } catch (ReserveFailedException | InventoryLockConflictException e) {
-            throw new com.fandrops.order.domain.exception.ReserveConflictException(productId);
+            throw new com.fandrops.order.domain.exception.ReserveConflictException(productId, e);
         }
     }
 }

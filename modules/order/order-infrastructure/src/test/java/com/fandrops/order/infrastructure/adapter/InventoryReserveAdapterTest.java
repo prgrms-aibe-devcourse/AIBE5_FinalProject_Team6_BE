@@ -16,7 +16,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.BDDMockito.willDoNothing;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.verify;
 
@@ -41,8 +40,6 @@ class InventoryReserveAdapterTest {
         @Test
         @DisplayName("정상 예약 시 InventoryCommandService.reserve() 호출")
         void reserve_success() {
-            willDoNothing().given(inventoryCommandService).reserve(ORDER_ID, PRODUCT_ID, QTY);
-
             sut.reserve(PRODUCT_ID, QTY, ORDER_ID);
 
             verify(inventoryCommandService).reserve(ORDER_ID, PRODUCT_ID, QTY);
