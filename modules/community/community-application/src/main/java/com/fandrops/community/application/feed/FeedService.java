@@ -1,6 +1,7 @@
 package com.fandrops.community.application.feed;
 
 import com.fandrops.community.application.exception.FeedNotFoundException;
+import com.fandrops.community.application.exception.FeedOwnershipException;
 import com.fandrops.community.domain.feed.ArtistFeed;
 import com.fandrops.community.domain.feed.FeedImage;
 import com.fandrops.community.domain.feed.repository.ArtistFeedRepository;
@@ -15,7 +16,9 @@ import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional(readOnly = true)
@@ -58,7 +61,14 @@ public class FeedService {
 
     public FeedListResult getFeeds(Long artistId, String cursor, int size,
                                    Long viewerFanId, Long viewerArtistMemberId) {
-        Long cursorId = cursor != null ? Long.parseLong(cursor) : null;
+        Long cursorId = null;
+        if (cursor != null) {
+            try {
+                cursorId = Long.parseLong(cursor);
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("cursor 형식이 올바르지 않습니다: " + cursor);
+            }
+        }
         List<ArtistFeed> feeds = feedRepository.findByArtistId(artistId, cursorId, size + 1);
         boolean hasMore = feeds.size() > size;
         List<ArtistFeed> page = hasMore ? feeds.subList(0, size) : feeds;
@@ -66,8 +76,12 @@ public class FeedService {
         List<Long> feedIds = page.stream().map(ArtistFeed::getId).toList();
         Set<Long> likedFeedIds = resolveLikedFeedIds(feedIds, viewerFanId, viewerArtistMemberId);
 
+        Map<Long, List<FeedImage>> imagesByFeedId = imageRepository
+                .findByFeedIdInOrderByCreatedAt(feedIds).stream()
+                .collect(Collectors.groupingBy(FeedImage::getFeedId));
+
         List<FeedResult> items = page.stream()
-                .map(f -> toResult(f, imageRepository.findByFeedIdOrderByCreatedAt(f.getId()),
+                .map(f -> toResult(f, imagesByFeedId.getOrDefault(f.getId(), List.of()),
                         likedFeedIds.contains(f.getId())))
                 .toList();
         String nextCursor = hasMore ? String.valueOf(page.get(page.size() - 1).getId()) : null;
@@ -89,9 +103,13 @@ public class FeedService {
 
     // 단일 TX: comment_like → comment → feed_like → feed_image → feed 순으로 삭제
     @Transactional
-    public void deleteFeed(Long feedId) {
+    public void deleteFeed(Long feedId, Long requesterArtistMemberId) {
         ArtistFeed feed = feedRepository.findById(feedId)
                 .orElseThrow(() -> new FeedNotFoundException("피드를 찾을 수 없습니다."));
+
+        if (!feed.getArtistMemberId().equals(requesterArtistMemberId)) {
+            throw new FeedOwnershipException("피드 작성자만 삭제할 수 있습니다.");
+        }
 
         commentLikeRepository.deleteByFeedId(feedId);
         commentRepository.deleteByFeedId(feedId);
