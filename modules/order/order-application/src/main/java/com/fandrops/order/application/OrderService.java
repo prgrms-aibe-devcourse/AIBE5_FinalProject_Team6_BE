@@ -5,6 +5,7 @@ import com.fandrops.order.application.dto.CreateOrderResult;
 import com.fandrops.order.domain.Order;
 import com.fandrops.order.domain.OrderItem;
 import com.fandrops.order.domain.OrderStatus;
+import com.fandrops.order.domain.exception.OrderNotFoundException;
 import com.fandrops.order.domain.exception.OutOfStockException;
 import com.fandrops.order.domain.exception.ReserveConflictException;
 import com.fandrops.order.domain.port.AccessTicketValidatePort;
@@ -33,11 +34,6 @@ public class OrderService {
     // 재고 부족 예외는 롤백 제외 → CANCELLED 상태가 DB에 커밋되어야 함
     @Transactional(noRollbackFor = {OutOfStockException.class, ReserveConflictException.class})
     public CreateOrderResult createOrder(CreateOrderCommand command) {
-        // 재고 예약 Saga 미구현으로 단일 상품 주문만 허용. inventory-infrastructure 완성 후 제거.
-        if (command.getItems().size() > 1) {
-            throw new IllegalArgumentException("MVP에서는 단일 상품 주문만 지원합니다");
-        }
-
         // 1. accessTicket 검증 (실패 시 AccessTicketInvalidException → 403)
         Long primaryProductId = command.getItems().get(0).getProductId();
         accessTicketValidatePort.validate(command.getAccessTicket(), command.getFanId(), primaryProductId);
@@ -65,5 +61,41 @@ public class OrderService {
             orderRepository.updateStatus(saved.getId(), OrderStatus.CANCELLED);
             throw e;
         }
+    }
+
+    @Transactional(readOnly = true)
+    public Order findOrder(Long orderId) {
+        return orderRepository.findById(orderId)
+                .orElseThrow(() -> new OrderNotFoundException(orderId));
+    }
+
+    @Transactional
+    public void markAsFailed(Long orderId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new OrderNotFoundException(orderId));
+        if (order.getStatus() == OrderStatus.FAILED || order.getStatus() == OrderStatus.CANCELLED) {
+            return;
+        }
+        orderRepository.updateStatus(orderId, OrderStatus.FAILED);
+    }
+
+    @Transactional
+    public void markAsCancelled(Long orderId) {
+        orderRepository.updateStatus(orderId, OrderStatus.CANCELLED);
+    }
+
+    @Transactional
+    public void markAsPaid(Long orderId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new OrderNotFoundException(orderId));
+        if (order.getStatus() == OrderStatus.PAID || order.getStatus() == OrderStatus.COMPLETED) {
+            return;
+        }
+        orderRepository.updateStatus(orderId, OrderStatus.PAID);
+    }
+
+    @Transactional
+    public void markAsCompleted(Long orderId) {
+        orderRepository.updateStatus(orderId, OrderStatus.COMPLETED);
     }
 }
