@@ -23,4 +23,9 @@ public class InventoryRepositoryAdapter implements InventoryRepository {
     public void save(Inventory inventory) {
         jpaRepository.save(InventoryJpaEntity.from(inventory));
     }
+
+    @Override
+    public int reserveAtomic(Long productId, int qty) {
+        return jpaRepository.reserveAtomic(productId, qty);
+    }
 }
