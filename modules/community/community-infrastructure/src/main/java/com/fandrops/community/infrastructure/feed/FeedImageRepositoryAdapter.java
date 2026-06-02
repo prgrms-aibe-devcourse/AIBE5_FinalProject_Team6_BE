@@ -30,6 +30,12 @@ public class FeedImageRepositoryAdapter implements FeedImageRepository {
     }
 
     @Override
+    public List<FeedImage> findByFeedIdInOrderByCreatedAt(List<Long> feedIds) {
+        return jpaRepository.findByFeedIdInOrderByCreatedAt(feedIds)
+                .stream().map(this::toDomain).toList();
+    }
+
+    @Override
     public void deleteByFeedId(Long feedId) {
         jpaRepository.deleteByFeedId(feedId);
     }

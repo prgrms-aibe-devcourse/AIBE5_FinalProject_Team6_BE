@@ -38,6 +38,11 @@ public class CommentLikeRepositoryAdapter implements CommentLikeRepository {
     }
 
     @Override
+    public void deleteByFeedId(Long feedId) {
+        jpaRepository.deleteByFeedId(feedId);
+    }
+
+    @Override
     public void delete(CommentLike commentLike) {
         jpaRepository.deleteById(commentLike.getId());
     }
