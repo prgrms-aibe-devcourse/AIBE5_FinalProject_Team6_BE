@@ -20,6 +20,9 @@ public class SseEmitterRegistry {
     @Value("${fandrops.queue.sse-timeout-ms:60000}")
     private long sseTimeoutMs;
 
+    @Value("${fandrops.ratelimit.sse-max-emitters:2000}")
+    private int sseMaxEmitters;
+
     public SseEmitter register(Long productId, Long fanId) {
         String key = key(productId, fanId);
         SseEmitter emitter = new SseEmitter(sseTimeoutMs);
@@ -61,6 +64,10 @@ public class SseEmitterRegistry {
             }
         }
         return Collections.unmodifiableMap(result);
+    }
+
+    public boolean isFull() {
+        return emitters.size() >= sseMaxEmitters;
     }
 
     private String key(Long productId, Long fanId) {

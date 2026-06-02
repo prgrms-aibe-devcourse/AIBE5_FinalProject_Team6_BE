@@ -130,12 +130,19 @@ FANDROPS 공개 REST API(`/api/v1/**`)의 **응답 envelope·에러 코드·페�
 | `LIKE_NOT_FOUND` | 404 | false | 좋아요 내역을 찾을 수 없습니다. |
 | `NOT_FAN_MEMBER` | 403 | false | 팬 가입 후 이용할 수 있습니다. |
 | `INVENTORY_NOT_FOUND` | 404 | false | 재고 정보를 찾을 수 없습니다. |
-| `RATE_LIMITED` | 429 | **true** | 요청이 많습니다. 잠시 후 다시 시도해 주세요. |
+| `RATE_LIMITED` | 429 | **true** | 요청이 너무 많습니다. 잠시 후 다시 시도해주세요. ⁽¹⁾ |
 | `INVALID_REQUEST` | 400 | false | 요청 형식이 올바르지 않습니다. |
 | `INTERNAL_ERROR` | 500 | **true** | 일시적인 오류입니다. |
 | `DB_LOCK_TIMEOUT` | 500 | **true** | 일시적인 오류입니다. |
 
 내부 상수 매핑 예: `ERR_4004` → `OUT_OF_STOCK`.
+
+> ⁽¹⁾ **`RATE_LIMITED` Retry-After 헤더**
+> - Spring Filter(fanId 기반) 차단 → `Retry-After: 60` (1분 슬라이딩 윈도우)
+> - Nginx `limit_req`(IP 기반) 차단 → `Retry-After: 1` (Nginx `add_header` 직접 반환)
+> - SSE 동시 연결 상한(2000) 초과 → `Retry-After: 60`
+> 
+> 두 경로 모두 `retryable: true` + Retry-After 헤더를 포함한다.
 
 ---
 

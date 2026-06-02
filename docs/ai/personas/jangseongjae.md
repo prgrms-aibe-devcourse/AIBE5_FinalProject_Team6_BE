@@ -85,6 +85,7 @@ apps/api-server/**   # 대기열/RateLimit filter/config만 (지영재와 협의
 - [ ] Access Ticket TTL 기본 **5분** (`invariants-and-state-machines.md §4`) — 드롭스 오픈런 P95 주문 생성 응답 시간 × 3 이상인지 실측 후 `application-*.yml` (`fandrops.queue.access-ticket-ttl`) 에서 조정
 - [ ] 결제 재시도 Job(`RESERVED→FAILED` 복구 스케줄러, `payment-application` 소유)과 알림 **Outbox(`outbox_events`)는 별개** — Outbox 폴러 오너는 표지민(`notification`). 혼동하지 않는다
 - [ ] `erd-design.md`에 새 테이블·컬럼을 추가할 때 **컬럼 목록 테이블**(컬럼명·타입·제약·설명)을 반드시 포함한다 — 누락 시 이슈 spec과 ERD 불일치로 JPA 엔티티 설계 오류 발생
+- [ ] **Redis 의존 Bean**(`WaitQueueRepository`, `AccessTicketRepository`, `RateLimitService` 등)은 **반드시 `@Profile("!local")`** 적용 — `local` 프로필은 Redis 없이 기동 가능해야 함 ([failure-policy §3.1](../../operations/failure-policy.md))
 
 ---
 

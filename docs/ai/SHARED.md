@@ -62,7 +62,7 @@
 | **2. Plan** | 변경할 파일·메서드·DB 컬럼을 나열한다. 영향 범위(타 도메인 포트 포함)를 확인한다. |
 | **3. Execute** | Plan에서 확정한 최소 범위만 구현한다. Plan 밖 리팩터·신규 abstraction 금지. |
 | **4. Debug** | persona의 `./gradlew` 명령 실행. 테스트 실패 시 원인을 먼저 분석하고, 테스트를 수정하지 않는다. |
-| **5. Retro** | **사후(post-work) 단계** — 코딩·디버깅이 끝난 뒤 실행한다. ① SHARED·페르소나 룰이 충분히 명확했는지 자체 평가한다. ② 비효율·모호·충돌이 있었던 지시는 구체적 문구와 함께 기록한다. ③ 아래 **4-field 한 줄 형식**으로 출력한다: `[Retro] 룰 작동: <1줄> \| 튜닝 제안: <1줄> \| SSOT 동기화 필요: <있음/없음> \| Edge Case: <있음(내용)/없음>` — PR 생성 완료 시에는 `docs/ai/workflows/generated/retro-<PR번호>.md` 저장 추가 ([auto-pr.md step 9](./workflows/auto-pr.md) 참고). feat/fix 브랜치에서 응답 종료 시 Stop 훅(`.claude/hooks/retro-reminder.py`)이 자동 상기. |
+| **5. Retro** | **사후(post-work) 단계** — 코딩·디버깅이 끝난 뒤 실행한다. ① SHARED·페르소나 룰이 충분히 명확했는지 자체 평가한다. ② 비효율·모호·충돌이 있었던 지시는 구체적 문구와 함께 기록한다. ③ 아래 **4-field 한 줄 형식**으로 출력한다: `[Retro] 룰 작동: <1줄> \| 튜닝 제안: <1줄> \| SSOT 동기화 필요: <있음/없음> \| Edge Case: <있음(내용)/없음>` — PR 생성 완료 시에는 `docs/ai/workflows/generated/retro-<PR번호>.md` 저장 추가 ([auto-pr.md step 9](./workflows/auto-pr.md) 참고). feat/fix 브랜치에서 응답 종료 시 Stop 훅(`.claude/hooks/retro-reminder.py`)이 자동 상기. **⚠️ 훅에 의존하지 말 것 — `feat/*`·`fix/*` 브랜치에서 코드 작성·수정·파일 생성이 1건 이상 있었던 응답 마지막에 Claude가 직접 Retro를 출력한다.** |
 
 ### 복잡한 문제 처리 (동시성·상태 정합·Saga)
 
