@@ -76,8 +76,10 @@ public class FeedService {
         List<Long> feedIds = page.stream().map(ArtistFeed::getId).toList();
         Set<Long> likedFeedIds = resolveLikedFeedIds(feedIds, viewerFanId, viewerArtistMemberId);
 
-        Map<Long, List<FeedImage>> imagesByFeedId = imageRepository
-                .findByFeedIdInOrderByCreatedAt(feedIds).stream()
+        List<FeedImage> allImages = feedIds.isEmpty()
+                ? List.of()
+                : imageRepository.findByFeedIdInOrderByCreatedAt(feedIds);
+        Map<Long, List<FeedImage>> imagesByFeedId = allImages.stream()
                 .collect(Collectors.groupingBy(FeedImage::getFeedId));
 
         List<FeedResult> items = page.stream()
