@@ -25,7 +25,7 @@ public class CommentLikeController extends CommunityControllerSupport {
             Authentication authentication,
             @RequestHeader(value = "X-Fan-Id", required = false) Long fanIdHeader) {
 
-        Long fanId = resolveFanId(authentication, fanIdHeader);
+        Long fanId = resolvePrincipals(authentication, fanIdHeader, null).fanId();
         commentLikeService.likeComment(commentId, fanId);
         return ResponseEntity.status(201).build();
     }
@@ -37,19 +37,8 @@ public class CommentLikeController extends CommunityControllerSupport {
             Authentication authentication,
             @RequestHeader(value = "X-Fan-Id", required = false) Long fanIdHeader) {
 
-        Long fanId = resolveFanId(authentication, fanIdHeader);
+        Long fanId = resolvePrincipals(authentication, fanIdHeader, null).fanId();
         commentLikeService.unlikeComment(commentId, fanId);
         return ResponseEntity.noContent().build();
-    }
-
-    private Long resolveFanId(Authentication authentication, Long header) {
-        if (header != null && isLocalProfile()) {
-            return header;
-        }
-        if (authentication != null && authentication.isAuthenticated()
-                && !"anonymousUser".equals(authentication.getPrincipal())) {
-            return Long.parseLong(authentication.getName());
-        }
-        throw new IllegalArgumentException("인증 정보가 없습니다. Bearer 토큰을 제공하세요.");
     }
 }
