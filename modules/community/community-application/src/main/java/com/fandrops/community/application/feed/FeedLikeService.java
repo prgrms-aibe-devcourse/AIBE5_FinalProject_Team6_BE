@@ -58,6 +58,9 @@ public class FeedLikeService {
     }
 
     public void unlikeFeed(Long feedId, Long fanId, Long artistMemberId) {
+        if (fanId == null && artistMemberId == null) {
+            throw new IllegalArgumentException("인증 정보가 없습니다. Bearer 토큰을 제공하세요.");
+        }
         FeedLike like = fanId != null
                 ? feedLikeRepository.findByFeedIdAndFanId(feedId, fanId)
                         .orElseThrow(() -> new LikeNotFoundException("좋아요 기록을 찾을 수 없습니다."))
