@@ -1,10 +1,7 @@
 package com.fandrops.community.application.schedule;
 
-import com.fandrops.community.application.exception.ScheduleNotFoundException;
-import com.fandrops.community.application.port.ScheduleNotificationPort;
 import com.fandrops.community.domain.schedule.ArtistSchedule;
 import com.fandrops.community.domain.schedule.ArtistScheduleType;
-import com.fandrops.community.domain.schedule.exception.ScheduleDomainException;
 import com.fandrops.community.domain.schedule.repository.ArtistScheduleRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,16 +15,17 @@ import java.util.List;
 public class ScheduleService {
 
     private final ArtistScheduleRepository scheduleRepository;
-    private final ScheduleNotificationPort notificationPort;
 
-    public ScheduleService(ArtistScheduleRepository scheduleRepository,
-                           ScheduleNotificationPort notificationPort) {
+    public ScheduleService(ArtistScheduleRepository scheduleRepository) {
         this.scheduleRepository = scheduleRepository;
-        this.notificationPort = notificationPort;
     }
 
+    // TODO: ArtistMembershipPort 구현 후 command.artistMemberId()와 command.artistId() 소속 검증 추가
     @Transactional
     public ScheduleResult createEvent(EventCreateCommand command) {
+        if (command.artistMemberId() == null) {
+            throw new IllegalArgumentException("인증 정보가 없습니다. Bearer 토큰을 제공하세요.");
+        }
         ArtistScheduleType type;
         try {
             type = ArtistScheduleType.valueOf(command.type());
@@ -45,24 +43,6 @@ public class ScheduleService {
                 .stream()
                 .map(this::toResult)
                 .toList();
-    }
-
-    // artistMemberId: 인증된 아티스트 멤버 식별자. 소속 검증(ArtistMembershipPort)은 미구현 — 구현 후 schedule.getArtistId()와 대조
-    @Transactional
-    public LiveStartResult startLive(Long liveId, Long artistMemberId) {
-        if (artistMemberId == null) {
-            throw new IllegalArgumentException("인증 정보가 없습니다. Bearer 토큰을 제공하세요.");
-        }
-        ArtistSchedule schedule = scheduleRepository.findById(liveId)
-                .orElseThrow(() -> new ScheduleNotFoundException("일정을 찾을 수 없습니다."));
-        try {
-            schedule.startLive();
-        } catch (ScheduleDomainException e) {
-            throw new IllegalArgumentException(e.getMessage(), e);
-        }
-        scheduleRepository.save(schedule);
-        notificationPort.notifyLiveStarted(schedule.getArtistId(), schedule.getId(), schedule.getTitle());
-        return new LiveStartResult(schedule.getId(), schedule.isLive());
     }
 
     private ScheduleResult toResult(ArtistSchedule s) {

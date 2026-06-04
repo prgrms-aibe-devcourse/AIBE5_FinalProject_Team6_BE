@@ -8,7 +8,6 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 
 @Repository
 public class ArtistScheduleRepositoryAdapter implements ArtistScheduleRepository {
@@ -17,11 +16,6 @@ public class ArtistScheduleRepositoryAdapter implements ArtistScheduleRepository
 
     public ArtistScheduleRepositoryAdapter(ArtistScheduleJpaRepository jpaRepository) {
         this.jpaRepository = jpaRepository;
-    }
-
-    @Override
-    public Optional<ArtistSchedule> findById(Long id) {
-        return jpaRepository.findById(id).map(this::toDomain);
     }
 
     @Override
@@ -47,12 +41,12 @@ public class ArtistScheduleRepositoryAdapter implements ArtistScheduleRepository
     private ArtistScheduleJpaEntity toJpa(ArtistSchedule s) {
         return new ArtistScheduleJpaEntity(
                 s.getId(), s.getArtistId(), s.getNoticeId(),
-                s.getTitle(), s.getType(), s.getScheduledAt(), s.isLive());
+                s.getTitle(), s.getType(), s.getScheduledAt());
     }
 
     private ArtistSchedule toDomain(ArtistScheduleJpaEntity e) {
         return ArtistSchedule.reconstruct(
                 e.getId(), e.getArtistId(), e.getNoticeId(),
-                e.getTitle(), e.getType(), e.getScheduledAt(), e.isLive());
+                e.getTitle(), e.getType(), e.getScheduledAt());
     }
 }

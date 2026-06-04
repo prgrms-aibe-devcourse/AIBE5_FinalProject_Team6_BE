@@ -1,7 +1,5 @@
 package com.fandrops.community.application.schedule;
 
-import com.fandrops.community.application.exception.ScheduleNotFoundException;
-import com.fandrops.community.application.port.ScheduleNotificationPort;
 import com.fandrops.community.domain.schedule.ArtistSchedule;
 import com.fandrops.community.domain.schedule.ArtistScheduleType;
 import com.fandrops.community.domain.schedule.repository.ArtistScheduleRepository;
@@ -15,7 +13,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -26,7 +23,6 @@ import static org.mockito.Mockito.*;
 class ScheduleServiceTest {
 
     @Mock ArtistScheduleRepository scheduleRepository;
-    @Mock ScheduleNotificationPort notificationPort;
 
     ScheduleService scheduleService;
 
@@ -34,7 +30,7 @@ class ScheduleServiceTest {
 
     @BeforeEach
     void setUp() {
-        scheduleService = new ScheduleService(scheduleRepository, notificationPort);
+        scheduleService = new ScheduleService(scheduleRepository);
     }
 
     @Nested
@@ -82,62 +78,6 @@ class ScheduleServiceTest {
     }
 
     @Nested
-    @DisplayName("startLive")
-    class StartLiveTest {
-
-        @Test
-        @DisplayName("LIVE 타입 일정 시작 성공 — isLive=true, 알림 발행, save 호출")
-        void success() {
-            ArtistSchedule liveSchedule = schedule(1L, 10L, ArtistScheduleType.LIVE, "라이브", NOW);
-            when(scheduleRepository.findById(eq(1L))).thenReturn(Optional.of(liveSchedule));
-            when(scheduleRepository.save(any())).thenReturn(liveSchedule);
-
-            LiveStartResult result = scheduleService.startLive(1L, 5L);
-
-            assertTrue(result.isLive());
-            assertEquals(1L, result.liveId());
-            verify(scheduleRepository).save(any());
-            verify(notificationPort).notifyLiveStarted(eq(10L), eq(1L), eq("라이브"));
-        }
-
-        @Test
-        @DisplayName("존재하지 않는 liveId → ScheduleNotFoundException")
-        void notFound_throws() {
-            when(scheduleRepository.findById(eq(999L))).thenReturn(Optional.empty());
-
-            assertThrows(ScheduleNotFoundException.class,
-                    () -> scheduleService.startLive(999L, 5L));
-            verify(scheduleRepository, never()).save(any());
-            verifyNoInteractions(notificationPort);
-        }
-
-        @Test
-        @DisplayName("이미 라이브 중인 일정 재시작 시도 → IllegalArgumentException (멱등 가드)")
-        void alreadyLive_throws() {
-            ArtistSchedule alreadyLive = ArtistSchedule.reconstruct(
-                    1L, 10L, null, "라이브", ArtistScheduleType.LIVE, NOW, true);
-            when(scheduleRepository.findById(eq(1L))).thenReturn(Optional.of(alreadyLive));
-
-            assertThrows(IllegalArgumentException.class,
-                    () -> scheduleService.startLive(1L, 5L));
-            verify(scheduleRepository, never()).save(any());
-            verifyNoInteractions(notificationPort);
-        }
-
-        @Test
-        @DisplayName("LIVE 아닌 타입(DROP) 시작 시도 → IllegalArgumentException (ScheduleDomainException 래핑)")
-        void nonLiveType_throws() {
-            ArtistSchedule dropSchedule = schedule(1L, 10L, ArtistScheduleType.DROP, "드롭", NOW);
-            when(scheduleRepository.findById(eq(1L))).thenReturn(Optional.of(dropSchedule));
-
-            assertThrows(IllegalArgumentException.class,
-                    () -> scheduleService.startLive(1L, 5L));
-            verify(scheduleRepository, never()).save(any());
-            verifyNoInteractions(notificationPort);
-        }
-    }
-
-    @Nested
     @DisplayName("createEvent")
     class CreateEventTest {
 
@@ -164,10 +104,19 @@ class ScheduleServiceTest {
                             new EventCreateCommand(10L, 5L, "행사", "UNKNOWN", NOW.plusDays(1))));
             verify(scheduleRepository, never()).save(any());
         }
+
+        @Test
+        @DisplayName("artistMemberId null → IllegalArgumentException (service-level null 가드)")
+        void nullArtistMemberId_throws() {
+            assertThrows(IllegalArgumentException.class,
+                    () -> scheduleService.createEvent(
+                            new EventCreateCommand(10L, null, "행사", "EVENT", NOW.plusDays(1))));
+            verify(scheduleRepository, never()).save(any());
+        }
     }
 
     private static ArtistSchedule schedule(Long id, Long artistId, ArtistScheduleType type,
                                             String title, LocalDateTime scheduledAt) {
-        return ArtistSchedule.reconstruct(id, artistId, null, title, type, scheduledAt, false);
+        return ArtistSchedule.reconstruct(id, artistId, null, title, type, scheduledAt);
     }
 }

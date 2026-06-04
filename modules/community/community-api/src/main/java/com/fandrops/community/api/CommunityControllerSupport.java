@@ -1,5 +1,6 @@
 package com.fandrops.community.api;
 
+import com.fandrops.community.application.exception.UnauthorizedException;
 import org.slf4j.MDC;
 import org.springframework.core.env.Environment;
 import org.springframework.security.core.Authentication;
@@ -39,7 +40,7 @@ public abstract class CommunityControllerSupport {
             }
             return Principal.ofFan(Long.parseLong(authentication.getName()));
         }
-        throw new IllegalArgumentException("인증 정보가 없습니다. Bearer 토큰을 제공하세요.");
+        throw new UnauthorizedException("인증 정보가 없습니다. Bearer 토큰을 제공하세요.");
     }
 
     protected Long resolveArtistMemberId(Authentication authentication, Long header) {
@@ -50,7 +51,7 @@ public abstract class CommunityControllerSupport {
                 && !"anonymousUser".equals(authentication.getPrincipal())) {
             return Long.parseLong(authentication.getName());
         }
-        throw new IllegalArgumentException("인증 정보가 없습니다. Bearer 토큰을 제공하세요.");
+        throw new UnauthorizedException("인증 정보가 없습니다. Bearer 토큰을 제공하세요.");
     }
 
     protected static boolean hasArtistOrAgencyRole(Authentication authentication) {

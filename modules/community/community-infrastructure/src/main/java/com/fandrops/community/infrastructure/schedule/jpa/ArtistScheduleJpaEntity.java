@@ -35,7 +35,4 @@ public class ArtistScheduleJpaEntity {
 
     @Column(name = "scheduled_at", nullable = false)
     private LocalDateTime scheduledAt;
-
-    @Column(name = "is_live", nullable = false)
-    private boolean isLive;
 }

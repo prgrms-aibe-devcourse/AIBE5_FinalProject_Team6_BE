@@ -3,7 +3,6 @@ package com.fandrops.community.api.schedule;
 import com.fandrops.common.ApiResponse;
 import com.fandrops.community.api.CommunityControllerSupport;
 import com.fandrops.community.application.schedule.EventCreateCommand;
-import com.fandrops.community.application.schedule.LiveStartResult;
 import com.fandrops.community.application.schedule.ScheduleResult;
 import com.fandrops.community.application.schedule.ScheduleService;
 import jakarta.validation.Valid;
@@ -52,17 +51,4 @@ public class ScheduleController extends CommunityControllerSupport {
         List<ScheduleResult> events = scheduleService.getCalendar(artistId, from, to);
         return ResponseEntity.ok(ApiResponse.ok(Map.of("events", events), traceId()));
     }
-
-    // PATCH /api/v1/lives/{liveId}/start — 라이브 시작 + ARTIST_SCHEDULE 알림 이벤트 발행 (F03-06)
-    @PatchMapping("/api/v1/lives/{liveId}/start")
-    public ResponseEntity<ApiResponse<LiveStartResult>> startLive(
-            @PathVariable Long liveId,
-            Authentication authentication,
-            @RequestHeader(value = "X-Artist-Member-Id", required = false) Long artistMemberIdHeader) {
-
-        Long artistMemberId = resolveArtistMemberId(authentication, artistMemberIdHeader);
-        LiveStartResult result = scheduleService.startLive(liveId, artistMemberId);
-        return ResponseEntity.ok(ApiResponse.ok(result, traceId()));
-    }
-
 }

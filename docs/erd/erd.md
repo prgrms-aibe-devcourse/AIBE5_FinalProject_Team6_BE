@@ -271,7 +271,6 @@ ARTIST_SCHEDULE {
     varchar title
     varchar type "DROP | LIVE | EVENT | NOTICE"
     datetime scheduled_at
-    boolean is_live "LIVE 타입 온에어 여부 (기본 false)"
 }
 
 BANNER {
