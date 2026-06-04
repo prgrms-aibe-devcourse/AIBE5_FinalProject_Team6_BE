@@ -7,6 +7,7 @@ import com.fandrops.community.application.exception.FeedNotFoundException;
 import com.fandrops.community.application.exception.FeedOwnershipException;
 import com.fandrops.community.application.exception.LikeNotFoundException;
 import com.fandrops.community.application.exception.NotFanMemberException;
+import com.fandrops.community.application.exception.ScheduleNotFoundException;
 import com.fandrops.community.application.exception.UnauthorizedException;
 import org.slf4j.MDC;
 import org.springframework.http.ResponseEntity;
@@ -50,6 +51,12 @@ public class CommunityExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> notFanMember(NotFanMemberException e) {
         return ResponseEntity.status(403)
                 .body(ApiResponse.fail("NOT_FAN_MEMBER", e.getMessage(), false, traceId()));
+    }
+
+    @ExceptionHandler(ScheduleNotFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> scheduleNotFound(ScheduleNotFoundException e) {
+        return ResponseEntity.status(404)
+                .body(ApiResponse.fail("SCHEDULE_NOT_FOUND", e.getMessage(), false, traceId()));
     }
 
     @ExceptionHandler(FeedOwnershipException.class)
