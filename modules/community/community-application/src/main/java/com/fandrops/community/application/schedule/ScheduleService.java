@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Objects;
 
 @Service
 @Transactional(readOnly = true)
@@ -23,9 +24,7 @@ public class ScheduleService {
     // TODO: ArtistMembershipPort 구현 후 command.artistMemberId()와 command.artistId() 소속 검증 추가
     @Transactional
     public ScheduleResult createEvent(EventCreateCommand command) {
-        if (command.artistMemberId() == null) {
-            throw new IllegalArgumentException("인증 정보가 없습니다. Bearer 토큰을 제공하세요.");
-        }
+        Objects.requireNonNull(command.artistMemberId(), "artistMemberId is required");
         ArtistScheduleType type;
         try {
             type = ArtistScheduleType.valueOf(command.type());
@@ -33,13 +32,16 @@ public class ScheduleService {
             throw new IllegalArgumentException(
                     "지원하지 않는 일정 유형입니다: " + command.type() + " (DROP|LIVE|EVENT|NOTICE)");
         }
+        LocalDateTime scheduledAtUtc = command.scheduledAt().withOffsetSameInstant(ZoneOffset.UTC).toLocalDateTime();
         ArtistSchedule schedule = ArtistSchedule.create(
-                command.artistId(), command.title(), type, command.scheduledAt());
+                command.artistId(), command.title(), type, scheduledAtUtc);
         return toResult(scheduleRepository.save(schedule));
     }
 
     public List<ScheduleResult> getCalendar(Long artistId, LocalDateTime from, LocalDateTime to) {
-        return scheduleRepository.findByArtistIdBetween(artistId, from, to)
+        LocalDateTime effectiveFrom = (from != null) ? from : LocalDateTime.now().minusDays(30);
+        LocalDateTime effectiveTo = (to != null) ? to : LocalDateTime.now().plusDays(90);
+        return scheduleRepository.findByArtistIdBetween(artistId, effectiveFrom, effectiveTo)
                 .stream()
                 .map(this::toResult)
                 .toList();

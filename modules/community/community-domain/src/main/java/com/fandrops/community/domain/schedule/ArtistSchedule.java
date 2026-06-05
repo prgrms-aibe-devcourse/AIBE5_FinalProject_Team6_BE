@@ -1,5 +1,7 @@
 package com.fandrops.community.domain.schedule;
 
+import com.fandrops.community.domain.schedule.exception.ScheduleDomainException;
+
 import java.time.LocalDateTime;
 
 public class ArtistSchedule {
@@ -23,6 +25,15 @@ public class ArtistSchedule {
 
     public static ArtistSchedule create(Long artistId, String title,
                                         ArtistScheduleType type, LocalDateTime scheduledAt) {
+        if (artistId == null) {
+            throw new ScheduleDomainException("artistId는 필수입니다.");
+        }
+        if (title == null || title.isBlank() || title.length() > 255) {
+            throw new ScheduleDomainException("title은 1~255자여야 합니다.");
+        }
+        if (scheduledAt == null) {
+            throw new ScheduleDomainException("scheduledAt은 필수입니다.");
+        }
         return new ArtistSchedule(null, artistId, null, title, type, scheduledAt);
     }
 

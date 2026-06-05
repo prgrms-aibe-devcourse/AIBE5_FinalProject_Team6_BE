@@ -12,6 +12,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -54,15 +56,15 @@ class ScheduleServiceTest {
         }
 
         @Test
-        @DisplayName("from·to 모두 null — 전체 조회 위임")
-        void nullRange_delegatesToRepository() {
-            when(scheduleRepository.findByArtistIdBetween(eq(10L), isNull(), isNull()))
+        @DisplayName("from·to 모두 null — 기본값(now-30d, now+90d) 적용 후 조회")
+        void nullRange_appliesDefaults() {
+            when(scheduleRepository.findByArtistIdBetween(eq(10L), any(LocalDateTime.class), any(LocalDateTime.class)))
                     .thenReturn(List.of());
 
             List<ScheduleResult> result = scheduleService.getCalendar(10L, null, null);
 
             assertTrue(result.isEmpty());
-            verify(scheduleRepository).findByArtistIdBetween(eq(10L), isNull(), isNull());
+            verify(scheduleRepository).findByArtistIdBetween(eq(10L), any(LocalDateTime.class), any(LocalDateTime.class));
         }
 
         @Test
@@ -88,7 +90,7 @@ class ScheduleServiceTest {
             when(scheduleRepository.save(any())).thenReturn(saved);
 
             ScheduleResult result = scheduleService.createEvent(
-                    new EventCreateCommand(10L, 5L, "팬미팅", "EVENT", NOW.plusDays(30)));
+                    new EventCreateCommand(10L, 5L, "팬미팅", "EVENT", NOW.plusDays(30).atOffset(ZoneOffset.UTC)));
 
             assertEquals(1L, result.id());
             assertEquals(ArtistScheduleType.EVENT, result.type());
@@ -101,16 +103,16 @@ class ScheduleServiceTest {
         void unknownType_throws() {
             assertThrows(IllegalArgumentException.class,
                     () -> scheduleService.createEvent(
-                            new EventCreateCommand(10L, 5L, "행사", "UNKNOWN", NOW.plusDays(1))));
+                            new EventCreateCommand(10L, 5L, "행사", "UNKNOWN", NOW.plusDays(1).atOffset(ZoneOffset.UTC))));
             verify(scheduleRepository, never()).save(any());
         }
 
         @Test
-        @DisplayName("artistMemberId null → IllegalArgumentException (service-level null 가드)")
+        @DisplayName("artistMemberId null → NullPointerException (service-level null 가드)")
         void nullArtistMemberId_throws() {
-            assertThrows(IllegalArgumentException.class,
+            assertThrows(NullPointerException.class,
                     () -> scheduleService.createEvent(
-                            new EventCreateCommand(10L, null, "행사", "EVENT", NOW.plusDays(1))));
+                            new EventCreateCommand(10L, null, "행사", "EVENT", NOW.plusDays(1).atOffset(ZoneOffset.UTC))));
             verify(scheduleRepository, never()).save(any());
         }
     }

@@ -2,6 +2,7 @@ package com.fandrops.community.api.schedule;
 
 import com.fandrops.common.ApiResponse;
 import com.fandrops.community.api.CommunityControllerSupport;
+import com.fandrops.community.application.exception.ForbiddenException;
 import com.fandrops.community.application.schedule.EventCreateCommand;
 import com.fandrops.community.application.schedule.ScheduleResult;
 import com.fandrops.community.application.schedule.ScheduleService;
@@ -34,6 +35,9 @@ public class ScheduleController extends CommunityControllerSupport {
             Authentication authentication,
             @RequestHeader(value = "X-Artist-Member-Id", required = false) Long artistMemberIdHeader) {
 
+        if (!isLocalProfile() && (authentication == null || !hasArtistOrAgencyRole(authentication))) {
+            throw new ForbiddenException("ARTIST 또는 AGENCY 권한이 필요합니다.");
+        }
         Long artistMemberId = resolveArtistMemberId(authentication, artistMemberIdHeader);
         ScheduleResult result = scheduleService.createEvent(
                 new EventCreateCommand(artistId, artistMemberId, request.title(),
@@ -42,6 +46,7 @@ public class ScheduleController extends CommunityControllerSupport {
     }
 
     // GET /api/v1/artists/{artistId}/calendar?from=...&to=... — 통합 스케줄 조회 (F03-05)
+    // 의도적 익명 허용 — F03-05 캘린더는 공개 조회 (mvp-api-spec.md)
     @GetMapping("/api/v1/artists/{artistId}/calendar")
     public ResponseEntity<ApiResponse<Map<String, List<ScheduleResult>>>> getCalendar(
             @PathVariable Long artistId,
