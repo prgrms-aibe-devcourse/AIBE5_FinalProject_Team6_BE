@@ -6,6 +6,7 @@ import com.fandrops.order.application.dto.CartResponse;
 import com.fandrops.order.application.dto.UpdateCartItemCommand;
 import com.fandrops.order.domain.Cart;
 import com.fandrops.order.domain.CartItem;
+import com.fandrops.order.domain.exception.CartAccessDeniedException;
 import com.fandrops.order.domain.exception.CartItemNotFoundException;
 import com.fandrops.order.domain.port.CartItemRepository;
 import com.fandrops.order.domain.port.CartRepository;
@@ -163,14 +164,14 @@ class CartServiceTest {
         }
 
         @Test
-        @DisplayName("타인 항목 수정 시 IllegalArgumentException")
+        @DisplayName("타인 항목 수정 시 CartAccessDeniedException")
         void updateItemQuantity_wrongOwner_throws() {
             CartItem item = cartItem(2);
             Cart otherCart = Cart.of(999L, 999L, LocalDateTime.now(), LocalDateTime.now());
             given(cartItemRepository.findById(CART_ITEM_ID)).willReturn(Optional.of(item));
             given(cartRepository.findByFanId(FAN_ID)).willReturn(Optional.of(otherCart));
 
-            assertThrows(IllegalArgumentException.class,
+            assertThrows(CartAccessDeniedException.class,
                     () -> sut.updateItemQuantity(new UpdateCartItemCommand(FAN_ID, CART_ITEM_ID, 3)));
 
             verify(cartItemRepository, never()).save(any());
@@ -204,14 +205,14 @@ class CartServiceTest {
         }
 
         @Test
-        @DisplayName("타인 항목 삭제 시 IllegalArgumentException")
+        @DisplayName("타인 항목 삭제 시 CartAccessDeniedException")
         void removeItem_wrongOwner_throws() {
             CartItem item = cartItem(1);
             Cart otherCart = Cart.of(999L, 999L, LocalDateTime.now(), LocalDateTime.now());
             given(cartItemRepository.findById(CART_ITEM_ID)).willReturn(Optional.of(item));
             given(cartRepository.findByFanId(FAN_ID)).willReturn(Optional.of(otherCart));
 
-            assertThrows(IllegalArgumentException.class, () -> sut.removeItem(FAN_ID, CART_ITEM_ID));
+            assertThrows(CartAccessDeniedException.class, () -> sut.removeItem(FAN_ID, CART_ITEM_ID));
 
             verify(cartItemRepository, never()).deleteById(any());
         }
