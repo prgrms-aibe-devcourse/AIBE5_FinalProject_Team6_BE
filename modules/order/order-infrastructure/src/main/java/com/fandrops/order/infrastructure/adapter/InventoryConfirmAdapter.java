@@ -3,6 +3,7 @@ package com.fandrops.order.infrastructure.adapter;
 import com.fandrops.inventory.application.InventoryCommandService;
 import com.fandrops.inventory.application.exception.DuplicateHistoryException;
 import com.fandrops.inventory.application.exception.InventoryLockConflictException;
+import com.fandrops.inventory.domain.exception.InvalidInventoryStateException;
 import com.fandrops.order.domain.exception.ReserveConflictException;
 import com.fandrops.order.domain.port.InventoryConfirmPort;
 import lombok.RequiredArgsConstructor;
@@ -18,7 +19,7 @@ public class InventoryConfirmAdapter implements InventoryConfirmPort {
             inventoryCommandService.confirm(orderId, productId, quantity);
         } catch (DuplicateHistoryException e) {
             // 멱등 중복 호출 — 이미 처리됨, 정상 종료
-        } catch (InventoryLockConflictException e) {
+        } catch (InvalidInventoryStateException | InventoryLockConflictException e) {
             throw new ReserveConflictException(productId, e);
         }
     }
