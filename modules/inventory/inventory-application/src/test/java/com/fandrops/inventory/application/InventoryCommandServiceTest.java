@@ -4,8 +4,8 @@ import com.fandrops.inventory.application.exception.InventoryNotFoundException;
 import com.fandrops.inventory.domain.Inventory;
 import com.fandrops.inventory.domain.InventoryChangeType;
 import com.fandrops.inventory.domain.InventoryHistory;
-import com.fandrops.inventory.domain.exception.OutOfStockException;
 import com.fandrops.inventory.domain.exception.InvalidInventoryStateException;
+import com.fandrops.inventory.domain.exception.OutOfStockException;
 import com.fandrops.inventory.domain.port.InventoryHistoryRepository;
 import com.fandrops.inventory.domain.port.InventoryRepository;
 import org.junit.jupiter.api.DisplayName;
@@ -49,9 +49,10 @@ class InventoryCommandServiceTest {
         @Test
         @DisplayName("Atomic Update 성공 시 RESERVE 이력 저장, save() 미호출")
         void reserve_savesHistoryWithoutDirectSave() {
-            Inventory inventory = Inventory.create(PRODUCT_ID, 100);
-            given(inventoryRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(inventory));
+            // post-update 상태: availableQty=90 (100에서 10 차감됨)
+            Inventory postUpdate = Inventory.reconstitute(1L, PRODUCT_ID, 100, 10, 90, 0);
             given(inventoryRepository.reserveAtomic(PRODUCT_ID, 10)).willReturn(1);
+            given(inventoryRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(postUpdate));
 
             sut.reserve(ORDER_ID, PRODUCT_ID, 10);
 
@@ -62,7 +63,7 @@ class InventoryCommandServiceTest {
             assertEquals(InventoryChangeType.RESERVE, saved.getChangeType());
             assertEquals(ORDER_ID, saved.getReferenceId());
             assertEquals(10, saved.getDeltaQty());
-            assertEquals(100, saved.getQtyBefore());
+            assertEquals(100, saved.getQtyBefore());  // qtyAfter(90) + qty(10)
             assertEquals(90, saved.getQtyAfter());
         }
 
@@ -70,8 +71,8 @@ class InventoryCommandServiceTest {
         @DisplayName("Atomic Update 0 rows(재고 부족) 시 OutOfStockException, 이력 미저장")
         void reserve_atomicUpdateZeroRows_throwsOutOfStock() {
             Inventory inventory = Inventory.create(PRODUCT_ID, 5);
-            given(inventoryRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(inventory));
             given(inventoryRepository.reserveAtomic(PRODUCT_ID, 10)).willReturn(0);
+            given(inventoryRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(inventory));
 
             assertThrows(OutOfStockException.class,
                     () -> sut.reserve(ORDER_ID, PRODUCT_ID, 10));
@@ -83,6 +84,7 @@ class InventoryCommandServiceTest {
         @Test
         @DisplayName("재고 없는 상품이면 InventoryNotFoundException")
         void reserve_inventoryNotFound() {
+            given(inventoryRepository.reserveAtomic(PRODUCT_ID, 10)).willReturn(0);
             given(inventoryRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.empty());
 
             assertThrows(InventoryNotFoundException.class,
@@ -95,27 +97,31 @@ class InventoryCommandServiceTest {
     class Confirm {
 
         @Test
-        @DisplayName("재고 확정 시 DECREASE 이력 저장")
-        void confirm_savesInventoryAndHistory() {
-            Inventory inventory = Inventory.create(PRODUCT_ID, 100);
-            // reserve로 reservedQty=20 셋업; 반환된 history는 arrange 단계라 사용 안 함
-            InventoryHistory ignored = inventory.reserve(20, ORDER_ID);
-            given(inventoryRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(inventory));
+        @DisplayName("재고 확정 시 DECREASE 이력 저장, save() 미호출")
+        void confirm_savesHistoryWithoutDirectSave() {
+            // post-update 상태: totalQty=80, reservedQty=0, availableQty=80 (20 confirm 후)
+            Inventory postUpdate = Inventory.reconstitute(1L, PRODUCT_ID, 80, 0, 80, 0);
+            given(inventoryRepository.confirmAtomic(PRODUCT_ID, 20)).willReturn(1);
+            given(inventoryRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(postUpdate));
 
             sut.confirm(ORDER_ID, PRODUCT_ID, 20);
 
-            verify(inventoryRepository).save(inventory);
+            verify(inventoryRepository, never()).save(any());
             ArgumentCaptor<InventoryHistory> captor = ArgumentCaptor.forClass(InventoryHistory.class);
             verify(inventoryHistoryRepository).save(captor.capture());
-            assertEquals(InventoryChangeType.DECREASE, captor.getValue().getChangeType());
-            assertEquals(ORDER_ID, captor.getValue().getReferenceId());
-            assertEquals(20, captor.getValue().getDeltaQty());
+            InventoryHistory history = captor.getValue();
+            assertEquals(InventoryChangeType.DECREASE, history.getChangeType());
+            assertEquals(ORDER_ID, history.getReferenceId());
+            assertEquals(20, history.getDeltaQty());
+            assertEquals(100, history.getQtyBefore());  // qtyAfter(80) + qty(20)
+            assertEquals(80, history.getQtyAfter());
         }
 
         @Test
         @DisplayName("reservedQty 부족 시 InvalidInventoryStateException 전파, save 미호출")
         void confirm_insufficientReserved_propagatesWithoutSave() {
-            Inventory inventory = Inventory.create(PRODUCT_ID, 100);
+            Inventory inventory = Inventory.create(PRODUCT_ID, 100);  // reservedQty=0
+            given(inventoryRepository.confirmAtomic(PRODUCT_ID, 10)).willReturn(0);
             given(inventoryRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(inventory));
 
             assertThrows(InvalidInventoryStateException.class,
@@ -128,6 +134,7 @@ class InventoryCommandServiceTest {
         @Test
         @DisplayName("재고 없는 상품이면 InventoryNotFoundException")
         void confirm_inventoryNotFound() {
+            given(inventoryRepository.confirmAtomic(PRODUCT_ID, 20)).willReturn(0);
             given(inventoryRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.empty());
 
             assertThrows(InventoryNotFoundException.class,
@@ -140,27 +147,31 @@ class InventoryCommandServiceTest {
     class Restore {
 
         @Test
-        @DisplayName("재고 복원 시 RELEASE 이력 저장")
-        void restore_savesInventoryAndHistory() {
-            Inventory inventory = Inventory.create(PRODUCT_ID, 100);
-            // reserve로 reservedQty=30 셋업; 반환된 history는 arrange 단계라 사용 안 함
-            InventoryHistory ignored = inventory.reserve(30, ORDER_ID);
-            given(inventoryRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(inventory));
+        @DisplayName("재고 복원 시 RELEASE 이력 저장, save() 미호출")
+        void restore_savesHistoryWithoutDirectSave() {
+            // post-update 상태: reservedQty=0, availableQty=100 (30 restore 후)
+            Inventory postUpdate = Inventory.reconstitute(1L, PRODUCT_ID, 100, 0, 100, 0);
+            given(inventoryRepository.restoreAtomic(PRODUCT_ID, 30)).willReturn(1);
+            given(inventoryRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(postUpdate));
 
             sut.restore(ORDER_ID, PRODUCT_ID, 30);
 
-            verify(inventoryRepository).save(inventory);
+            verify(inventoryRepository, never()).save(any());
             ArgumentCaptor<InventoryHistory> captor = ArgumentCaptor.forClass(InventoryHistory.class);
             verify(inventoryHistoryRepository).save(captor.capture());
-            assertEquals(InventoryChangeType.RELEASE, captor.getValue().getChangeType());
-            assertEquals(ORDER_ID, captor.getValue().getReferenceId());
-            assertEquals(30, captor.getValue().getDeltaQty());
+            InventoryHistory history = captor.getValue();
+            assertEquals(InventoryChangeType.RELEASE, history.getChangeType());
+            assertEquals(ORDER_ID, history.getReferenceId());
+            assertEquals(30, history.getDeltaQty());
+            assertEquals(70, history.getQtyBefore());   // qtyAfter(100) - qty(30)
+            assertEquals(100, history.getQtyAfter());
         }
 
         @Test
         @DisplayName("reservedQty 부족 시 InvalidInventoryStateException 전파, save 미호출")
         void restore_insufficientReserved_propagatesWithoutSave() {
-            Inventory inventory = Inventory.create(PRODUCT_ID, 100);
+            Inventory inventory = Inventory.create(PRODUCT_ID, 100);  // reservedQty=0
+            given(inventoryRepository.restoreAtomic(PRODUCT_ID, 10)).willReturn(0);
             given(inventoryRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(inventory));
 
             assertThrows(InvalidInventoryStateException.class,
@@ -173,6 +184,7 @@ class InventoryCommandServiceTest {
         @Test
         @DisplayName("재고 없는 상품이면 InventoryNotFoundException")
         void restore_inventoryNotFound() {
+            given(inventoryRepository.restoreAtomic(PRODUCT_ID, 30)).willReturn(0);
             given(inventoryRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.empty());
 
             assertThrows(InventoryNotFoundException.class,
