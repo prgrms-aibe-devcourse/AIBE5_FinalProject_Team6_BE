@@ -104,7 +104,7 @@ public class OrderService {
     public void markAsPaid(Long orderId) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new OrderNotFoundException(orderId));
-        if (order.getStatus() == OrderStatus.PAID || order.getStatus() == OrderStatus.COMPLETED) {
+        if (order.getStatus() != OrderStatus.RESERVED) {
             return;
         }
         orderRepository.updateStatus(orderId, OrderStatus.PAID);
