@@ -34,13 +34,13 @@ class RedisWaitQueueRepositoryTest {
             new GenericContainer<>("redis:7-alpine").withExposedPorts(6379);
 
     private static LettuceConnectionFactory connectionFactory;
-    // P3: StringRedisTemplate은 stateless — @BeforeAll에서 한 번만 생성
     private static StringRedisTemplate redisTemplate;
     private RedisWaitQueueRepository repository;
 
-    private static final Long FAN_ID     = 1L;
-    private static final Long PRODUCT_ID = 100L;
-    private static final long TTL        = 86400L;
+    private static final Long   FAN_ID         = 1L;
+    private static final Long   PRODUCT_ID     = 100L;
+    private static final long   TTL            = 86400L;
+    private static final String FAN_KEY_FORMAT = "queue:%d:fan:%d";
 
     @BeforeAll
     static void initFactory() {
@@ -58,7 +58,7 @@ class RedisWaitQueueRepositoryTest {
 
     @BeforeEach
     void setUp() {
-        // P2: 순차 실행 기준 안전. @Execution(CONCURRENT) 전환 시 productId별 key prefix 삭제로 교체 필요
+        // 순차 실행 기준 안전. @Execution(CONCURRENT) 전환 시 productId별 key prefix 삭제로 교체 필요
         redisTemplate.execute((RedisCallback<Object>) conn -> {
             conn.serverCommands().flushAll();
             return null;
@@ -120,7 +120,7 @@ class RedisWaitQueueRepositoryTest {
         repository.join(FAN_ID, PRODUCT_ID);
 
         Long ttl = redisTemplate.getExpire(
-                String.format("queue:%d:fan:%d", PRODUCT_ID, FAN_ID), TimeUnit.SECONDS);
+                String.format(FAN_KEY_FORMAT, PRODUCT_ID, FAN_ID), TimeUnit.SECONDS);
 
         assertThat(ttl).isGreaterThan(0L).isLessThanOrEqualTo(TTL);
     }
@@ -262,7 +262,7 @@ class RedisWaitQueueRepositoryTest {
         ready.await();
         start.countDown();
         executor.shutdown();
-        // P1: timeout 시 스레드가 아직 실행 중일 수 있으므로 강제 종료 후 실패 처리
+        // timeout 시 스레드가 아직 실행 중인 상태에서 assert가 실행되지 않도록 강제 종료
         if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
             executor.shutdownNow();
             fail("동시성 테스트 타임아웃 — CI 환경에서 스레드가 5초 내 완료되지 않음");
@@ -303,6 +303,7 @@ class RedisWaitQueueRepositoryTest {
                 .get()
                 .extracting(WaitQueueEntry::getStatus)
                 .isEqualTo(WaitQueueStatus.EXPIRED);
+        assertThat(repository.countProcessing(PRODUCT_ID)).isEqualTo(0L);
     }
 
     @Test
