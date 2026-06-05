@@ -64,8 +64,8 @@ public class CartController {
             @Valid @RequestBody UpdateCartItemRequest request,
             Authentication authentication,
             @RequestHeader(value = "X-Fan-Id", required = false) Long fanIdHeader) {
-        resolveFanId(authentication, fanIdHeader);
-        cartService.updateItemQuantity(new UpdateCartItemCommand(id, request.getQuantity()));
+        Long fanId = resolveFanId(authentication, fanIdHeader);
+        cartService.updateItemQuantity(new UpdateCartItemCommand(fanId, id, request.getQuantity()));
         return ResponseEntity.ok(ApiResponse.ok(
                 Map.of("cartItemId", id, "quantity", request.getQuantity()), traceId()));
     }
@@ -75,8 +75,8 @@ public class CartController {
             @PathVariable Long id,
             Authentication authentication,
             @RequestHeader(value = "X-Fan-Id", required = false) Long fanIdHeader) {
-        resolveFanId(authentication, fanIdHeader);
-        cartService.removeItem(id);
+        Long fanId = resolveFanId(authentication, fanIdHeader);
+        cartService.removeItem(fanId, id);
         return ResponseEntity.noContent().build();
     }
 

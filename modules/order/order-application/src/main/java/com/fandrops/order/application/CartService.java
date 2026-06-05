@@ -7,6 +7,7 @@ import com.fandrops.order.application.dto.UpdateCartItemCommand;
 import com.fandrops.order.domain.Cart;
 import com.fandrops.order.domain.CartItem;
 import com.fandrops.order.domain.exception.CartItemNotFoundException;
+import com.fandrops.order.domain.exception.CartNotFoundException;
 import com.fandrops.order.domain.port.CartItemRepository;
 import com.fandrops.order.domain.port.CartRepository;
 import com.fandrops.order.domain.port.ProductPricePort;
@@ -66,14 +67,25 @@ public class CartService {
     public void updateItemQuantity(UpdateCartItemCommand command) {
         CartItem item = cartItemRepository.findById(command.getCartItemId())
                 .orElseThrow(() -> new CartItemNotFoundException(command.getCartItemId()));
+        verifyOwnership(command.getFanId(), item.getCartId());
         item.updateQuantity(command.getQuantity());
         cartItemRepository.save(item);
     }
 
     @Transactional
-    public void removeItem(Long cartItemId) {
-        cartItemRepository.findById(cartItemId)
+    public void removeItem(Long fanId, Long cartItemId) {
+        CartItem item = cartItemRepository.findById(cartItemId)
                 .orElseThrow(() -> new CartItemNotFoundException(cartItemId));
+        verifyOwnership(fanId, item.getCartId());
         cartItemRepository.deleteById(cartItemId);
+    }
+
+    // cartId가 요청 fanId의 장바구니인지 검증
+    private void verifyOwnership(Long fanId, Long cartId) {
+        Cart cart = cartRepository.findByFanId(fanId)
+                .orElseThrow(() -> new CartNotFoundException(fanId));
+        if (!cart.getId().equals(cartId)) {
+            throw new IllegalArgumentException("본인의 장바구니 항목만 수정할 수 있습니다.");
+        }
     }
 }
