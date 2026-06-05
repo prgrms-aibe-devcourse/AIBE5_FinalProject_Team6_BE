@@ -150,30 +150,6 @@ public class AuthService {
         userRepository.save(fan);
     }
 
-    // 내 정보 조회
-    @Transactional(readOnly = true)
-    public FanResult getMyInfo(Long fanId) {
-        Fan fan = userRepository.findById(fanId)
-                .orElseThrow(() -> new FanNotFoundException("존재하지 않는 팬입니다."));
-        return FanResult.from(fan);
-    }
-
-    // 내 정보 수정
-    @Transactional
-    public FanResult updateMyInfo(UpdateFanCommand command) {
-        Fan fan = userRepository.findById(command.fanId())
-                .orElseThrow(() -> new FanNotFoundException("존재하지 않는 팬입니다."));
-
-        if (command.nickname() != null) {
-            fan.updateNickname(command.nickname());
-        }
-        if (command.allowNotification() != null) {
-            fan.updateNotificationConsent(command.allowNotification());
-        }
-
-        return FanResult.from(userRepository.save(fan));
-    }
-
     private AuthTokenResult issueTokens(Long userId, UserRole role) {
         String accessToken = jwtProvider.generateAccessToken(userId, role);
         String refreshToken = jwtProvider.generateRefreshToken(userId);
