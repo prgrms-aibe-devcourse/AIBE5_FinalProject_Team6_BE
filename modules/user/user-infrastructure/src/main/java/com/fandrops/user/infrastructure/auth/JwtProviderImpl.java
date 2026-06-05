@@ -64,10 +64,11 @@ public class JwtProviderImpl implements JwtProvider {
                     .build()
                     .parseSignedClaims(token)
                     .getPayload();
-            return new ParsedClaims(
-                    Long.parseLong(claims.getSubject()),
-                    claims.get("role", String.class)
-            );
+            String role = claims.get("role", String.class);
+            if (role == null) {
+                throw new InvalidTokenException("액세스 토큰이 아닙니다.");
+            }
+            return new ParsedClaims(Long.parseLong(claims.getSubject()), role);
         } catch (JwtException | IllegalArgumentException e) {
             throw new InvalidTokenException("유효하지 않은 액세스 토큰입니다.", e);
         }

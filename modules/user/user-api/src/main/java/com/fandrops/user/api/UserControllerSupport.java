@@ -1,5 +1,6 @@
 package com.fandrops.user.api;
 
+import com.fandrops.user.application.exception.InvalidCredentialsException;
 import org.slf4j.MDC;
 import org.springframework.core.env.Environment;
 import org.springframework.security.core.Authentication;
@@ -32,6 +33,6 @@ public abstract class UserControllerSupport {
                 && authentication.getPrincipal() instanceof Long fanId) {
             return fanId;
         }
-        throw new IllegalStateException("인증 정보가 없습니다.");
+        throw new InvalidCredentialsException("인증이 필요합니다.");
     }
 }
