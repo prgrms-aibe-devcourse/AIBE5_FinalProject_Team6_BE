@@ -148,17 +148,32 @@ class CartServiceTest {
     class UpdateItemQuantity {
 
         @Test
-        @DisplayName("수량 변경 성공")
+        @DisplayName("수량 변경 성공 — 소유권 검증 포함")
         void updateItemQuantity_success() {
             CartItem item = cartItem(2);
             given(cartItemRepository.findById(CART_ITEM_ID)).willReturn(Optional.of(item));
+            given(cartRepository.findByFanId(FAN_ID)).willReturn(Optional.of(cart()));
             given(cartItemRepository.save(any())).willReturn(item);
 
-            sut.updateItemQuantity(new UpdateCartItemCommand(CART_ITEM_ID, 5));
+            sut.updateItemQuantity(new UpdateCartItemCommand(FAN_ID, CART_ITEM_ID, 5));
 
             ArgumentCaptor<CartItem> captor = ArgumentCaptor.forClass(CartItem.class);
             verify(cartItemRepository).save(captor.capture());
             assertEquals(5, captor.getValue().getQuantity());
+        }
+
+        @Test
+        @DisplayName("타인 항목 수정 시 IllegalArgumentException")
+        void updateItemQuantity_wrongOwner_throws() {
+            CartItem item = cartItem(2);
+            Cart otherCart = Cart.of(999L, 999L, LocalDateTime.now(), LocalDateTime.now());
+            given(cartItemRepository.findById(CART_ITEM_ID)).willReturn(Optional.of(item));
+            given(cartRepository.findByFanId(FAN_ID)).willReturn(Optional.of(otherCart));
+
+            assertThrows(IllegalArgumentException.class,
+                    () -> sut.updateItemQuantity(new UpdateCartItemCommand(FAN_ID, CART_ITEM_ID, 3)));
+
+            verify(cartItemRepository, never()).save(any());
         }
 
         @Test
@@ -167,7 +182,7 @@ class CartServiceTest {
             given(cartItemRepository.findById(CART_ITEM_ID)).willReturn(Optional.empty());
 
             assertThrows(CartItemNotFoundException.class,
-                    () -> sut.updateItemQuantity(new UpdateCartItemCommand(CART_ITEM_ID, 3)));
+                    () -> sut.updateItemQuantity(new UpdateCartItemCommand(FAN_ID, CART_ITEM_ID, 3)));
 
             verify(cartItemRepository, never()).save(any());
         }
@@ -178,13 +193,27 @@ class CartServiceTest {
     class RemoveItem {
 
         @Test
-        @DisplayName("항목 삭제 성공")
+        @DisplayName("항목 삭제 성공 — 소유권 검증 포함")
         void removeItem_success() {
             given(cartItemRepository.findById(CART_ITEM_ID)).willReturn(Optional.of(cartItem(1)));
+            given(cartRepository.findByFanId(FAN_ID)).willReturn(Optional.of(cart()));
 
-            sut.removeItem(CART_ITEM_ID);
+            sut.removeItem(FAN_ID, CART_ITEM_ID);
 
             verify(cartItemRepository).deleteById(CART_ITEM_ID);
+        }
+
+        @Test
+        @DisplayName("타인 항목 삭제 시 IllegalArgumentException")
+        void removeItem_wrongOwner_throws() {
+            CartItem item = cartItem(1);
+            Cart otherCart = Cart.of(999L, 999L, LocalDateTime.now(), LocalDateTime.now());
+            given(cartItemRepository.findById(CART_ITEM_ID)).willReturn(Optional.of(item));
+            given(cartRepository.findByFanId(FAN_ID)).willReturn(Optional.of(otherCart));
+
+            assertThrows(IllegalArgumentException.class, () -> sut.removeItem(FAN_ID, CART_ITEM_ID));
+
+            verify(cartItemRepository, never()).deleteById(any());
         }
 
         @Test
@@ -192,7 +221,7 @@ class CartServiceTest {
         void removeItem_notFound_throws() {
             given(cartItemRepository.findById(CART_ITEM_ID)).willReturn(Optional.empty());
 
-            assertThrows(CartItemNotFoundException.class, () -> sut.removeItem(CART_ITEM_ID));
+            assertThrows(CartItemNotFoundException.class, () -> sut.removeItem(FAN_ID, CART_ITEM_ID));
 
             verify(cartItemRepository, never()).deleteById(any());
         }
