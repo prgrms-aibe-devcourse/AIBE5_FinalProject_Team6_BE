@@ -43,6 +43,12 @@ public class CartJpaEntity {
         return new CartJpaEntity(cart.getFanId());
     }
 
+    public static CartJpaEntity fromWithId(Cart cart) {
+        CartJpaEntity entity = new CartJpaEntity(cart.getFanId());
+        entity.id = cart.getId();
+        return entity;
+    }
+
     public Cart toDomain() {
         return Cart.of(id, fanId, createdAt, updatedAt);
     }

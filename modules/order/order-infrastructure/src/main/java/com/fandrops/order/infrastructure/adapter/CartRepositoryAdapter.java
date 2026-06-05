@@ -19,6 +19,9 @@ public class CartRepositoryAdapter implements CartRepository {
 
     @Override
     public Cart save(Cart cart) {
-        return jpaRepository.save(CartJpaEntity.from(cart)).toDomain();
+        CartJpaEntity entity = cart.getId() == null
+                ? CartJpaEntity.from(cart)
+                : CartJpaEntity.fromWithId(cart);
+        return jpaRepository.save(entity).toDomain();
     }
 }

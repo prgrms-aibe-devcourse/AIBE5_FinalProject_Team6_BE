@@ -54,6 +54,7 @@ k6 드롭스 부하 테스트(Phase 4)에서 아래 **하나 이상**이 확인�
 | T1 | `cart_item` write P95 | **주문 생성 트랜잭션 P95의 20% 이상**을 차지 |
 | T2 | DB 커넥션 풀 점유율 | 드롭스 구간 **80% 초과**가 **5분 이상** 지속 |
 | T3 | HikariCP active connections | `maximum-pool-size`에 **근접**(운영 설정값 기준, 예: ≥90%) |
+| T4 | `GET /cart` P95 | **120ms 초과** — 아이템 수(N)만큼 `productPricePort.getPrice()` 호출로 N+1 발생. 상품 API 구현 후 `getPrices(Set<Long>)` 벌크 메서드로 교체 또는 캐시 도입 검토 |
 
 트리거 미충족 시 **RDB 유지**. Redis는 [ADR-001](./ADR-001-multi-module-monolith.md)대로 **대기열·캐시** 등 기존 용도만 사용한다.
 
