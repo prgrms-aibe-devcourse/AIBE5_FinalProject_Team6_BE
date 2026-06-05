@@ -2,7 +2,6 @@ package com.fandrops.order.infrastructure.config;
 
 import com.fandrops.inventory.application.InventoryCommandService;
 import com.fandrops.order.application.OrderService;
-import com.fandrops.order.application.PaymentEventListener;
 import com.fandrops.order.domain.port.AccessTicketValidatePort;
 import com.fandrops.order.domain.port.InventoryConfirmPort;
 import com.fandrops.order.domain.port.InventoryReservePort;
@@ -89,10 +88,4 @@ public class OrderConfig implements AsyncConfigurer {
         return executor;
     }
 
-    @Bean
-    public PaymentEventListener paymentEventListener(OrderService orderService,
-                                                     InventoryRestorePort inventoryRestorePort,
-                                                     InventoryConfirmPort inventoryConfirmPort) {
-        return new PaymentEventListener(orderService, inventoryRestorePort, inventoryConfirmPort);
-    }
 }
