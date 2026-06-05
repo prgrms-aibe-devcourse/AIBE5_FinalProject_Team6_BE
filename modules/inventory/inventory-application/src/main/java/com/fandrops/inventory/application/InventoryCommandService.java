@@ -7,6 +7,7 @@ import com.fandrops.inventory.domain.Inventory;
 import com.fandrops.inventory.domain.InventoryChangeType;
 import com.fandrops.inventory.domain.InventoryHistory;
 import com.fandrops.inventory.domain.InventoryRefType;
+import com.fandrops.inventory.domain.exception.InvalidInventoryStateException;
 import com.fandrops.inventory.domain.exception.OutOfStockException;
 import com.fandrops.inventory.domain.port.InventoryHistoryRepository;
 import com.fandrops.inventory.domain.port.InventoryRepository;
@@ -28,40 +29,50 @@ public class InventoryCommandService {
 
     @Transactional
     public void reserve(Long orderId, Long productId, int qty) {
-        Inventory inventory = findByProductId(productId);
-        int qtyBefore = inventory.getAvailableQty();
         int affected = inventoryRepository.reserveAtomic(productId, qty);
         if (affected == 0) {
+            findByProductId(productId);  // InventoryNotFoundException 체크
             throw new OutOfStockException(productId);
         }
+        // clearAutomatically=true → JPA 캐시 클리어됨, 재조회로 정확한 post-update 값 획득
+        Inventory updated = findByProductId(productId);
+        int qtyAfter = updated.getAvailableQty();
         InventoryHistory history = InventoryHistory.of(
-                inventory.getId(), InventoryChangeType.RESERVE, qty,
-                qtyBefore, qtyBefore - qty, orderId, InventoryRefType.ORDER);
-        saveHistory(history, inventory.getId(), orderId);
+                updated.getId(), InventoryChangeType.RESERVE, qty,
+                qtyAfter + qty, qtyAfter, orderId, InventoryRefType.ORDER);
+        saveHistory(history, updated.getId(), orderId);
     }
 
     @Transactional
     public void confirm(Long orderId, Long productId, int qty) {
-        Inventory inventory = findByProductId(productId);
-        InventoryHistory history = inventory.confirm(qty, orderId);
-        try {
-            inventoryRepository.save(inventory);
-        } catch (OptimisticLockingFailureException e) {
-            throw new InventoryLockConflictException(productId);
+        int affected = inventoryRepository.confirmAtomic(productId, qty);
+        if (affected == 0) {
+            Inventory inventory = findByProductId(productId);
+            throw new InvalidInventoryStateException(
+                    String.format("confirm 실패: reservedQty=%d, qty=%d", inventory.getReservedQty(), qty));
         }
-        saveHistory(history, inventory.getId(), orderId);
+        Inventory updated = findByProductId(productId);
+        int qtyAfter = updated.getTotalQty();
+        InventoryHistory history = InventoryHistory.of(
+                updated.getId(), InventoryChangeType.DECREASE, qty,
+                qtyAfter + qty, qtyAfter, orderId, InventoryRefType.ORDER);
+        saveHistory(history, updated.getId(), orderId);
     }
 
     @Transactional
     public void restore(Long orderId, Long productId, int qty) {
-        Inventory inventory = findByProductId(productId);
-        InventoryHistory history = inventory.restore(qty, orderId);
-        try {
-            inventoryRepository.save(inventory);
-        } catch (OptimisticLockingFailureException e) {
-            throw new InventoryLockConflictException(productId);
+        int affected = inventoryRepository.restoreAtomic(productId, qty);
+        if (affected == 0) {
+            Inventory inventory = findByProductId(productId);
+            throw new InvalidInventoryStateException(
+                    String.format("restore 실패: reservedQty=%d, qty=%d", inventory.getReservedQty(), qty));
         }
-        saveHistory(history, inventory.getId(), orderId);
+        Inventory updated = findByProductId(productId);
+        int qtyAfter = updated.getAvailableQty();
+        InventoryHistory history = InventoryHistory.of(
+                updated.getId(), InventoryChangeType.RELEASE, qty,
+                qtyAfter - qty, qtyAfter, orderId, InventoryRefType.ORDER);
+        saveHistory(history, updated.getId(), orderId);
     }
 
     @Transactional
