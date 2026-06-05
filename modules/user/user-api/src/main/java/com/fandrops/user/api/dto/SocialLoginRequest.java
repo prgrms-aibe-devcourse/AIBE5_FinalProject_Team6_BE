@@ -1,3 +1,5 @@
 package com.fandrops.user.api.dto;
 
-public record SocialLoginRequest(String code) {}
+import jakarta.validation.constraints.NotBlank;
+
+public record SocialLoginRequest(@NotBlank String code) {}

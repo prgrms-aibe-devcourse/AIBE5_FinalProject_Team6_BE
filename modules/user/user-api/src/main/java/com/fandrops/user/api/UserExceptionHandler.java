@@ -7,12 +7,25 @@ import com.fandrops.user.application.exception.InvalidCredentialsException;
 import com.fandrops.user.application.exception.InvalidTokenException;
 import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import java.util.UUID;
+import java.util.stream.Collectors;
+
 @RestControllerAdvice(basePackages = "com.fandrops.user.api")
 public class UserExceptionHandler {
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ApiResponse<Void> handleValidation(MethodArgumentNotValidException e) {
+        String message = e.getBindingResult().getFieldErrors().stream()
+                .map(fe -> fe.getField() + ": " + fe.getDefaultMessage())
+                .collect(Collectors.joining(", "));
+        return ApiResponse.fail("INVALID_REQUEST", message, false, traceId());
+    }
 
     @ExceptionHandler(DuplicateEmailException.class)
     @ResponseStatus(HttpStatus.CONFLICT)
@@ -41,11 +54,11 @@ public class UserExceptionHandler {
     @ExceptionHandler(IllegalArgumentException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ApiResponse<Void> handleIllegalArgument(IllegalArgumentException e) {
-        return ApiResponse.fail("INVALID_REQUEST", e.getMessage(), false, traceId());
+        return ApiResponse.fail("INVALID_REQUEST", "잘못된 요청입니다.", false, traceId());
     }
 
     private static String traceId() {
         String id = MDC.get("traceId");
-        return id != null ? id : "";
+        return id != null ? id : UUID.randomUUID().toString();
     }
 }

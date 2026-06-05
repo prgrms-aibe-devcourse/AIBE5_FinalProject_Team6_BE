@@ -8,6 +8,7 @@ import com.fandrops.user.application.dto.LoginCommand;
 import com.fandrops.user.application.dto.SocialLoginCommand;
 import com.fandrops.user.application.service.AuthService;
 import com.fandrops.user.domain.AuthProvider;
+import jakarta.validation.Valid;
 import org.springframework.core.env.Environment;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -25,7 +26,7 @@ public class AuthController extends UserControllerSupport {
     }
 
     @PostMapping("/signup")
-    public ResponseEntity<ApiResponse<AuthTokenResponse>> signUp(@RequestBody SignUpRequest request) {
+    public ResponseEntity<ApiResponse<AuthTokenResponse>> signUp(@Valid @RequestBody SignUpRequest request) {
         AuthTokenResult result = authService.signUp(new SignUpCommand(
                 request.email(), request.password(), request.nickname(), request.termsAgreed()));
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -33,7 +34,7 @@ public class AuthController extends UserControllerSupport {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<ApiResponse<AuthTokenResponse>> login(@RequestBody LoginRequest request) {
+    public ResponseEntity<ApiResponse<AuthTokenResponse>> login(@Valid @RequestBody LoginRequest request) {
         AuthTokenResult result = authService.login(new LoginCommand(request.email(), request.password()));
         return ResponseEntity.ok(ApiResponse.ok(toAuthTokenResponse(result), traceId()));
     }
@@ -41,7 +42,7 @@ public class AuthController extends UserControllerSupport {
     @PostMapping("/social/{provider}")
     public ResponseEntity<ApiResponse<AuthTokenResponse>> socialLogin(
             @PathVariable String provider,
-            @RequestBody SocialLoginRequest request) {
+            @Valid @RequestBody SocialLoginRequest request) {
         AuthProvider authProvider;
         try {
             authProvider = AuthProvider.valueOf(provider.toUpperCase());
@@ -54,26 +55,26 @@ public class AuthController extends UserControllerSupport {
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<Void> logout(@RequestBody LogoutRequest request) {
+    public ResponseEntity<Void> logout(@Valid @RequestBody LogoutRequest request) {
         authService.logout(request.refreshToken());
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/token/refresh")
-    public ResponseEntity<ApiResponse<RefreshResponse>> refresh(@RequestBody RefreshRequest request) {
+    public ResponseEntity<ApiResponse<RefreshResponse>> refresh(@Valid @RequestBody RefreshRequest request) {
         AuthTokenResult result = authService.refreshAccessToken(request.refreshToken());
         return ResponseEntity.ok(ApiResponse.ok(
                 new RefreshResponse(result.accessToken(), result.expiresIn()), traceId()));
     }
 
     @PostMapping("/password-reset/request")
-    public ResponseEntity<Void> requestPasswordReset(@RequestBody PasswordResetRequestDto request) {
+    public ResponseEntity<Void> requestPasswordReset(@Valid @RequestBody PasswordResetRequest request) {
         authService.requestPasswordReset(request.email());
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/password-reset/confirm")
-    public ResponseEntity<Void> confirmPasswordReset(@RequestBody PasswordResetConfirmRequest request) {
+    public ResponseEntity<Void> confirmPasswordReset(@Valid @RequestBody PasswordResetConfirmRequest request) {
         authService.confirmPasswordReset(request.token(), request.newPassword());
         return ResponseEntity.noContent().build();
     }

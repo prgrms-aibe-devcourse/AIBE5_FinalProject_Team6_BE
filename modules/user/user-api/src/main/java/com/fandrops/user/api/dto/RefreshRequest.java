@@ -1,3 +1,5 @@
 package com.fandrops.user.api.dto;
 
-public record RefreshRequest(String refreshToken) {}
+import jakarta.validation.constraints.NotBlank;
+
+public record RefreshRequest(@NotBlank String refreshToken) {}

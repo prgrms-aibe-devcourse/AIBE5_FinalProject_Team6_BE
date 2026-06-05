@@ -1,6 +1,8 @@
 package com.fandrops.user.api.dto;
 
+import jakarta.validation.constraints.NotBlank;
+
 public record PasswordResetConfirmRequest(
-        String token,
-        String newPassword
+        @NotBlank String token,
+        @NotBlank String newPassword
 ) {}

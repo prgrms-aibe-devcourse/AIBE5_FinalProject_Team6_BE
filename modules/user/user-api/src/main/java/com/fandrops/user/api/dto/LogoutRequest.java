@@ -1,3 +1,5 @@
 package com.fandrops.user.api.dto;
 
-public record LogoutRequest(String refreshToken) {}
+import jakarta.validation.constraints.NotBlank;
+
+public record LogoutRequest(@NotBlank String refreshToken) {}

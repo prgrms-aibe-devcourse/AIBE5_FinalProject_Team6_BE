@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/v1/fans")
 public class FanController extends UserControllerSupport {
 
+    // TODO: 팬 정보 관리는 추후 FanService로 분리 예정 — AuthService 책임 분리 (#83)
     private final AuthService authService;
 
     public FanController(AuthService authService, Environment environment) {
@@ -29,7 +30,7 @@ public class FanController extends UserControllerSupport {
         return ResponseEntity.ok(ApiResponse.ok(authService.getMyInfo(fanId), traceId()));
     }
 
-    @PutMapping("/me")
+    @PatchMapping("/me")
     public ResponseEntity<ApiResponse<FanResult>> updateMyInfo(
             Authentication authentication,
             @RequestHeader(value = "X-Fan-Id", required = false) Long localFanId,
