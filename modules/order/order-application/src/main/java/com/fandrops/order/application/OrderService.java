@@ -92,6 +92,11 @@ public class OrderService {
 
     @Transactional
     public void markAsCancelled(Long orderId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new OrderNotFoundException(orderId));
+        if (order.getStatus() == OrderStatus.CANCELLED || order.getStatus() == OrderStatus.COMPLETED) {
+            return;
+        }
         orderRepository.updateStatus(orderId, OrderStatus.CANCELLED);
     }
 
@@ -107,6 +112,11 @@ public class OrderService {
 
     @Transactional
     public void markAsCompleted(Long orderId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new OrderNotFoundException(orderId));
+        if (order.getStatus() != OrderStatus.PAID) {
+            return;
+        }
         orderRepository.updateStatus(orderId, OrderStatus.COMPLETED);
     }
 }
