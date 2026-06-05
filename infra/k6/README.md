@@ -8,6 +8,7 @@
 4. [실행 방법](#실행-방법)
 5. [결과 해석](#결과-해석)
 6. [트러블슈팅](#트러블슈팅)
+7. [Phase 4 — 서버 환경 실행](#phase-4--서버-환경-실행)
 
 ---
 
@@ -395,3 +396,219 @@ threshold 실패 예시:
 | `orders_reserved > 100` | 오버셀 버그 발생 | 인벤토리 낙관적 락 로직 점검 |
 | `429 has retryable:true` check 실패 | SSE 과부하 응답에 retryable 필드 누락 | `SseEmitterRegistry` 429 응답 스펙 확인 |
 | Wiremock 연결 실패 | `docker compose up -d` 미실행 | `docker compose ps` 로 wiremock 상태 확인 |
+
+---
+
+## Phase 4 — 서버 환경 실행
+
+### 현재(로컬) vs Phase 4 구성 비교
+
+**현재 (로컬 개발 PC)**
+
+```
+k6 실행
+  └─▶ localhost:8080  (Spring Boot — 로컬 실행)
+        ├─▶ localhost:3307  (MySQL — Docker)
+        ├─▶ localhost:6379  (Redis — Docker)
+        └─▶ localhost:8089  (Wiremock — Docker, 가짜 Toss PG)
+```
+
+**Phase 4 (AWS 배포 후)**
+
+```
+k6 실행 머신 (로컬 PC 또는 GitHub Actions runner)
+  └─▶ https://api-stg.fandrops.com  (EC2 — Spring Boot)
+        ├─▶ AWS RDS MySQL
+        ├─▶ AWS ElastiCache Redis
+        └─▶ Toss PG (Wiremock 또는 실제 테스트 키)
+```
+
+---
+
+### 서버 전환 방법
+
+모든 시나리오는 `BASE_URL` 환경변수 하나로 대상 서버를 바꿀 수 있다.
+
+```bash
+# 로컬 (기본값 — 환경변수 생략 가능)
+k6 run scenarios/02_feed_read.js
+
+# 스테이징 서버
+k6 run -e BASE_URL=https://api-stg.fandrops.com scenarios/02_feed_read.js
+
+# 여러 환경변수 동시 사용
+k6 run \
+  -e BASE_URL=https://api-stg.fandrops.com \
+  -e PRODUCT_ID=1 \
+  -e FAN_ID=1 \
+  scenarios/01_order_concurrency.js
+```
+
+> **주의:** `BASE_URL`에 trailing slash(`/`)를 붙이지 않는다.
+
+---
+
+### 시나리오 03 — Toss PG 처리 방법
+
+Phase 4에서 시나리오 03을 실행할 때 Wiremock을 서버에 배포하거나 실제 Toss 테스트 키로 교체하는 두 가지 방법이 있다.
+
+#### 방법 A: 서버에 Wiremock 배포 (권장)
+
+EC2에서 Wiremock Docker 컨테이너를 실행해 부하 테스트 전용 PG 모킹을 유지한다.
+
+```bash
+# EC2 접속 후 실행
+docker run -d \
+  --name wiremock \
+  -p 8089:8080 \
+  -v /home/ec2-user/wiremock-stubs:/home/wiremock/mappings \
+  wiremock/wiremock:3.9.1 \
+  --verbose --global-response-templating
+
+# stubs 파일 복사 (로컬 → EC2)
+scp -i key.pem infra/k6/wiremock/stubs/toss-confirm.json \
+  ec2-user@<EC2_IP>:/home/ec2-user/wiremock-stubs/
+```
+
+`application-stg.yml`에서 Wiremock 주소 지정:
+
+```yaml
+toss:
+  api:
+    base-url: http://localhost:8089   # EC2 내부에서 Wiremock에 접근
+```
+
+#### 방법 B: 실제 Toss 테스트 키 사용
+
+Toss Payments 개발자 콘솔에서 발급한 **테스트 시크릿 키**로 교체하면 실제 Toss 샌드박스 환경에서 결제 확인 API를 호출한다.
+
+```yaml
+# application-stg.yml
+toss:
+  api:
+    base-url: https://api.tosspayments.com
+    secret-key: test_sk_xxxxxxxxxxxx   # 테스트 키 (실제 결제 발생 없음)
+```
+
+> **주의:** 테스트 키도 Toss 서버에 실제 요청이 가므로 k6 VU 수를 50 이하로 제한하고 시나리오 03의 부하를 낮춰서 실행할 것.
+
+---
+
+### GitHub Actions CI/CD 연동 (선택)
+
+배포마다 k6 부하 테스트를 자동 실행하려면 아래 워크플로우를 추가한다.
+
+```yaml
+# .github/workflows/k6-load-test.yml
+name: k6 Load Test (Staging)
+
+on:
+  workflow_dispatch:           # 수동 실행
+  push:
+    branches: [develop]        # develop 병합 시 자동 실행
+
+jobs:
+  load-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install k6
+        run: |
+          curl -s https://dl.k6.io/key.gpg | sudo apt-key add -
+          echo "deb https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update && sudo apt-get install k6
+
+      - name: Run feed read scenario
+        run: |
+          cd infra/k6
+          k6 run -e BASE_URL=${{ secrets.STG_BASE_URL }} scenarios/02_feed_read.js
+
+      - name: Run order concurrency scenario
+        run: |
+          cd infra/k6
+          k6 run -e BASE_URL=${{ secrets.STG_BASE_URL }} scenarios/01_order_concurrency.js
+```
+
+GitHub 저장소 → Settings → Secrets에 `STG_BASE_URL` 값을 `https://api-stg.fandrops.com`으로 등록한다.
+
+> **권장 실행 순서**: CI에서는 VU 수가 많은 시나리오(04, 05)는 제외하고 01, 02, 03만 실행한다. 04·05는 수동으로 실행한다.
+
+---
+
+### Grafana + Prometheus 실시간 모니터링
+
+k6 결과를 Prometheus Remote Write로 전송하면 Grafana 대시보드에서 실시간으로 확인할 수 있다.
+
+#### 1. Prometheus Remote Write 설정
+
+k6 실행 시 `--out` 옵션을 추가한다:
+
+```bash
+K6_PROMETHEUS_RW_SERVER_URL=http://<PROMETHEUS_URL>:9090/api/v1/write \
+k6 run \
+  --out experimental-prometheus-rw \
+  -e BASE_URL=https://api-stg.fandrops.com \
+  scenarios/01_order_concurrency.js
+```
+
+#### 2. Grafana 대시보드 임포트
+
+공식 k6 대시보드 ID **`2587`**을 Grafana에서 임포트한다:
+
+1. Grafana → Dashboards → Import
+2. Dashboard ID `2587` 입력 → Load
+3. Prometheus 데이터 소스 선택 → Import
+
+#### 3. 주요 모니터링 지표
+
+| 지표 | 설명 | 경보 기준 |
+|------|------|----------|
+| `k6_http_req_duration_p95` | 응답시간 P95 | 시나리오별 threshold 참고 |
+| `k6_http_req_failed_rate` | 에러율 | 1% 초과 시 경보 |
+| `k6_vus` | 현재 활성 VU 수 | - |
+| `k6_data_received` | 수신 처리량 | - |
+| `orders_reserved` | 시나리오 01/04 누적 주문 수 | 100 초과 시 오버셀 |
+
+#### 4. Prometheus + Grafana Docker Compose (로컬 모니터링)
+
+로컬에서도 모니터링이 필요하다면 `compose.yaml`에 아래를 추가한다:
+
+```yaml
+# compose.yaml에 추가
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    ports:
+      - "9090:9090"
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --web.enable-remote-write-receiver   # k6 remote write 수신
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    depends_on:
+      - prometheus
+```
+
+실행 후 `http://localhost:3000`에서 Grafana에 접속한다 (admin/admin).
+
+---
+
+### Phase 4 체크리스트
+
+Phase 4 전환 전 아래 항목을 확인한다.
+
+```
+[ ] api-stg.fandrops.com 에서 /actuator/health 200 응답 확인
+[ ] RDS 보안 그룹 — EC2에서만 3306 접근 허용 (k6 머신에서 직접 접근 불가)
+[ ] ElastiCache 보안 그룹 — EC2에서만 6379 접근 허용
+[ ] application-stg.yml 에 queue 설정 적용 (max-concurrent-processing=300 등)
+[ ] 시나리오 03: Wiremock EC2 실행 또는 Toss 테스트 키 교체 완료
+[ ] k6 실행 머신에서 BASE_URL 접근 가능 여부 확인 (curl 테스트)
+[ ] seed 데이터 스테이징 DB에 삽입 완료 (seed.sql 원격 실행)
+[ ] Grafana 대시보드 연결 확인 (선택)
+```
