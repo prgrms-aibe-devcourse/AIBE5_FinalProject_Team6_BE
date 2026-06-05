@@ -1,0 +1,21 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "/v1/payments/confirm"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "paymentKey": "{{jsonPath request.body '$.paymentKey'}}",
+      "orderId": "{{jsonPath request.body '$.orderId'}}",
+      "status": "DONE",
+      "method": "카드",
+      "totalAmount": "{{jsonPath request.body '$.amount'}}",
+      "approvedAt": "2024-01-01T09:00:00+09:00"
+    },
+    "transformers": ["response-template"]
+  }
+}
