@@ -3,6 +3,9 @@ package com.fandrops.order.api;
 import com.fandrops.order.api.dto.ApiError;
 import com.fandrops.order.api.dto.ApiResponse;
 import com.fandrops.order.domain.exception.AccessTicketInvalidException;
+import com.fandrops.order.domain.exception.CartAccessDeniedException;
+import com.fandrops.order.domain.exception.CartItemNotFoundException;
+import com.fandrops.order.domain.exception.CartNotFoundException;
 import com.fandrops.order.domain.exception.OrderNotFoundException;
 import com.fandrops.order.domain.exception.OutOfStockException;
 import com.fandrops.order.domain.exception.ReserveConflictException;
@@ -62,6 +65,30 @@ public class OrderExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.error(
                         new ApiError("INVALID_REQUEST", "유효하지 않은 인증 정보입니다.", false),
+                        MDC.get("traceId") != null ? MDC.get("traceId") : UUID.randomUUID().toString()));
+    }
+
+    @ExceptionHandler(CartAccessDeniedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleCartAccessDenied(CartAccessDeniedException e) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ApiResponse.error(
+                        new ApiError("CART_ACCESS_DENIED", e.getMessage(), false),
+                        MDC.get("traceId") != null ? MDC.get("traceId") : UUID.randomUUID().toString()));
+    }
+
+    @ExceptionHandler(CartNotFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> handleCartNotFound(CartNotFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.error(
+                        new ApiError("CART_NOT_FOUND", e.getMessage(), false),
+                        MDC.get("traceId") != null ? MDC.get("traceId") : UUID.randomUUID().toString()));
+    }
+
+    @ExceptionHandler(CartItemNotFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> handleCartItemNotFound(CartItemNotFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.error(
+                        new ApiError("CART_ITEM_NOT_FOUND", e.getMessage(), false),
                         MDC.get("traceId") != null ? MDC.get("traceId") : UUID.randomUUID().toString()));
     }
 }

@@ -175,7 +175,7 @@ Gradle 모듈·담당자: [architecture.md § 도메인 오너십](../architectu
 
 | Method | Endpoint | 설명 | Request Body / Param | Response |
 | --- | --- | --- | --- | --- |
-| GET | `/cart` | 내 장바구니 조회 | — | `{ items: [{ productId, quantity, price }] }` |
+| GET | `/cart` | 내 장바구니 조회 | — | `{ items: [{ cartItemId, productId, quantity, price }] }` |
 | POST | `/cart/items` | 장바구니 담기 | `productId`, `quantity` | `201` `{ cartItemId }` |
 | PATCH | `/cart/items/{id}` | 수량 변경 | `quantity` | `{ cartItemId, quantity }` |
 | DELETE | `/cart/items/{id}` | 장바구니 항목 삭제 | — | `204 No Content` |

@@ -8,10 +8,17 @@ import com.fandrops.order.domain.port.InventoryReservePort;
 import com.fandrops.order.domain.port.InventoryRestorePort;
 import com.fandrops.order.domain.port.OrderRepository;
 import com.fandrops.order.domain.port.ProductPricePort;
+import com.fandrops.order.application.CartService;
+import com.fandrops.order.domain.port.CartItemRepository;
+import com.fandrops.order.domain.port.CartRepository;
+import com.fandrops.order.infrastructure.adapter.CartItemRepositoryAdapter;
+import com.fandrops.order.infrastructure.adapter.CartRepositoryAdapter;
 import com.fandrops.order.infrastructure.adapter.InventoryConfirmAdapter;
 import com.fandrops.order.infrastructure.adapter.InventoryReserveAdapter;
 import com.fandrops.order.infrastructure.adapter.InventoryRestoreAdapter;
 import com.fandrops.order.infrastructure.adapter.StubProductPriceAdapter;
+import com.fandrops.order.infrastructure.persistence.CartItemJpaRepository;
+import com.fandrops.order.infrastructure.persistence.CartJpaRepository;
 import com.fandrops.order.infrastructure.persistence.OrderJpaRepository;
 import com.fandrops.order.infrastructure.persistence.OrderRepositoryAdapter;
 import java.util.concurrent.Executor;
@@ -74,6 +81,23 @@ public class OrderConfig implements AsyncConfigurer {
                                      ProductPricePort productPricePort) {
         return new OrderService(orderRepository, inventoryReservePort, inventoryRestorePort,
                 accessTicketValidatePort, productPricePort);
+    }
+
+    @Bean
+    public CartRepository cartRepository(CartJpaRepository jpaRepository) {
+        return new CartRepositoryAdapter(jpaRepository);
+    }
+
+    @Bean
+    public CartItemRepository cartItemRepository(CartItemJpaRepository jpaRepository) {
+        return new CartItemRepositoryAdapter(jpaRepository);
+    }
+
+    @Bean
+    public CartService cartService(CartRepository cartRepository,
+                                   CartItemRepository cartItemRepository,
+                                   ProductPricePort productPricePort) {
+        return new CartService(cartRepository, cartItemRepository, productPricePort);
     }
 
     @Bean(name = "sagaExecutor")
