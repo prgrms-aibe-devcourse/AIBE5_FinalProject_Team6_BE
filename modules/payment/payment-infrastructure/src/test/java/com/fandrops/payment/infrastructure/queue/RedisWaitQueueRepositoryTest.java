@@ -24,6 +24,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.fail;
 
 @Testcontainers
 class RedisWaitQueueRepositoryTest {
@@ -33,7 +34,8 @@ class RedisWaitQueueRepositoryTest {
             new GenericContainer<>("redis:7-alpine").withExposedPorts(6379);
 
     private static LettuceConnectionFactory connectionFactory;
-    private StringRedisTemplate redisTemplate;
+    // P3: StringRedisTemplate은 stateless — @BeforeAll에서 한 번만 생성
+    private static StringRedisTemplate redisTemplate;
     private RedisWaitQueueRepository repository;
 
     private static final Long FAN_ID     = 1L;
@@ -46,6 +48,7 @@ class RedisWaitQueueRepositoryTest {
                 REDIS.getHost(), REDIS.getMappedPort(6379));
         connectionFactory = new LettuceConnectionFactory(config);
         connectionFactory.afterPropertiesSet();
+        redisTemplate = new StringRedisTemplate(connectionFactory);
     }
 
     @AfterAll
@@ -55,7 +58,7 @@ class RedisWaitQueueRepositoryTest {
 
     @BeforeEach
     void setUp() {
-        redisTemplate = new StringRedisTemplate(connectionFactory);
+        // P2: 순차 실행 기준 안전. @Execution(CONCURRENT) 전환 시 productId별 key prefix 삭제로 교체 필요
         redisTemplate.execute((RedisCallback<Object>) conn -> {
             conn.serverCommands().flushAll();
             return null;
@@ -77,7 +80,7 @@ class RedisWaitQueueRepositoryTest {
     }
 
     @Test
-    @DisplayName("join: 비-terminal 중복 요청 시 기존 entry 반환 (JOIN_SCRIPT 반환값 0)")
+    @DisplayName("join: 비-terminal 중복 요청 시 기존 entry 반환")
     void join_duplicateNonTerminal_returnsExistingEntry() {
         WaitQueueEntry first = repository.join(FAN_ID, PRODUCT_ID);
         WaitQueueEntry second = repository.join(FAN_ID, PRODUCT_ID);
@@ -87,7 +90,7 @@ class RedisWaitQueueRepositoryTest {
     }
 
     @Test
-    @DisplayName("W-1: DONE 후 재진입 시 새 WAITING entry 생성")
+    @DisplayName("join: DONE 후 재진입 시 새 WAITING entry 생성")
     void join_afterDone_createsNewEntry() {
         repository.join(FAN_ID, PRODUCT_ID);
         repository.transitionToProcessing(FAN_ID, PRODUCT_ID, Instant.now());
@@ -100,7 +103,7 @@ class RedisWaitQueueRepositoryTest {
     }
 
     @Test
-    @DisplayName("W-1: EXPIRED 후 재진입 시 새 WAITING entry 생성")
+    @DisplayName("join: EXPIRED 후 재진입 시 새 WAITING entry 생성")
     void join_afterExpired_createsNewEntry() {
         repository.join(FAN_ID, PRODUCT_ID);
         repository.transitionToProcessing(FAN_ID, PRODUCT_ID, Instant.now());
@@ -109,6 +112,17 @@ class RedisWaitQueueRepositoryTest {
         WaitQueueEntry rejoined = repository.join(FAN_ID, PRODUCT_ID);
 
         assertThat(rejoined.getStatus()).isEqualTo(WaitQueueStatus.WAITING);
+    }
+
+    @Test
+    @DisplayName("join: fanKey에 TTL이 설정됨")
+    void join_setsKeyTtl() {
+        repository.join(FAN_ID, PRODUCT_ID);
+
+        Long ttl = redisTemplate.getExpire(
+                String.format("queue:%d:fan:%d", PRODUCT_ID, FAN_ID), TimeUnit.SECONDS);
+
+        assertThat(ttl).isGreaterThan(0L).isLessThanOrEqualTo(TTL);
     }
 
     // ─── findEntry / getPosition ──────────────────────────────────────────────
@@ -146,7 +160,7 @@ class RedisWaitQueueRepositoryTest {
     }
 
     @Test
-    @DisplayName("exit: PROCESSING 상태에서 호출 시 무시 — entry 유지 (EXIT_SCRIPT 반환값 0)")
+    @DisplayName("exit: PROCESSING 상태에서 호출 시 무시 — entry 유지")
     void exit_ignoredWhenProcessing() {
         repository.join(FAN_ID, PRODUCT_ID);
         repository.transitionToProcessing(FAN_ID, PRODUCT_ID, Instant.now());
@@ -156,6 +170,38 @@ class RedisWaitQueueRepositoryTest {
         Optional<WaitQueueEntry> entry = repository.findEntry(FAN_ID, PRODUCT_ID);
         assertThat(entry).isPresent();
         assertThat(entry.get().getStatus()).isEqualTo(WaitQueueStatus.PROCESSING);
+    }
+
+    @Test
+    @DisplayName("exit: DONE 상태에서 호출 시 무시 — entry 유지")
+    void exit_ignoredWhenDone() {
+        repository.join(FAN_ID, PRODUCT_ID);
+        repository.transitionToProcessing(FAN_ID, PRODUCT_ID, Instant.now());
+        repository.transitionToTerminal(FAN_ID, PRODUCT_ID, WaitQueueStatus.DONE);
+
+        repository.exit(FAN_ID, PRODUCT_ID);
+
+        assertThat(repository.findEntry(FAN_ID, PRODUCT_ID))
+                .isPresent()
+                .get()
+                .extracting(WaitQueueEntry::getStatus)
+                .isEqualTo(WaitQueueStatus.DONE);
+    }
+
+    @Test
+    @DisplayName("exit: EXPIRED 상태에서 호출 시 무시 — entry 유지")
+    void exit_ignoredWhenExpired() {
+        repository.join(FAN_ID, PRODUCT_ID);
+        repository.transitionToProcessing(FAN_ID, PRODUCT_ID, Instant.now());
+        repository.transitionToTerminal(FAN_ID, PRODUCT_ID, WaitQueueStatus.EXPIRED);
+
+        repository.exit(FAN_ID, PRODUCT_ID);
+
+        assertThat(repository.findEntry(FAN_ID, PRODUCT_ID))
+                .isPresent()
+                .get()
+                .extracting(WaitQueueEntry::getStatus)
+                .isEqualTo(WaitQueueStatus.EXPIRED);
     }
 
     // ─── transitionToProcessing ───────────────────────────────────────────────
@@ -177,7 +223,7 @@ class RedisWaitQueueRepositoryTest {
     }
 
     @Test
-    @DisplayName("transitionToProcessing: 이미 PROCESSING 상태에서 재호출 시 false (ADVANCE_SCRIPT 멱등)")
+    @DisplayName("transitionToProcessing: 이미 PROCESSING 상태에서 재호출 시 false")
     void transitionToProcessing_alreadyProcessing_returnsFalse() {
         repository.join(FAN_ID, PRODUCT_ID);
         repository.transitionToProcessing(FAN_ID, PRODUCT_ID, Instant.now());
@@ -189,7 +235,7 @@ class RedisWaitQueueRepositoryTest {
     }
 
     @Test
-    @DisplayName("ADVANCE_SCRIPT 동시성: 10 스레드 동시 호출 시 정확히 1번만 PROCESSING 전이")
+    @DisplayName("transitionToProcessing: 10 스레드 동시 호출 시 정확히 1번만 PROCESSING 전이")
     void transitionToProcessing_concurrent_onlyOneSucceeds() throws InterruptedException {
         repository.join(FAN_ID, PRODUCT_ID);
 
@@ -216,7 +262,11 @@ class RedisWaitQueueRepositoryTest {
         ready.await();
         start.countDown();
         executor.shutdown();
-        executor.awaitTermination(5, TimeUnit.SECONDS);
+        // P1: timeout 시 스레드가 아직 실행 중일 수 있으므로 강제 종료 후 실패 처리
+        if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+            executor.shutdownNow();
+            fail("동시성 테스트 타임아웃 — CI 환경에서 스레드가 5초 내 완료되지 않음");
+        }
 
         assertThat(successCount.get()).isEqualTo(1);
         assertThat(repository.countProcessing(PRODUCT_ID)).isEqualTo(1L);
@@ -256,7 +306,7 @@ class RedisWaitQueueRepositoryTest {
     }
 
     @Test
-    @DisplayName("transitionToTerminal: WAITING 상태에서 호출 시 무시 — entry 유지 (TERMINAL_SCRIPT 반환값 0)")
+    @DisplayName("transitionToTerminal: WAITING 상태에서 호출 시 무시 — entry 유지")
     void transitionToTerminal_ignoredWhenNotProcessing() {
         repository.join(FAN_ID, PRODUCT_ID);
 
