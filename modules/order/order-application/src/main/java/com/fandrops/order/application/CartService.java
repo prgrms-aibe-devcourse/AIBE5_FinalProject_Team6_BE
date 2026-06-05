@@ -6,6 +6,7 @@ import com.fandrops.order.application.dto.CartResponse;
 import com.fandrops.order.application.dto.UpdateCartItemCommand;
 import com.fandrops.order.domain.Cart;
 import com.fandrops.order.domain.CartItem;
+import com.fandrops.order.domain.exception.CartAccessDeniedException;
 import com.fandrops.order.domain.exception.CartItemNotFoundException;
 import com.fandrops.order.domain.exception.CartNotFoundException;
 import com.fandrops.order.domain.port.CartItemRepository;
@@ -36,6 +37,7 @@ public class CartService {
             return new CartResponse(List.of());
         }
         List<CartItem> items = cartItemRepository.findAllByCartId(cart.get().getId());
+        // TODO: product 모듈 연동 시 ProductPricePort.getPrices(List<Long>) 벌크 조회로 교체 — N+1 방지
         List<CartItemResponse> responses = items.stream()
                 .map(item -> new CartItemResponse(
                         item.getId(),
@@ -80,12 +82,12 @@ public class CartService {
         cartItemRepository.deleteById(cartItemId);
     }
 
-    // cartId가 요청 fanId의 장바구니인지 검증
+    // cartId가 요청 fanId의 장바구니인지 검증 — 불일치 시 403
     private void verifyOwnership(Long fanId, Long cartId) {
         Cart cart = cartRepository.findByFanId(fanId)
                 .orElseThrow(() -> new CartNotFoundException(fanId));
         if (!cart.getId().equals(cartId)) {
-            throw new IllegalArgumentException("본인의 장바구니 항목만 수정할 수 있습니다.");
+            throw new CartAccessDeniedException();
         }
     }
 }
