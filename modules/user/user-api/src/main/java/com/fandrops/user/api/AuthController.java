@@ -6,7 +6,6 @@ import com.fandrops.user.application.dto.AuthTokenResult;
 import com.fandrops.user.application.dto.SignUpCommand;
 import com.fandrops.user.application.dto.LoginCommand;
 import com.fandrops.user.application.dto.SocialLoginCommand;
-import com.fandrops.user.application.dto.UpdateFanCommand;
 import com.fandrops.user.application.service.AuthService;
 import com.fandrops.user.domain.AuthProvider;
 import org.springframework.core.env.Environment;
@@ -43,8 +42,14 @@ public class AuthController extends UserControllerSupport {
     public ResponseEntity<ApiResponse<AuthTokenResponse>> socialLogin(
             @PathVariable String provider,
             @RequestBody SocialLoginRequest request) {
+        AuthProvider authProvider;
+        try {
+            authProvider = AuthProvider.valueOf(provider.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("지원하지 않는 소셜 로그인 제공자입니다: " + provider);
+        }
         AuthTokenResult result = authService.socialLogin(
-                new SocialLoginCommand(AuthProvider.valueOf(provider), request.code()));
+                new SocialLoginCommand(authProvider, request.code()));
         return ResponseEntity.ok(ApiResponse.ok(toAuthTokenResponse(result), traceId()));
     }
 
