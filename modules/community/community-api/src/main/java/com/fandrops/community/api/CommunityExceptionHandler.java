@@ -5,9 +5,11 @@ import com.fandrops.community.application.exception.AlreadyLikedException;
 import com.fandrops.community.application.exception.CommentNotFoundException;
 import com.fandrops.community.application.exception.FeedNotFoundException;
 import com.fandrops.community.application.exception.FeedOwnershipException;
+import com.fandrops.community.application.exception.ForbiddenException;
 import com.fandrops.community.application.exception.LikeNotFoundException;
 import com.fandrops.community.application.exception.NotFanMemberException;
 import com.fandrops.community.application.exception.UnauthorizedException;
+import com.fandrops.community.domain.schedule.exception.ScheduleDomainException;
 import org.slf4j.MDC;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -34,16 +36,16 @@ public class CommunityExceptionHandler {
                 .body(ApiResponse.fail("COMMENT_NOT_FOUND", e.getMessage(), false, traceId()));
     }
 
-    @ExceptionHandler(AlreadyLikedException.class)
-    public ResponseEntity<ApiResponse<Void>> alreadyLiked(AlreadyLikedException e) {
-        return ResponseEntity.status(409)
-                .body(ApiResponse.fail("ALREADY_LIKED", e.getMessage(), false, traceId()));
-    }
-
     @ExceptionHandler(LikeNotFoundException.class)
     public ResponseEntity<ApiResponse<Void>> likeNotFound(LikeNotFoundException e) {
         return ResponseEntity.status(404)
                 .body(ApiResponse.fail("LIKE_NOT_FOUND", e.getMessage(), false, traceId()));
+    }
+
+    @ExceptionHandler(AlreadyLikedException.class)
+    public ResponseEntity<ApiResponse<Void>> alreadyLiked(AlreadyLikedException e) {
+        return ResponseEntity.status(409)
+                .body(ApiResponse.fail("ALREADY_LIKED", e.getMessage(), false, traceId()));
     }
 
     @ExceptionHandler(NotFanMemberException.class)
@@ -58,17 +60,32 @@ public class CommunityExceptionHandler {
                 .body(ApiResponse.fail("FORBIDDEN", e.getMessage(), false, traceId()));
     }
 
+    @ExceptionHandler(ForbiddenException.class)
+    public ResponseEntity<ApiResponse<Void>> forbidden(ForbiddenException e) {
+        return ResponseEntity.status(403)
+                .body(ApiResponse.fail("FORBIDDEN", e.getMessage(), false, traceId()));
+    }
+
     @ExceptionHandler(UnauthorizedException.class)
     public ResponseEntity<ApiResponse<Void>> unauthorized(UnauthorizedException e) {
         return ResponseEntity.status(401)
                 .body(ApiResponse.fail("INVALID_TOKEN", e.getMessage(), false, traceId()));
     }
 
+    // Objects.requireNonNull NPE는 컨트롤러 role 검증으로 정상 경로 도달 불가
+    // 도달 시 500 반환 의도적 허용
+
     // JWT sub 클레임이 숫자가 아닌 경우 (토큰 위변조 · 잘못된 발급) -> 401
     @ExceptionHandler(NumberFormatException.class)
     public ResponseEntity<ApiResponse<Void>> numberFormat(NumberFormatException e) {
         return ResponseEntity.status(401)
                 .body(ApiResponse.fail("INVALID_TOKEN", "인증 토큰이 유효하지 않습니다.", false, traceId()));
+    }
+
+    @ExceptionHandler(ScheduleDomainException.class)
+    public ResponseEntity<ApiResponse<Void>> scheduleDomain(ScheduleDomainException e) {
+        return ResponseEntity.status(400)
+                .body(ApiResponse.fail("INVALID_REQUEST", e.getMessage(), false, traceId()));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

@@ -81,25 +81,4 @@ public class FeedController extends CommunityControllerSupport {
         return ResponseEntity.noContent().build();
     }
 
-    private static boolean hasArtistOrAgencyRole(Authentication authentication) {
-        return authentication.getAuthorities().stream()
-                .anyMatch(a -> a.getAuthority().equals("ARTIST")
-                        || a.getAuthority().equals("AGENCY"));
-    }
-
-    private static boolean hasFanRole(Authentication authentication) {
-        return authentication.getAuthorities().stream()
-                .anyMatch(a -> a.getAuthority().equals("FAN"));
-    }
-
-    private Long resolveArtistMemberId(Authentication authentication, Long header) {
-        if (header != null && isLocalProfile()) {
-            return header;
-        }
-        if (authentication != null && authentication.isAuthenticated()
-                && !"anonymousUser".equals(authentication.getPrincipal())) {
-            return Long.parseLong(authentication.getName());
-        }
-        throw new IllegalArgumentException("인증 정보가 없습니다. Bearer 토큰을 제공하세요.");
-    }
 }

@@ -1,5 +1,6 @@
 package com.fandrops.community.api;
 
+import com.fandrops.community.application.exception.UnauthorizedException;
 import org.slf4j.MDC;
 import org.springframework.core.env.Environment;
 import org.springframework.security.core.Authentication;
@@ -34,8 +35,33 @@ public abstract class CommunityControllerSupport {
         }
         if (authentication != null && authentication.isAuthenticated()
                 && !"anonymousUser".equals(authentication.getPrincipal())) {
+            if (hasArtistOrAgencyRole(authentication)) {
+                return Principal.ofArtistMember(Long.parseLong(authentication.getName()));
+            }
             return Principal.ofFan(Long.parseLong(authentication.getName()));
         }
-        throw new IllegalArgumentException("인증 정보가 없습니다. Bearer 토큰을 제공하세요.");
+        throw new UnauthorizedException("인증 정보가 없습니다. Bearer 토큰을 제공하세요.");
+    }
+
+    protected Long resolveArtistMemberId(Authentication authentication, Long header) {
+        if (header != null && isLocalProfile()) {
+            return header;
+        }
+        if (authentication != null && authentication.isAuthenticated()
+                && !"anonymousUser".equals(authentication.getPrincipal())) {
+            return Long.parseLong(authentication.getName());
+        }
+        throw new UnauthorizedException("인증 정보가 없습니다. Bearer 토큰을 제공하세요.");
+    }
+
+    protected static boolean hasArtistOrAgencyRole(Authentication authentication) {
+        return authentication.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ARTIST")
+                        || a.getAuthority().equals("AGENCY"));
+    }
+
+    protected static boolean hasFanRole(Authentication authentication) {
+        return authentication.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("FAN"));
     }
 }
