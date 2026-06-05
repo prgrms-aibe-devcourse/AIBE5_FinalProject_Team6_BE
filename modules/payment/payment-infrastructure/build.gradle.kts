@@ -10,4 +10,5 @@
     testImplementation("org.assertj:assertj-core")
     testImplementation("org.mockito:mockito-junit-jupiter")
     testImplementation("org.junit.jupiter:junit-jupiter")
+    testImplementation("org.testcontainers:junit-jupiter")
 }
