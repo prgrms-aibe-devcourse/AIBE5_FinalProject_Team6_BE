@@ -14,6 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -40,10 +41,12 @@ public class GoodsVoteController extends CommunityControllerSupport {
         }
         List<GoodsVoteResult> items = goodsVoteService.getVotes(artistId, cursor, size);
         Long nextCursor = items.size() == size ? items.get(items.size() - 1).id() : null;
-        Map<String, Object> data = Map.of(
-                "items", items,
-                "nextCursor", nextCursor != null ? String.valueOf(nextCursor) : "",
-                "hasMore", nextCursor != null);
+
+        // Map.of()는 null 값 불허 → HashMap 사용 (api-contract.md: nextCursor는 null 허용)
+        Map<String, Object> data = new HashMap<>();
+        data.put("items", items);
+        data.put("nextCursor", nextCursor != null ? String.valueOf(nextCursor) : null);
+        data.put("hasMore", nextCursor != null);
         return ResponseEntity.ok(ApiResponse.ok(data, traceId()));
     }
 
@@ -74,21 +77,10 @@ public class GoodsVoteController extends CommunityControllerSupport {
             Authentication authentication,
             @RequestHeader(value = "X-Fan-Id", required = false) Long fanIdHeader) {
 
-        Long fanId = resolveFanId(authentication, fanIdHeader);
+        // resolveArtistMemberId와 로직 동일 — 부모 메서드 재사용
+        Long fanId = resolveArtistMemberId(authentication, fanIdHeader);
         GoodsBallotResult result = goodsVoteService.castBallot(
                 new GoodsBallotCommand(id, request.optionId(), fanId));
         return ResponseEntity.status(201).body(ApiResponse.ok(Map.of("recordId", result.recordId()), traceId()));
-    }
-
-    private Long resolveFanId(Authentication authentication, Long header) {
-        if (header != null && isLocalProfile()) {
-            return header;
-        }
-        if (authentication != null && authentication.isAuthenticated()
-                && !"anonymousUser".equals(authentication.getPrincipal())) {
-            return Long.parseLong(authentication.getName());
-        }
-        throw new com.fandrops.community.application.exception.UnauthorizedException(
-                "인증 정보가 없습니다. Bearer 토큰을 제공하세요.");
     }
 }

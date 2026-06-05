@@ -19,7 +19,9 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional(readOnly = true)
@@ -59,19 +61,33 @@ public class GoodsVoteService {
     }
 
     public List<GoodsVoteResult> getVotes(Long artistId, Long cursorId, int size) {
-        return voteRepository.findByArtistId(artistId, cursorId, size)
+        List<GoodsVote> votes = voteRepository.findByArtistId(artistId, cursorId, size);
+        if (votes.isEmpty()) {
+            return List.of();
+        }
+        List<Long> voteIds = votes.stream().map(GoodsVote::getId).toList();
+        Map<Long, List<GoodsVoteOptionResult>> optionsByVoteId = optionRepository.findByVoteIdIn(voteIds)
                 .stream()
-                .map(vote -> GoodsVoteResult.of(vote, toOptionResults(vote.getId())))
+                .collect(Collectors.groupingBy(
+                        GoodsVoteOption::getVoteId,
+                        Collectors.mapping(
+                                o -> new GoodsVoteOptionResult(o.getId(), o.getLabel(), o.getImageUrl(), o.getVoteCount()),
+                                Collectors.toList())));
+        return votes.stream()
+                .map(vote -> GoodsVoteResult.of(vote, optionsByVoteId.getOrDefault(vote.getId(), List.of())))
                 .toList();
     }
 
     @Transactional
     public GoodsBallotResult castBallot(GoodsBallotCommand command) {
+        // now를 한 번만 캡처 — isVotable 체크와 레코드 저장에 동일 시각 사용 (TOCTOU 방지)
+        LocalDateTime now = LocalDateTime.now(clock);
+
         // 1. 투표 조회 및 유효성 검증 (artistId는 vote에서 가져옴)
         GoodsVote vote = voteRepository.findById(command.voteId())
                 .orElseThrow(() -> new GoodsVoteNotFoundException("투표를 찾을 수 없습니다."));
 
-        if (!vote.isVotable(LocalDateTime.now(clock))) {
+        if (!vote.isVotable(now)) {
             throw new GoodsVoteClosedException("마감되었거나 비활성화된 투표입니다.");
         }
 
@@ -88,22 +104,17 @@ public class GoodsVoteService {
             throw new IllegalArgumentException("선택지가 해당 투표에 속하지 않습니다.");
         }
 
-        // 4. 투표 기록 저장 (UK 위반 → 중복 투표 409)
+        // 4. 투표 기록 저장 — try 범위를 save()만 감쌈 (incrementVoteCount 오류 오분류 방지)
+        GoodsVoteRecord record;
         try {
-            GoodsVoteRecord record = recordRepository.save(
-                    GoodsVoteRecord.create(command.voteId(), command.optionId(),
-                            command.fanId(), LocalDateTime.now(clock)));
-            // 5. vote_count 원자적 증가
-            optionRepository.incrementVoteCount(command.optionId());
-            return new GoodsBallotResult(record.getId());
+            record = recordRepository.save(
+                    GoodsVoteRecord.create(command.voteId(), command.optionId(), command.fanId(), now));
         } catch (DataIntegrityViolationException e) {
             throw new DuplicateVoteException("이미 투표하셨습니다.");
         }
-    }
 
-    private List<GoodsVoteOptionResult> toOptionResults(Long voteId) {
-        return optionRepository.findByVoteId(voteId).stream()
-                .map(o -> new GoodsVoteOptionResult(o.getId(), o.getLabel(), o.getImageUrl(), o.getVoteCount()))
-                .toList();
+        // 5. vote_count 원자적 증가
+        optionRepository.incrementVoteCount(command.optionId());
+        return new GoodsBallotResult(record.getId());
     }
 }

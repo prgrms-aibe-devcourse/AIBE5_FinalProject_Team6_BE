@@ -45,6 +45,9 @@ subprojects {
         add("testImplementation", "org.junit.jupiter:junit-jupiter")
         add("testRuntimeOnly", "org.junit.platform:junit-platform-launcher")
     }
+    tasks.withType<JavaCompile> {
+        options.compilerArgs.add("-parameters")
+    }
     tasks.withType<Test> {
         useJUnitPlatform()
     }

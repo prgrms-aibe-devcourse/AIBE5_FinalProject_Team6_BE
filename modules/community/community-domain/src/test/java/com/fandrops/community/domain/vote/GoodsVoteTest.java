@@ -33,6 +33,13 @@ class GoodsVoteTest {
     }
 
     @Test
+    @DisplayName("title null → GoodsVoteDomainException")
+    void create_nullTitle_throws() {
+        assertThrows(GoodsVoteDomainException.class,
+                () -> GoodsVote.create(1L, null, FUTURE, NOW));
+    }
+
+    @Test
     @DisplayName("title 빈 문자열 → GoodsVoteDomainException")
     void create_blankTitle_throws() {
         assertThrows(GoodsVoteDomainException.class,
@@ -51,6 +58,13 @@ class GoodsVoteTest {
     void create_pastEndsAt_throws() {
         assertThrows(GoodsVoteDomainException.class,
                 () -> GoodsVote.create(1L, "투표", PAST, NOW));
+    }
+
+    @Test
+    @DisplayName("endsAt == now (strictly-after 아님) → GoodsVoteDomainException")
+    void create_endsAtEqualsNow_throws() {
+        assertThrows(GoodsVoteDomainException.class,
+                () -> GoodsVote.create(1L, "투표", NOW, NOW));
     }
 
     @Test

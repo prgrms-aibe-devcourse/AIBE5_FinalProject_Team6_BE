@@ -1,5 +1,7 @@
 package com.fandrops.community.application.vote;
 
+import com.fandrops.community.domain.vote.GoodsVote;
+
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -12,7 +14,7 @@ public record GoodsVoteResult(
         boolean active,
         List<GoodsVoteOptionResult> options
 ) {
-    public static GoodsVoteResult of(com.fandrops.community.domain.vote.GoodsVote vote,
+    public static GoodsVoteResult of(GoodsVote vote,
                                      List<GoodsVoteOptionResult> options) {
         return new GoodsVoteResult(
                 vote.getId(),

@@ -23,13 +23,13 @@ import org.springframework.dao.DataIntegrityViolationException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -49,6 +49,42 @@ class GoodsVoteServiceTest {
     void setUp() {
         clock = Clock.fixed(Instant.parse("2026-06-01T12:00:00Z"), ZoneOffset.UTC);
         service = new GoodsVoteService(voteRepository, optionRepository, recordRepository, fanMembershipPort, clock);
+    }
+
+    @Nested
+    @DisplayName("getVotes")
+    class GetVotesTest {
+
+        @Test
+        @DisplayName("findByVoteIdIn 단일 쿼리로 옵션 일괄 조회 — N+1 없음")
+        void batchLoadOptions() {
+            GoodsVote v1 = vote(1L, true, NOW.plusDays(7));
+            GoodsVote v2 = vote(2L, true, NOW.plusDays(14));
+            GoodsVoteOption opt1 = GoodsVoteOption.reconstruct(10L, 1L, "A", null, 3);
+            GoodsVoteOption opt2 = GoodsVoteOption.reconstruct(11L, 2L, "B", null, 1);
+
+            when(voteRepository.findByArtistId(100L, null, 20)).thenReturn(List.of(v1, v2));
+            when(optionRepository.findByVoteIdIn(anyList())).thenReturn(List.of(opt1, opt2));
+
+            List<GoodsVoteResult> results = service.getVotes(100L, null, 20);
+
+            assertEquals(2, results.size());
+            assertEquals(1, results.get(0).options().size());
+            assertEquals(1, results.get(1).options().size());
+            verify(optionRepository, times(1)).findByVoteIdIn(anyList());
+            verify(optionRepository, never()).findByVoteId(any());
+        }
+
+        @Test
+        @DisplayName("투표 없을 때 빈 리스트 반환 — findByVoteIdIn 호출 없음")
+        void emptyVotes_returnsEmpty() {
+            when(voteRepository.findByArtistId(100L, null, 20)).thenReturn(List.of());
+
+            List<GoodsVoteResult> results = service.getVotes(100L, null, 20);
+
+            assertTrue(results.isEmpty());
+            verify(optionRepository, never()).findByVoteIdIn(anyList());
+        }
     }
 
     @Nested
@@ -140,6 +176,19 @@ class GoodsVoteServiceTest {
             assertThrows(DuplicateVoteException.class,
                     () -> service.castBallot(new GoodsBallotCommand(1L, 10L, 5L)));
             verify(optionRepository, never()).incrementVoteCount(any());
+        }
+
+        @Test
+        @DisplayName("선택지 없음 → GoodsVoteNotFoundException")
+        void optionNotFound_throws() {
+            GoodsVote openVote = vote(1L, true, NOW.plusDays(7));
+            when(voteRepository.findById(1L)).thenReturn(Optional.of(openVote));
+            when(fanMembershipPort.isFanOf(5L, openVote.getArtistId())).thenReturn(true);
+            when(optionRepository.findById(99L)).thenReturn(Optional.empty());
+
+            assertThrows(GoodsVoteNotFoundException.class,
+                    () -> service.castBallot(new GoodsBallotCommand(1L, 99L, 5L)));
+            verify(recordRepository, never()).save(any());
         }
 
         @Test

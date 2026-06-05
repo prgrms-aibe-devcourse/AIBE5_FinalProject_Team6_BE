@@ -13,5 +13,8 @@ public interface GoodsVoteOptionRepository {
 
     List<GoodsVoteOption> findByVoteId(Long voteId);
 
+    // N+1 방지: 여러 voteId의 옵션을 단일 IN 쿼리로 조회
+    List<GoodsVoteOption> findByVoteIdIn(List<Long> voteIds);
+
     void incrementVoteCount(Long optionId);
 }

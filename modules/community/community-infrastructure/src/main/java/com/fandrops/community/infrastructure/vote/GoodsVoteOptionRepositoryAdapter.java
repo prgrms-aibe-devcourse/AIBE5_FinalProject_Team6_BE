@@ -34,6 +34,11 @@ public class GoodsVoteOptionRepositoryAdapter implements GoodsVoteOptionReposito
     }
 
     @Override
+    public List<GoodsVoteOption> findByVoteIdIn(List<Long> voteIds) {
+        return jpaRepository.findByVoteIdIn(voteIds).stream().map(this::toDomain).toList();
+    }
+
+    @Override
     public void incrementVoteCount(Long optionId) {
         jpaRepository.incrementVoteCount(optionId);
     }
