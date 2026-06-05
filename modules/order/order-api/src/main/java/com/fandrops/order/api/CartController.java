@@ -60,7 +60,7 @@ public class CartController {
 
     @PatchMapping("/items/{id}")
     public ResponseEntity<ApiResponse<Map<String, Object>>> updateItem(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             @Valid @RequestBody UpdateCartItemRequest request,
             Authentication authentication,
             @RequestHeader(value = "X-Fan-Id", required = false) Long fanIdHeader) {
@@ -72,7 +72,7 @@ public class CartController {
 
     @DeleteMapping("/items/{id}")
     public ResponseEntity<Void> deleteItem(
-            @PathVariable Long id,
+            @PathVariable("id") Long id,
             Authentication authentication,
             @RequestHeader(value = "X-Fan-Id", required = false) Long fanIdHeader) {
         Long fanId = resolveFanId(authentication, fanIdHeader);
