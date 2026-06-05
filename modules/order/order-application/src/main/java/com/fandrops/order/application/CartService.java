@@ -12,7 +12,9 @@ import com.fandrops.order.domain.exception.CartNotFoundException;
 import com.fandrops.order.domain.port.CartItemRepository;
 import com.fandrops.order.domain.port.CartRepository;
 import com.fandrops.order.domain.port.ProductPricePort;
+import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,13 +39,14 @@ public class CartService {
             return new CartResponse(List.of());
         }
         List<CartItem> items = cartItemRepository.findAllByCartId(cart.get().getId());
-        // TODO: product 모듈 연동 시 ProductPricePort.getPrices(List<Long>) 벌크 조회로 교체 — N+1 방지
+        List<Long> productIds = items.stream().map(CartItem::getProductId).toList();
+        Map<Long, BigDecimal> prices = productPricePort.getPrices(productIds);
         List<CartItemResponse> responses = items.stream()
                 .map(item -> new CartItemResponse(
                         item.getId(),
                         item.getProductId(),
                         item.getQuantity(),
-                        productPricePort.getPrice(item.getProductId())))
+                        prices.getOrDefault(item.getProductId(), BigDecimal.ZERO)))
                 .toList();
         return new CartResponse(responses);
     }

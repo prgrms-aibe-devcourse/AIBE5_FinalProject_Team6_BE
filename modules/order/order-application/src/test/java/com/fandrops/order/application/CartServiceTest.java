@@ -8,6 +8,7 @@ import com.fandrops.order.domain.Cart;
 import com.fandrops.order.domain.CartItem;
 import com.fandrops.order.domain.exception.CartAccessDeniedException;
 import com.fandrops.order.domain.exception.CartItemNotFoundException;
+import java.util.Map;
 import com.fandrops.order.domain.port.CartItemRepository;
 import com.fandrops.order.domain.port.CartRepository;
 import com.fandrops.order.domain.port.ProductPricePort;
@@ -79,7 +80,8 @@ class CartServiceTest {
             CartItem item = cartItem(2);
             given(cartRepository.findByFanId(FAN_ID)).willReturn(Optional.of(cart()));
             given(cartItemRepository.findAllByCartId(CART_ID)).willReturn(List.of(item));
-            given(productPricePort.getPrice(PRODUCT_ID)).willReturn(BigDecimal.valueOf(10000));
+            given(productPricePort.getPrices(List.of(PRODUCT_ID)))
+                    .willReturn(Map.of(PRODUCT_ID, BigDecimal.valueOf(10000)));
 
             CartResponse result = sut.getCart(FAN_ID);
 
