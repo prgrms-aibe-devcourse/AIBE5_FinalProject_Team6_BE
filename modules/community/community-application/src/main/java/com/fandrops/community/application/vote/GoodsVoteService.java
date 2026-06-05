@@ -8,6 +8,7 @@ import com.fandrops.community.application.port.FanMembershipPort;
 import com.fandrops.community.domain.vote.GoodsVote;
 import com.fandrops.community.domain.vote.GoodsVoteOption;
 import com.fandrops.community.domain.vote.GoodsVoteRecord;
+import com.fandrops.community.domain.vote.exception.GoodsVoteDomainException;
 import com.fandrops.community.domain.vote.repository.GoodsVoteOptionRepository;
 import com.fandrops.community.domain.vote.repository.GoodsVoteRecordRepository;
 import com.fandrops.community.domain.vote.repository.GoodsVoteRepository;
@@ -101,7 +102,7 @@ public class GoodsVoteService {
                 .orElseThrow(() -> new GoodsVoteNotFoundException("선택지를 찾을 수 없습니다."));
 
         if (!option.getVoteId().equals(command.voteId())) {
-            throw new IllegalArgumentException("선택지가 해당 투표에 속하지 않습니다.");
+            throw new GoodsVoteDomainException("선택지가 해당 투표에 속하지 않습니다.");
         }
 
         // 4. 투표 기록 저장 — try 범위를 save()만 감쌈 (incrementVoteCount 오류 오분류 방지)

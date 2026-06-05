@@ -8,6 +8,7 @@ import com.fandrops.community.application.port.FanMembershipPort;
 import com.fandrops.community.domain.vote.GoodsVote;
 import com.fandrops.community.domain.vote.GoodsVoteOption;
 import com.fandrops.community.domain.vote.GoodsVoteRecord;
+import com.fandrops.community.domain.vote.exception.GoodsVoteDomainException;
 import com.fandrops.community.domain.vote.repository.GoodsVoteOptionRepository;
 import com.fandrops.community.domain.vote.repository.GoodsVoteRecordRepository;
 import com.fandrops.community.domain.vote.repository.GoodsVoteRepository;
@@ -192,7 +193,7 @@ class GoodsVoteServiceTest {
         }
 
         @Test
-        @DisplayName("다른 투표의 선택지 → IllegalArgumentException")
+        @DisplayName("다른 투표의 선택지 → GoodsVoteDomainException")
         void wrongOption_throws() {
             GoodsVote openVote = vote(1L, true, NOW.plusDays(7));
             // option이 voteId=2에 속함
@@ -202,7 +203,7 @@ class GoodsVoteServiceTest {
             when(fanMembershipPort.isFanOf(5L, openVote.getArtistId())).thenReturn(true);
             when(optionRepository.findById(10L)).thenReturn(Optional.of(wrongOpt));
 
-            assertThrows(IllegalArgumentException.class,
+            assertThrows(GoodsVoteDomainException.class,
                     () -> service.castBallot(new GoodsBallotCommand(1L, 10L, 5L)));
         }
     }

@@ -53,7 +53,7 @@ public class CommunityExceptionHandler {
 
     @ExceptionHandler(GoodsVoteClosedException.class)
     public ResponseEntity<ApiResponse<Void>> goodsVoteClosed(GoodsVoteClosedException e) {
-        return ResponseEntity.status(400)
+        return ResponseEntity.status(422)
                 .body(ApiResponse.fail("GOODS_VOTE_CLOSED", e.getMessage(), false, traceId()));
     }
 
