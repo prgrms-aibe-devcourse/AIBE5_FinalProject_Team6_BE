@@ -10,9 +10,11 @@ import com.fandrops.order.domain.exception.OutOfStockException;
 import com.fandrops.order.domain.exception.ReserveConflictException;
 import com.fandrops.order.domain.port.AccessTicketValidatePort;
 import com.fandrops.order.domain.port.InventoryReservePort;
+import com.fandrops.order.domain.port.InventoryRestorePort;
 import com.fandrops.order.domain.port.OrderRepository;
 import com.fandrops.order.domain.port.ProductPricePort;
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,12 +23,16 @@ public class OrderService {
 
     private final OrderRepository orderRepository;
     private final InventoryReservePort inventoryReservePort;
+    private final InventoryRestorePort inventoryRestorePort;
     private final AccessTicketValidatePort accessTicketValidatePort;
     private final ProductPricePort productPricePort;
 
-    public OrderService(OrderRepository orderRepository, InventoryReservePort inventoryReservePort, AccessTicketValidatePort accessTicketValidatePort, ProductPricePort productPricePort) {
+    public OrderService(OrderRepository orderRepository, InventoryReservePort inventoryReservePort,
+                        InventoryRestorePort inventoryRestorePort,
+                        AccessTicketValidatePort accessTicketValidatePort, ProductPricePort productPricePort) {
         this.orderRepository = orderRepository;
         this.inventoryReservePort = inventoryReservePort;
+        this.inventoryRestorePort = inventoryRestorePort;
         this.accessTicketValidatePort = accessTicketValidatePort;
         this.productPricePort = productPricePort;
     }
@@ -50,14 +56,19 @@ public class OrderService {
         Order order = Order.create(command.getFanId(), items);
         Order saved = orderRepository.save(order);
 
-        // 4. 재고 예약 + 상태 전이
+        // 4. 재고 예약 + 상태 전이 — 부분 성공 시 이미 예약된 아이템 복구 후 CANCELLED
+        List<OrderItem> reserved = new ArrayList<>();
         try {
             for (OrderItem item : saved.getItems()) {
                 inventoryReservePort.reserve(item.getProductId(), item.getQuantity(), saved.getId());
+                reserved.add(item);
             }
             orderRepository.updateStatus(saved.getId(), OrderStatus.RESERVED);
             return new CreateOrderResult(saved.getId(), OrderStatus.RESERVED.name(), saved.getOrderPaymentKey());
         } catch (OutOfStockException | ReserveConflictException e) {
+            for (OrderItem item : reserved) {
+                inventoryRestorePort.restore(item.getProductId(), item.getQuantity(), saved.getId());
+            }
             orderRepository.updateStatus(saved.getId(), OrderStatus.CANCELLED);
             throw e;
         }

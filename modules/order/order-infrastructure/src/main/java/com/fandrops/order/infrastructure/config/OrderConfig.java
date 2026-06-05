@@ -54,9 +54,11 @@ public class OrderConfig {
     @Bean
     public OrderService orderService(OrderRepository orderRepository,
                                      InventoryReservePort inventoryReservePort,
+                                     InventoryRestorePort inventoryRestorePort,
                                      AccessTicketValidatePort accessTicketValidatePort,
                                      ProductPricePort productPricePort) {
-        return new OrderService(orderRepository, inventoryReservePort, accessTicketValidatePort, productPricePort);
+        return new OrderService(orderRepository, inventoryReservePort, inventoryRestorePort,
+                accessTicketValidatePort, productPricePort);
     }
 
     @Bean
