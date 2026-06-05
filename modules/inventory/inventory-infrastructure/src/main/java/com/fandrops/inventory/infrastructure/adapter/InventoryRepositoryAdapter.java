@@ -28,4 +28,14 @@ public class InventoryRepositoryAdapter implements InventoryRepository {
     public int reserveAtomic(Long productId, int qty) {
         return jpaRepository.reserveAtomic(productId, qty);
     }
+
+    @Override
+    public int confirmAtomic(Long productId, int qty) {
+        return jpaRepository.confirmAtomic(productId, qty);
+    }
+
+    @Override
+    public int restoreAtomic(Long productId, int qty) {
+        return jpaRepository.restoreAtomic(productId, qty);
+    }
 }
