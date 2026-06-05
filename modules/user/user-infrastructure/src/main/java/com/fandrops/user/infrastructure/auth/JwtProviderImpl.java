@@ -1,7 +1,10 @@
 package com.fandrops.user.infrastructure.auth;
 
+import com.fandrops.user.application.dto.ParsedClaims;
+import com.fandrops.user.application.exception.InvalidTokenException;
 import com.fandrops.user.application.port.JwtProvider;
 import com.fandrops.user.domain.UserRole;
+import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
@@ -51,5 +54,22 @@ public class JwtProviderImpl implements JwtProvider {
     @Override
     public long getAccessTokenExpiresIn() {
         return accessTokenExpireSeconds;
+    }
+
+    @Override
+    public ParsedClaims parse(String token) {
+        try {
+            var claims = Jwts.parser()
+                    .verifyWith(secretKey)
+                    .build()
+                    .parseSignedClaims(token)
+                    .getPayload();
+            return new ParsedClaims(
+                    Long.parseLong(claims.getSubject()),
+                    claims.get("role", String.class)
+            );
+        } catch (JwtException | IllegalArgumentException e) {
+            throw new InvalidTokenException("유효하지 않은 액세스 토큰입니다.", e);
+        }
     }
 }
