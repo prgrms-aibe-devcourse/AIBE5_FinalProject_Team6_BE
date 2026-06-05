@@ -84,8 +84,8 @@ k6 드롭스 부하 테스트(Phase 4)에서 아래 **하나 이상**이 확인�
 
 ## 구현 체크리스트 (형성빈)
 
-- [ ] `CART` 1:1 `FAN`, `CART_ITEM` FK·UK(`cart_id`, `product_id`) 적용
-- [ ] 담기/수량 변경/삭제 API는 `cart_item` RDB CRUD
+- [x] `CART` 1:1 `FAN`, `CART_ITEM` FK·UK(`cart_id`, `product_id`) 적용
+- [x] 담기/수량 변경/삭제 API는 `cart_item` RDB CRUD
 - [ ] `POST /orders` 시 재고·주문 TX와 장바구니 정리 경계 문서화 (코드·PR)
 - [ ] k6 시나리오에 `cart_item` write·pool 메트릭 포함 — [observability-metrics §2.1](../operations/observability-metrics.md#21-k6--장바구니-phase-2-전환-트리거)
 
