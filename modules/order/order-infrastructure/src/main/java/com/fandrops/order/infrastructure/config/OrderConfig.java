@@ -17,15 +17,28 @@ import com.fandrops.order.infrastructure.persistence.OrderJpaRepository;
 import com.fandrops.order.infrastructure.persistence.OrderRepositoryAdapter;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ThreadPoolExecutor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.aop.interceptor.AsyncUncaughtExceptionHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.annotation.AsyncConfigurer;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 /** order 모듈 빈 조립. 포트 구현체와 OrderService를 스프링 컨텍스트에 등록한다. */
 @Configuration
 @EnableAsync
-public class OrderConfig {
+public class OrderConfig implements AsyncConfigurer {
+
+    private static final Logger log = LoggerFactory.getLogger(OrderConfig.class);
+
+    @Override
+    public AsyncUncaughtExceptionHandler getAsyncUncaughtExceptionHandler() {
+        return (ex, method, params) ->
+                log.error("[Saga 비동기 예외] {}.{} — params: {}",
+                        method.getDeclaringClass().getSimpleName(), method.getName(), params, ex);
+    }
 
     @Bean
     public OrderRepository orderRepository(OrderJpaRepository jpaRepository) {
