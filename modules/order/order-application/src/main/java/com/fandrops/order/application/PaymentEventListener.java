@@ -28,7 +28,7 @@ public class PaymentEventListener {
         this.inventoryConfirmPort = inventoryConfirmPort;
     }
 
-    @Async
+    @Async("sagaExecutor")
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handlePaymentFailed(PaymentFailedEvent event) {
         Long orderId = event.getOrderId();
@@ -49,7 +49,7 @@ public class PaymentEventListener {
         }
     }
 
-    @Async
+    @Async("sagaExecutor")
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handlePaymentApproved(PaymentApprovedEvent event) {
         Long orderId = event.getOrderId();

@@ -15,9 +15,12 @@ import com.fandrops.order.infrastructure.adapter.InventoryRestoreAdapter;
 import com.fandrops.order.infrastructure.adapter.StubProductPriceAdapter;
 import com.fandrops.order.infrastructure.persistence.OrderJpaRepository;
 import com.fandrops.order.infrastructure.persistence.OrderRepositoryAdapter;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ThreadPoolExecutor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableAsync;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 /** order 모듈 빈 조립. 포트 구현체와 OrderService를 스프링 컨텍스트에 등록한다. */
 @Configuration
@@ -59,6 +62,18 @@ public class OrderConfig {
                                      ProductPricePort productPricePort) {
         return new OrderService(orderRepository, inventoryReservePort, inventoryRestorePort,
                 accessTicketValidatePort, productPricePort);
+    }
+
+    @Bean(name = "sagaExecutor")
+    public Executor sagaExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(4);
+        executor.setMaxPoolSize(8);
+        executor.setQueueCapacity(100);
+        executor.setThreadNamePrefix("saga-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.initialize();
+        return executor;
     }
 
     @Bean
