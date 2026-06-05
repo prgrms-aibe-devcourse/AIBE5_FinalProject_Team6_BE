@@ -10,6 +10,12 @@ spring:
       mail.smtp.auth: true
       mail.smtp.starttls.enable: true
 
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
 fandrops:
   jwt:
     secret: ${JWT_SECRET}

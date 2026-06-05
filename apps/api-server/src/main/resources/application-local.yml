@@ -62,6 +62,13 @@ management:
     redis:
       enabled: true
 
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+
 fandrops:
   ops:
     trace:
