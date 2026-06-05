@@ -77,8 +77,7 @@ public class GoodsVoteController extends CommunityControllerSupport {
             Authentication authentication,
             @RequestHeader(value = "X-Fan-Id", required = false) Long fanIdHeader) {
 
-        // resolveArtistMemberId와 로직 동일 — 부모 메서드 재사용
-        Long fanId = resolveArtistMemberId(authentication, fanIdHeader);
+        Long fanId = resolveFanId(authentication, fanIdHeader);
         GoodsBallotResult result = goodsVoteService.castBallot(
                 new GoodsBallotCommand(id, request.optionId(), fanId));
         return ResponseEntity.status(201).body(ApiResponse.ok(Map.of("recordId", result.recordId()), traceId()));
