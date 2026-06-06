@@ -40,6 +40,8 @@ public class ApiSecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/v1/auth/**").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/prometheus").permitAll()
+                        // 공개 피드 조회 — 비인증 브라우징 허용 (타 모듈 공개 경로 추가 시 여기에 등록)
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/artists/*/feeds").permitAll()
                         .requestMatchers("/api/v1/**").authenticated()
                         .anyRequest().denyAll()
                 )

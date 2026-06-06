@@ -47,7 +47,7 @@ public class AuthController extends UserControllerSupport {
         try {
             authProvider = AuthProvider.valueOf(provider.toUpperCase());
         } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("지원하지 않는 소셜 로그인 제공자입니다: " + provider);
+            throw new IllegalArgumentException("지원하지 않는 소셜 로그인 제공자입니다.");
         }
         AuthTokenResult result = authService.socialLogin(
                 new SocialLoginCommand(authProvider, request.code()));

@@ -54,7 +54,7 @@ public class UserExceptionHandler {
     @ExceptionHandler(IllegalArgumentException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ApiResponse<Void> handleIllegalArgument(IllegalArgumentException e) {
-        return ApiResponse.fail("INVALID_REQUEST", "잘못된 요청입니다.", false, traceId());
+        return ApiResponse.fail("INVALID_REQUEST", e.getMessage(), false, traceId());
     }
 
     private static String traceId() {
