@@ -67,11 +67,11 @@ public class OAuthClientImpl implements OAuthClient {
     private OAuthUserInfo fetchKakaoUserInfo(String code) {
         OAuthProperties.ProviderProperties kakao = props.kakao();
 
-        String tokenBody = "grant_type=authorization_code"
+        String tokenBody = "code=" + encode(code)
                 + "&client_id=" + encode(kakao.clientId())
                 + "&client_secret=" + encode(kakao.clientSecret())
                 + "&redirect_uri=" + encode(kakao.redirectUri())
-                + "&code=" + encode(code);
+                + "&grant_type=authorization_code";
 
         KakaoTokenResponse tokenResponse = restClient.post()
                 .uri(kakao.tokenUri())
