@@ -8,6 +8,7 @@ import com.fandrops.user.application.exception.DuplicateEmailException;
 import com.fandrops.user.application.exception.FanNotFoundException;
 import com.fandrops.user.application.exception.InvalidCredentialsException;
 import com.fandrops.user.application.exception.InvalidTokenException;
+import com.fandrops.user.domain.AgencyApplicationAlreadyReviewedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -75,6 +76,12 @@ public class UserExceptionHandler {
     @ResponseStatus(HttpStatus.CONFLICT)
     public ApiResponse<Void> handleDuplicateAgencyAccount(DuplicateAgencyAccountException e) {
         return ApiResponse.fail("DUPLICATE_AGENCY_ACCOUNT", e.getMessage(), false, traceId());
+    }
+
+    @ExceptionHandler(AgencyApplicationAlreadyReviewedException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public ApiResponse<Void> handleAlreadyReviewed(AgencyApplicationAlreadyReviewedException e) {
+        return ApiResponse.fail("ALREADY_REVIEWED", e.getMessage(), false, traceId());
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

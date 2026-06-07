@@ -97,7 +97,7 @@ public class AgencyApplication {
     // 불변조건 AA-1: 종료 상태에서 재전이 불가
     private void validateNotTerminal() {
         if (this.status.isTerminal()) {
-            throw new IllegalStateException(
+            throw new AgencyApplicationAlreadyReviewedException(
                 "이미 심사가 완료된 신청서입니다. 현재 상태: " + this.status
             );
         }

@@ -11,6 +11,7 @@ import com.fandrops.user.application.port.EmailNotificationPort;
 import com.fandrops.user.domain.AgencyAccount;
 import com.fandrops.user.domain.AgencyAccountStatus;
 import com.fandrops.user.domain.AgencyApplication;
+import com.fandrops.user.domain.AgencyApplicationAlreadyReviewedException;
 import com.fandrops.user.domain.AgencyApplicationStatus;
 import com.fandrops.user.domain.UserRole;
 import org.junit.jupiter.api.BeforeEach;
@@ -170,23 +171,23 @@ class AgencyApplicationServiceTest {
     }
 
     @Test
-    @DisplayName("이미 APPROVED된 신청서를 다시 승인하면 IllegalStateException (AA-1)")
+    @DisplayName("이미 APPROVED된 신청서를 다시 승인하면 AgencyApplicationAlreadyReviewedException (AA-1)")
     void approveApplication_alreadyApproved_throws() {
         AgencyApplication approved = buildApprovedApplication(1L);
         when(agencyApplicationRepository.findById(1L)).thenReturn(Optional.of(approved));
         when(agencyAccountRepository.existsByLoginId(anyString())).thenReturn(false);
 
-        assertThrows(IllegalStateException.class, () -> service.approveApplication(1L));
+        assertThrows(AgencyApplicationAlreadyReviewedException.class, () -> service.approveApplication(1L));
     }
 
     @Test
-    @DisplayName("이미 REJECTED된 신청서를 승인하면 IllegalStateException (AA-1)")
+    @DisplayName("이미 REJECTED된 신청서를 승인하면 AgencyApplicationAlreadyReviewedException (AA-1)")
     void approveApplication_alreadyRejected_throws() {
         AgencyApplication rejected = buildRejectedApplication(1L);
         when(agencyApplicationRepository.findById(1L)).thenReturn(Optional.of(rejected));
         when(agencyAccountRepository.existsByLoginId(anyString())).thenReturn(false);
 
-        assertThrows(IllegalStateException.class, () -> service.approveApplication(1L));
+        assertThrows(AgencyApplicationAlreadyReviewedException.class, () -> service.approveApplication(1L));
         verify(agencyAccountRepository, never()).save(any());
     }
 
@@ -250,12 +251,12 @@ class AgencyApplicationServiceTest {
     }
 
     @Test
-    @DisplayName("이미 APPROVED된 신청서를 반려하면 IllegalStateException (AA-1)")
+    @DisplayName("이미 APPROVED된 신청서를 반려하면 AgencyApplicationAlreadyReviewedException (AA-1)")
     void rejectApplication_alreadyApproved_throws() {
         AgencyApplication approved = buildApprovedApplication(1L);
         when(agencyApplicationRepository.findById(1L)).thenReturn(Optional.of(approved));
 
-        assertThrows(IllegalStateException.class,
+        assertThrows(AgencyApplicationAlreadyReviewedException.class,
                 () -> service.rejectApplication(1L, "추가 사유"));
         verify(agencyApplicationRepository, never()).save(any());
         verify(emailNotificationPort, never()).sendApplicationRejectedEmail(any(), any());
@@ -274,12 +275,12 @@ class AgencyApplicationServiceTest {
     }
 
     @Test
-    @DisplayName("이미 REJECTED된 신청서를 다시 반려하면 IllegalStateException (AA-1)")
+    @DisplayName("이미 REJECTED된 신청서를 다시 반려하면 AgencyApplicationAlreadyReviewedException (AA-1)")
     void rejectApplication_alreadyRejected_throws() {
         AgencyApplication rejected = buildRejectedApplication(1L);
         when(agencyApplicationRepository.findById(1L)).thenReturn(Optional.of(rejected));
 
-        assertThrows(IllegalStateException.class,
+        assertThrows(AgencyApplicationAlreadyReviewedException.class,
                 () -> service.rejectApplication(1L, "추가 사유"));
     }
 
