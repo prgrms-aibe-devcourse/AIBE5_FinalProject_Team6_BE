@@ -9,8 +9,10 @@ import com.fandrops.user.application.port.AgencyAccountRepository;
 import com.fandrops.user.application.port.AgencyApplicationRepository;
 import com.fandrops.user.application.port.EmailNotificationPort;
 import com.fandrops.user.domain.AgencyAccount;
+import com.fandrops.user.domain.AgencyAccountStatus;
 import com.fandrops.user.domain.AgencyApplication;
 import com.fandrops.user.domain.AgencyApplicationStatus;
+import com.fandrops.user.domain.UserRole;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -94,6 +96,8 @@ public class AgencyApplicationService {
                 .passwordHash(passwordEncoder.encode(tempPassword))
                 .companyName(application.getCompanyName())
                 .contactEmail(application.getContactEmail())
+                .status(AgencyAccountStatus.ACTIVE)
+                .role(UserRole.AGENCY)
                 .build();
         agencyAccountRepository.save(account);
 

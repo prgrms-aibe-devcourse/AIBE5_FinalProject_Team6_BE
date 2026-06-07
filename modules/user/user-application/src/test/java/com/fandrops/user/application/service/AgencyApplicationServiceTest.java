@@ -9,12 +9,15 @@ import com.fandrops.user.application.port.AgencyAccountRepository;
 import com.fandrops.user.application.port.AgencyApplicationRepository;
 import com.fandrops.user.application.port.EmailNotificationPort;
 import com.fandrops.user.domain.AgencyAccount;
+import com.fandrops.user.domain.AgencyAccountStatus;
 import com.fandrops.user.domain.AgencyApplication;
 import com.fandrops.user.domain.AgencyApplicationStatus;
+import com.fandrops.user.domain.UserRole;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -177,6 +180,36 @@ class AgencyApplicationServiceTest {
     }
 
     @Test
+    @DisplayName("이미 REJECTED된 신청서를 승인하면 IllegalStateException (AA-1)")
+    void approveApplication_alreadyRejected_throws() {
+        AgencyApplication rejected = buildRejectedApplication(1L);
+        when(agencyApplicationRepository.findById(1L)).thenReturn(Optional.of(rejected));
+        when(agencyAccountRepository.existsByLoginId(anyString())).thenReturn(false);
+
+        assertThrows(IllegalStateException.class, () -> service.approveApplication(1L));
+        verify(agencyAccountRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("승인 시 AgencyAccount 는 status=ACTIVE, role=AGENCY 로 저장된다")
+    void approveApplication_success_accountHasCorrectStatusAndRole() {
+        AgencyApplication application = buildPendingApplication(1L);
+        when(agencyApplicationRepository.findById(1L)).thenReturn(Optional.of(application));
+        when(agencyAccountRepository.existsByLoginId("contact@hybe.com")).thenReturn(false);
+        when(passwordEncoder.encode(anyString())).thenReturn("hashedTempPw");
+        when(agencyApplicationRepository.save(any())).thenReturn(application);
+        when(agencyAccountRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.approveApplication(1L);
+
+        ArgumentCaptor<AgencyAccount> captor = ArgumentCaptor.forClass(AgencyAccount.class);
+        verify(agencyAccountRepository).save(captor.capture());
+        AgencyAccount saved = captor.getValue();
+        assertEquals(AgencyAccountStatus.ACTIVE, saved.getStatus());
+        assertEquals(UserRole.AGENCY, saved.getRole());
+    }
+
+    @Test
     @DisplayName("이메일 발송 실패 시 예외가 전파된다 — DB 롤백 의도 확인")
     void approveApplication_emailFails_exceptionPropagates() {
         AgencyApplication application = buildPendingApplication(1L);
@@ -214,6 +247,30 @@ class AgencyApplicationServiceTest {
         assertThrows(AgencyApplicationNotFoundException.class,
                 () -> service.rejectApplication(99L, "서류 미비"));
         verify(emailNotificationPort, never()).sendApplicationRejectedEmail(any(), any());
+    }
+
+    @Test
+    @DisplayName("이미 APPROVED된 신청서를 반려하면 IllegalStateException (AA-1)")
+    void rejectApplication_alreadyApproved_throws() {
+        AgencyApplication approved = buildApprovedApplication(1L);
+        when(agencyApplicationRepository.findById(1L)).thenReturn(Optional.of(approved));
+
+        assertThrows(IllegalStateException.class,
+                () -> service.rejectApplication(1L, "추가 사유"));
+        verify(agencyApplicationRepository, never()).save(any());
+        verify(emailNotificationPort, never()).sendApplicationRejectedEmail(any(), any());
+    }
+
+    @Test
+    @DisplayName("반려 이메일 발송 실패 시 예외가 전파된다 — DB 롤백 의도 확인")
+    void rejectApplication_emailFails_exceptionPropagates() {
+        AgencyApplication application = buildPendingApplication(1L);
+        when(agencyApplicationRepository.findById(1L)).thenReturn(Optional.of(application));
+        when(agencyApplicationRepository.save(any())).thenReturn(application);
+        doThrow(new RuntimeException("메일 서버 연결 실패"))
+                .when(emailNotificationPort).sendApplicationRejectedEmail(any(), any());
+
+        assertThrows(RuntimeException.class, () -> service.rejectApplication(1L, "서류 미비"));
     }
 
     @Test
