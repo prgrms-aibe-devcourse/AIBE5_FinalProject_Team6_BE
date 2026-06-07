@@ -13,6 +13,7 @@ import com.fandrops.community.application.exception.LikeNotFoundException;
 import com.fandrops.community.application.exception.NotFanMemberException;
 import com.fandrops.community.application.exception.UnauthorizedException;
 import com.fandrops.community.domain.schedule.exception.ScheduleDomainException;
+import com.fandrops.community.domain.vote.exception.GoodsVoteDomainException;
 import org.slf4j.MDC;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -101,6 +102,12 @@ public class CommunityExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> numberFormat(NumberFormatException e) {
         return ResponseEntity.status(401)
                 .body(ApiResponse.fail("INVALID_TOKEN", "인증 토큰이 유효하지 않습니다.", false, traceId()));
+    }
+
+    @ExceptionHandler(GoodsVoteDomainException.class)
+    public ResponseEntity<ApiResponse<Void>> goodsVoteDomain(GoodsVoteDomainException e) {
+        return ResponseEntity.status(400)
+                .body(ApiResponse.fail("INVALID_REQUEST", e.getMessage(), false, traceId()));
     }
 
     @ExceptionHandler(ScheduleDomainException.class)

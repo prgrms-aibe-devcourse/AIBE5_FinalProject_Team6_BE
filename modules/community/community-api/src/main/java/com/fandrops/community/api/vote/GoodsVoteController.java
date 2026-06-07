@@ -39,14 +39,16 @@ public class GoodsVoteController extends CommunityControllerSupport {
         if (size < 1 || size > 50) {
             throw new IllegalArgumentException("size는 1~50 사이여야 합니다.");
         }
-        List<GoodsVoteResult> items = goodsVoteService.getVotes(artistId, cursor, size);
-        Long nextCursor = items.size() == size ? items.get(items.size() - 1).id() : null;
+        List<GoodsVoteResult> raw = goodsVoteService.getVotes(artistId, cursor, size);
+        boolean hasMore = raw.size() > size;
+        List<GoodsVoteResult> items = hasMore ? raw.subList(0, size) : raw;
+        Long nextCursor = hasMore ? items.get(items.size() - 1).id() : null;
 
         // Map.of()는 null 값 불허 → HashMap 사용 (api-contract.md: nextCursor는 null 허용)
         Map<String, Object> data = new HashMap<>();
         data.put("items", items);
         data.put("nextCursor", nextCursor != null ? String.valueOf(nextCursor) : null);
-        data.put("hasMore", nextCursor != null);
+        data.put("hasMore", hasMore);
         return ResponseEntity.ok(ApiResponse.ok(data, traceId()));
     }
 

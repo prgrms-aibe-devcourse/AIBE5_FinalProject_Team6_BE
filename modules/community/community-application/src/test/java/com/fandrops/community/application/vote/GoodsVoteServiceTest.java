@@ -64,7 +64,7 @@ class GoodsVoteServiceTest {
             GoodsVoteOption opt1 = GoodsVoteOption.reconstruct(10L, 1L, "A", null, 3);
             GoodsVoteOption opt2 = GoodsVoteOption.reconstruct(11L, 2L, "B", null, 1);
 
-            when(voteRepository.findByArtistId(100L, null, 20)).thenReturn(List.of(v1, v2));
+            when(voteRepository.findByArtistId(100L, null, 21)).thenReturn(List.of(v1, v2));
             when(optionRepository.findByVoteIdIn(anyList())).thenReturn(List.of(opt1, opt2));
 
             List<GoodsVoteResult> results = service.getVotes(100L, null, 20);
@@ -79,7 +79,7 @@ class GoodsVoteServiceTest {
         @Test
         @DisplayName("투표 없을 때 빈 리스트 반환 — findByVoteIdIn 호출 없음")
         void emptyVotes_returnsEmpty() {
-            when(voteRepository.findByArtistId(100L, null, 20)).thenReturn(List.of());
+            when(voteRepository.findByArtistId(100L, null, 21)).thenReturn(List.of());
 
             List<GoodsVoteResult> results = service.getVotes(100L, null, 20);
 

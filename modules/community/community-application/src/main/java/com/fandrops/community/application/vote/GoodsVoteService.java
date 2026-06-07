@@ -62,7 +62,7 @@ public class GoodsVoteService {
     }
 
     public List<GoodsVoteResult> getVotes(Long artistId, Long cursorId, int size) {
-        List<GoodsVote> votes = voteRepository.findByArtistId(artistId, cursorId, size);
+        List<GoodsVote> votes = voteRepository.findByArtistId(artistId, cursorId, size + 1);
         if (votes.isEmpty()) {
             return List.of();
         }
