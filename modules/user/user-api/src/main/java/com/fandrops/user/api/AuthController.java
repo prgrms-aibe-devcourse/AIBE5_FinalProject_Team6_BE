@@ -64,7 +64,7 @@ public class AuthController extends UserControllerSupport {
     public ResponseEntity<ApiResponse<RefreshResponse>> refresh(@Valid @RequestBody RefreshRequest request) {
         AuthTokenResult result = authService.refreshAccessToken(request.refreshToken());
         return ResponseEntity.ok(ApiResponse.ok(
-                new RefreshResponse(result.accessToken(), result.expiresIn()), traceId()));
+                new RefreshResponse(result.accessToken(), result.refreshToken(), result.expiresIn()), traceId()));
     }
 
     @PostMapping("/password-reset/request")
