@@ -143,7 +143,7 @@ public class AgencyApplication {
 
         public AgencyApplication build() {
             Objects.requireNonNull(companyName, "companyName은 필수입니다");
-            Objects.requireNonNull(businessRegistrationNumber, "businessRegistrationNumber는 필수입니다");
+            // businessRegistrationNumber: nullable 허용 — 1인 크리에이터는 개인사업자 번호 없을 수 있음
             Objects.requireNonNull(representativeName, "representativeName은 필수입니다");
             Objects.requireNonNull(contactEmail, "contactEmail은 필수입니다");
             Objects.requireNonNull(contactPhone, "contactPhone은 필수입니다");
