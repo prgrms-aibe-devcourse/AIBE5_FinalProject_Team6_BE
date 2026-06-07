@@ -54,6 +54,18 @@ public abstract class CommunityControllerSupport {
         throw new UnauthorizedException("인증 정보가 없습니다. Bearer 토큰을 제공하세요.");
     }
 
+    // TODO: user 모듈 Auth 계약 확정 후 JWT 클레임에서 fanId 추출로 교체 (표지민 협의)
+    protected Long resolveFanId(Authentication authentication, Long header) {
+        if (header != null && isLocalProfile()) {
+            return header;
+        }
+        if (authentication != null && authentication.isAuthenticated()
+                && !"anonymousUser".equals(authentication.getPrincipal())) {
+            return Long.parseLong(authentication.getName());
+        }
+        throw new UnauthorizedException("인증 정보가 없습니다. Bearer 토큰을 제공하세요.");
+    }
+
     protected static boolean hasArtistOrAgencyRole(Authentication authentication) {
         return authentication.getAuthorities().stream()
                 .anyMatch(a -> a.getAuthority().equals("ARTIST")

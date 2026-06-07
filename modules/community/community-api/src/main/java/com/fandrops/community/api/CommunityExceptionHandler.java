@@ -2,6 +2,9 @@ package com.fandrops.community.api;
 
 import com.fandrops.common.ApiResponse;
 import com.fandrops.community.application.exception.AlreadyLikedException;
+import com.fandrops.community.application.exception.DuplicateVoteException;
+import com.fandrops.community.application.exception.GoodsVoteClosedException;
+import com.fandrops.community.application.exception.GoodsVoteNotFoundException;
 import com.fandrops.community.application.exception.CommentNotFoundException;
 import com.fandrops.community.application.exception.FeedNotFoundException;
 import com.fandrops.community.application.exception.FeedOwnershipException;
@@ -10,6 +13,7 @@ import com.fandrops.community.application.exception.LikeNotFoundException;
 import com.fandrops.community.application.exception.NotFanMemberException;
 import com.fandrops.community.application.exception.UnauthorizedException;
 import com.fandrops.community.domain.schedule.exception.ScheduleDomainException;
+import com.fandrops.community.domain.vote.exception.GoodsVoteDomainException;
 import org.slf4j.MDC;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -40,6 +44,24 @@ public class CommunityExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> likeNotFound(LikeNotFoundException e) {
         return ResponseEntity.status(404)
                 .body(ApiResponse.fail("LIKE_NOT_FOUND", e.getMessage(), false, traceId()));
+    }
+
+    @ExceptionHandler(GoodsVoteNotFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> goodsVoteNotFound(GoodsVoteNotFoundException e) {
+        return ResponseEntity.status(404)
+                .body(ApiResponse.fail("GOODS_VOTE_NOT_FOUND", e.getMessage(), false, traceId()));
+    }
+
+    @ExceptionHandler(GoodsVoteClosedException.class)
+    public ResponseEntity<ApiResponse<Void>> goodsVoteClosed(GoodsVoteClosedException e) {
+        return ResponseEntity.status(422)
+                .body(ApiResponse.fail("GOODS_VOTE_CLOSED", e.getMessage(), false, traceId()));
+    }
+
+    @ExceptionHandler(DuplicateVoteException.class)
+    public ResponseEntity<ApiResponse<Void>> duplicateVote(DuplicateVoteException e) {
+        return ResponseEntity.status(409)
+                .body(ApiResponse.fail("DUPLICATE_VOTE", e.getMessage(), false, traceId()));
     }
 
     @ExceptionHandler(AlreadyLikedException.class)
@@ -80,6 +102,12 @@ public class CommunityExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> numberFormat(NumberFormatException e) {
         return ResponseEntity.status(401)
                 .body(ApiResponse.fail("INVALID_TOKEN", "인증 토큰이 유효하지 않습니다.", false, traceId()));
+    }
+
+    @ExceptionHandler(GoodsVoteDomainException.class)
+    public ResponseEntity<ApiResponse<Void>> goodsVoteDomain(GoodsVoteDomainException e) {
+        return ResponseEntity.status(400)
+                .body(ApiResponse.fail("INVALID_REQUEST", e.getMessage(), false, traceId()));
     }
 
     @ExceptionHandler(ScheduleDomainException.class)
