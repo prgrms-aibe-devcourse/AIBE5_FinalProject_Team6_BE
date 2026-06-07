@@ -63,18 +63,20 @@ public class UserExceptionHandler {
     }
 
     // 카카오·구글 OAuth 서버가 4xx/5xx를 반환한 경우
+    // 5xx: 카카오 일시 장애 → retryable=true / 4xx: 코드 만료 등 → retryable=false
     @ExceptionHandler(RestClientResponseException.class)
     @ResponseStatus(HttpStatus.BAD_GATEWAY)
     public ApiResponse<Void> handleOAuthProviderError(RestClientResponseException e) {
-        log.error("OAuth 제공자 오류: status={}", e.getStatusCode(), e);
-        return ApiResponse.fail("OAUTH_PROVIDER_ERROR", "소셜 로그인 서버 오류가 발생했습니다.", false, traceId());
+        log.error("OAuth 제공자 오류: status={} text={}", e.getStatusCode(), e.getStatusText());
+        boolean retryable = e.getStatusCode().is5xxServerError();
+        return ApiResponse.fail("OAUTH_PROVIDER_ERROR", "소셜 로그인 서버 오류가 발생했습니다.", retryable, traceId());
     }
 
     // 카카오·구글 OAuth 응답이 예상과 다른 경우 (예: HTTP 200 에러 응답)
     @ExceptionHandler(IllegalStateException.class)
     @ResponseStatus(HttpStatus.BAD_GATEWAY)
     public ApiResponse<Void> handleIllegalState(IllegalStateException e) {
-        log.error("OAuth 응답 파싱 오류: {}", e.getMessage(), e);
+        log.error("OAuth 응답 파싱 오류: {}", e.getMessage());
         return ApiResponse.fail("OAUTH_INVALID_RESPONSE", "소셜 로그인 응답 처리 중 오류가 발생했습니다.", false, traceId());
     }
 
