@@ -1,8 +1,11 @@
 package com.fandrops.community.api;
 
 import com.fandrops.common.ApiResponse;
+import com.fandrops.community.application.exception.AlreadyCheckedInException;
 import com.fandrops.community.application.exception.AlreadyJoinedException;
 import com.fandrops.community.application.exception.AlreadyLikedException;
+import com.fandrops.community.application.exception.AttendanceEventNotFoundException;
+import com.fandrops.community.application.exception.AttendanceEventNotOngoingException;
 import com.fandrops.community.application.exception.ArtistNotFoundException;
 import com.fandrops.community.application.exception.DuplicateVoteException;
 import com.fandrops.community.application.exception.GoodsVoteClosedException;
@@ -30,6 +33,24 @@ import java.util.UUID;
 
 @RestControllerAdvice
 public class CommunityExceptionHandler {
+
+    @ExceptionHandler(AttendanceEventNotFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> attendanceEventNotFound(AttendanceEventNotFoundException e) {
+        return ResponseEntity.status(404)
+                .body(ApiResponse.fail("ATTENDANCE_EVENT_NOT_FOUND", e.getMessage(), false, traceId()));
+    }
+
+    @ExceptionHandler(AlreadyCheckedInException.class)
+    public ResponseEntity<ApiResponse<Void>> alreadyCheckedIn(AlreadyCheckedInException e) {
+        return ResponseEntity.status(409)
+                .body(ApiResponse.fail("ALREADY_CHECKED_IN", e.getMessage(), false, traceId()));
+    }
+
+    @ExceptionHandler(AttendanceEventNotOngoingException.class)
+    public ResponseEntity<ApiResponse<Void>> attendanceEventNotOngoing(AttendanceEventNotOngoingException e) {
+        return ResponseEntity.status(400)
+                .body(ApiResponse.fail("ATTENDANCE_EVENT_NOT_ONGOING", e.getMessage(), false, traceId()));
+    }
 
     @ExceptionHandler(ArtistNotFoundException.class)
     public ResponseEntity<ApiResponse<Void>> artistNotFound(ArtistNotFoundException e) {
