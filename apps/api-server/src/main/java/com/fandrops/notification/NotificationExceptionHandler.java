@@ -2,6 +2,7 @@ package com.fandrops.notification;
 
 import com.fandrops.common.ApiResponse;
 import com.fandrops.notification.application.exception.NotificationNotFoundException;
+import com.fandrops.notification.application.exception.UnauthenticatedException;
 import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -17,8 +18,8 @@ public class NotificationExceptionHandler {
                 .body(ApiResponse.fail("NOTIFICATION_NOT_FOUND", e.getMessage(), false, traceId()));
     }
 
-    @ExceptionHandler(IllegalStateException.class)
-    public ResponseEntity<ApiResponse<Void>> handleUnauthorized(IllegalStateException e) {
+    @ExceptionHandler(UnauthenticatedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleUnauthorized(UnauthenticatedException e) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(ApiResponse.fail("UNAUTHORIZED", e.getMessage(), false, traceId()));
     }

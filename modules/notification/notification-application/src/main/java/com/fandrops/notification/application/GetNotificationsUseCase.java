@@ -19,7 +19,7 @@ public class GetNotificationsUseCase {
 
     @Transactional(readOnly = true)
     public List<NotificationResult> getNotifications(Long fanId, Long cursorId, Integer size) {
-        int pageSize = (size != null && size > 0) ? size : DEFAULT_SIZE;
+        int pageSize = (size != null && size > 0) ? Math.min(size, 100) : DEFAULT_SIZE;
         return notificationPort.findByFanId(fanId, cursorId, pageSize)
                 .stream()
                 .map(NotificationResult::from)

@@ -1,5 +1,6 @@
 package com.fandrops.notification.application.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fandrops.notification.domain.Notification;
 import java.time.Instant;
 
@@ -8,6 +9,7 @@ public class NotificationResult {
     private final Long id;
     private final String type;
     private final String message;
+    @JsonProperty("isRead")
     private final boolean isRead;
     private final Instant sentAt;
     private final Long targetId;
