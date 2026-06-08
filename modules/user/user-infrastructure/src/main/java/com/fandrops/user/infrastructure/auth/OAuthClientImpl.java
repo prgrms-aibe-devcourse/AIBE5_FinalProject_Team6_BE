@@ -65,8 +65,41 @@ public class OAuthClientImpl implements OAuthClient {
     }
 
     private OAuthUserInfo fetchKakaoUserInfo(String code) {
-        // 카카오 client_id 발급 후 구현 예정
-        throw new UnsupportedOperationException("카카오 OAuth 미구현 — client_id 발급 후 별도 PR에서 작업");
+        OAuthProperties.ProviderProperties kakao = props.kakao();
+
+        String tokenBody = "code=" + encode(code)
+                + "&client_id=" + encode(kakao.clientId())
+                + "&client_secret=" + encode(kakao.clientSecret())
+                + "&redirect_uri=" + encode(kakao.redirectUri())
+                + "&grant_type=authorization_code";
+
+        KakaoTokenResponse tokenResponse = restClient.post()
+                .uri(kakao.tokenUri())
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .body(tokenBody)
+                .retrieve()
+                .body(KakaoTokenResponse.class);
+
+        if (tokenResponse == null || tokenResponse.accessToken() == null) {
+            throw new IllegalStateException("카카오 토큰 응답이 비어 있습니다.");
+        }
+
+        KakaoUserInfo userInfo = restClient.get()
+                .uri(kakao.userInfoUri())
+                .header("Authorization", "Bearer " + tokenResponse.accessToken())
+                .retrieve()
+                .body(KakaoUserInfo.class);
+
+        if (userInfo == null || userInfo.id() == null) {
+            throw new IllegalStateException("카카오 사용자 정보 응답이 비어 있습니다.");
+        }
+
+        String email = userInfo.kakaoAccount() != null ? userInfo.kakaoAccount().email() : null;
+        String nickname = (userInfo.kakaoAccount() != null && userInfo.kakaoAccount().profile() != null)
+                ? userInfo.kakaoAccount().profile().nickname()
+                : null;
+
+        return new OAuthUserInfo(String.valueOf(userInfo.id()), email, nickname);
     }
 
     private static String encode(String value) {
@@ -75,4 +108,9 @@ public class OAuthClientImpl implements OAuthClient {
 
     private record GoogleTokenResponse(@JsonProperty("access_token") String accessToken) {}
     private record GoogleUserInfo(String id, String email, String name) {}
+
+    private record KakaoTokenResponse(@JsonProperty("access_token") String accessToken) {}
+    private record KakaoUserInfo(Long id, @JsonProperty("kakao_account") KakaoAccount kakaoAccount) {}
+    private record KakaoAccount(String email, KakaoProfile profile) {}
+    private record KakaoProfile(String nickname) {}
 }

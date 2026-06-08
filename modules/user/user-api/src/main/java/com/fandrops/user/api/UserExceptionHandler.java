@@ -5,18 +5,23 @@ import com.fandrops.user.application.exception.DuplicateEmailException;
 import com.fandrops.user.application.exception.FanNotFoundException;
 import com.fandrops.user.application.exception.InvalidCredentialsException;
 import com.fandrops.user.application.exception.InvalidTokenException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.client.RestClientResponseException;
 
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 @RestControllerAdvice(basePackages = "com.fandrops.user.api")
 public class UserExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(UserExceptionHandler.class);
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
@@ -55,6 +60,24 @@ public class UserExceptionHandler {
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ApiResponse<Void> handleIllegalArgument(IllegalArgumentException e) {
         return ApiResponse.fail("INVALID_REQUEST", e.getMessage(), false, traceId());
+    }
+
+    // 카카오·구글 OAuth 서버가 4xx/5xx를 반환한 경우
+    // 5xx: 카카오 일시 장애 → retryable=true / 4xx: 코드 만료 등 → retryable=false
+    @ExceptionHandler(RestClientResponseException.class)
+    @ResponseStatus(HttpStatus.BAD_GATEWAY)
+    public ApiResponse<Void> handleOAuthProviderError(RestClientResponseException e) {
+        log.error("OAuth 제공자 오류: status={} text={}", e.getStatusCode(), e.getStatusText());
+        boolean retryable = e.getStatusCode().is5xxServerError();
+        return ApiResponse.fail("OAUTH_PROVIDER_ERROR", "소셜 로그인 서버 오류가 발생했습니다.", retryable, traceId());
+    }
+
+    // 카카오·구글 OAuth 응답이 예상과 다른 경우 (예: HTTP 200 에러 응답)
+    @ExceptionHandler(IllegalStateException.class)
+    @ResponseStatus(HttpStatus.BAD_GATEWAY)
+    public ApiResponse<Void> handleIllegalState(IllegalStateException e) {
+        log.error("OAuth 응답 파싱 오류: {}", e.getMessage());
+        return ApiResponse.fail("OAUTH_INVALID_RESPONSE", "소셜 로그인 응답 처리 중 오류가 발생했습니다.", false, traceId());
     }
 
     private static String traceId() {
