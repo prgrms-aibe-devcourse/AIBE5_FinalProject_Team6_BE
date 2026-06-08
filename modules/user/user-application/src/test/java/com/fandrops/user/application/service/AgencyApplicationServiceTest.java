@@ -7,6 +7,7 @@ import com.fandrops.user.application.exception.DuplicateAgencyAccountException;
 import com.fandrops.user.application.exception.DuplicateApplicationException;
 import com.fandrops.user.application.port.AgencyAccountRepository;
 import com.fandrops.user.application.port.AgencyApplicationRepository;
+import com.fandrops.user.application.port.ArtistProfileRepository;
 import com.fandrops.user.application.port.EmailNotificationPort;
 import com.fandrops.user.domain.AgencyAccount;
 import com.fandrops.user.domain.AgencyAccountStatus;
@@ -37,6 +38,7 @@ class AgencyApplicationServiceTest {
 
     @Mock AgencyApplicationRepository agencyApplicationRepository;
     @Mock AgencyAccountRepository agencyAccountRepository;
+    @Mock ArtistProfileRepository artistProfileRepository;
     @Mock EmailNotificationPort emailNotificationPort;
     @Mock PasswordEncoder passwordEncoder;
 
@@ -46,7 +48,7 @@ class AgencyApplicationServiceTest {
     void setUp() {
         service = new AgencyApplicationService(
                 agencyApplicationRepository, agencyAccountRepository,
-                emailNotificationPort, passwordEncoder);
+                artistProfileRepository, emailNotificationPort, passwordEncoder);
     }
 
     // ── submitApplication ────────────────────────────────────────────────────
@@ -127,19 +129,21 @@ class AgencyApplicationServiceTest {
     // ── approveApplication ───────────────────────────────────────────────────
 
     @Test
-    @DisplayName("정상 승인 시 APPROVED 저장 + AgencyAccount 생성 + 이메일 발송")
+    @DisplayName("정상 승인 시 APPROVED 저장 + AgencyAccount 생성 + ArtistProfile 생성 + 이메일 발송")
     void approveApplication_success() {
         AgencyApplication application = buildPendingApplication(1L);
         when(agencyApplicationRepository.findById(1L)).thenReturn(Optional.of(application));
         when(agencyAccountRepository.existsByLoginId("contact@hybe.com")).thenReturn(false);
         when(passwordEncoder.encode(anyString())).thenReturn("hashedTempPw");
         when(agencyApplicationRepository.save(any())).thenReturn(application);
-        when(agencyAccountRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(agencyAccountRepository.save(any())).thenReturn(buildSavedAccount(100L));
+        when(artistProfileRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         service.approveApplication(1L);
 
         verify(agencyApplicationRepository).save(any());
         verify(agencyAccountRepository).save(any());
+        verify(artistProfileRepository).save(any());
         verify(emailNotificationPort).sendApplicationApprovedEmail(
                 eq("contact@hybe.com"), eq("contact@hybe.com"), anyString());
     }
@@ -199,7 +203,8 @@ class AgencyApplicationServiceTest {
         when(agencyAccountRepository.existsByLoginId("contact@hybe.com")).thenReturn(false);
         when(passwordEncoder.encode(anyString())).thenReturn("hashedTempPw");
         when(agencyApplicationRepository.save(any())).thenReturn(application);
-        when(agencyAccountRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(agencyAccountRepository.save(any())).thenReturn(buildSavedAccount(100L));
+        when(artistProfileRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         service.approveApplication(1L);
 
@@ -218,7 +223,8 @@ class AgencyApplicationServiceTest {
         when(agencyAccountRepository.existsByLoginId("contact@hybe.com")).thenReturn(false);
         when(passwordEncoder.encode(anyString())).thenReturn("hashedTempPw");
         when(agencyApplicationRepository.save(any())).thenReturn(application);
-        when(agencyAccountRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(agencyAccountRepository.save(any())).thenReturn(buildSavedAccount(100L));
+        when(artistProfileRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         doThrow(new RuntimeException("메일 서버 연결 실패"))
                 .when(emailNotificationPort).sendApplicationApprovedEmail(any(), any(), any());
 
@@ -316,5 +322,17 @@ class AgencyApplicationServiceTest {
                 AgencyApplicationStatus.REJECTED, "서류 미비",
                 LocalDateTime.of(2025, 1, 1, 0, 0),
                 LocalDateTime.of(2025, 1, 5, 0, 0));
+    }
+
+    private AgencyAccount buildSavedAccount(Long id) {
+        return AgencyAccount.builder()
+                .id(id)
+                .loginId("contact@hybe.com")
+                .passwordHash("hashedTempPw")
+                .companyName("HYBE")
+                .contactEmail("contact@hybe.com")
+                .status(AgencyAccountStatus.ACTIVE)
+                .role(UserRole.AGENCY)
+                .build();
     }
 }

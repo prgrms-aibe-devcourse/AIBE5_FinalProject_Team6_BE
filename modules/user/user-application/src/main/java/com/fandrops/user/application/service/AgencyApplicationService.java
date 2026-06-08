@@ -7,11 +7,13 @@ import com.fandrops.user.application.exception.DuplicateAgencyAccountException;
 import com.fandrops.user.application.exception.DuplicateApplicationException;
 import com.fandrops.user.application.port.AgencyAccountRepository;
 import com.fandrops.user.application.port.AgencyApplicationRepository;
+import com.fandrops.user.application.port.ArtistProfileRepository;
 import com.fandrops.user.application.port.EmailNotificationPort;
 import com.fandrops.user.domain.AgencyAccount;
 import com.fandrops.user.domain.AgencyAccountStatus;
 import com.fandrops.user.domain.AgencyApplication;
 import com.fandrops.user.domain.AgencyApplicationStatus;
+import com.fandrops.user.domain.ArtistProfile;
 import com.fandrops.user.domain.UserRole;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -27,16 +29,19 @@ public class AgencyApplicationService {
 
     private final AgencyApplicationRepository agencyApplicationRepository;
     private final AgencyAccountRepository agencyAccountRepository;
+    private final ArtistProfileRepository artistProfileRepository;
     private final EmailNotificationPort emailNotificationPort;
     private final PasswordEncoder passwordEncoder;
 
     public AgencyApplicationService(
             AgencyApplicationRepository agencyApplicationRepository,
             AgencyAccountRepository agencyAccountRepository,
+            ArtistProfileRepository artistProfileRepository,
             EmailNotificationPort emailNotificationPort,
             PasswordEncoder passwordEncoder) {
         this.agencyApplicationRepository = agencyApplicationRepository;
         this.agencyAccountRepository = agencyAccountRepository;
+        this.artistProfileRepository = artistProfileRepository;
         this.emailNotificationPort = emailNotificationPort;
         this.passwordEncoder = passwordEncoder;
     }
@@ -99,7 +104,13 @@ public class AgencyApplicationService {
                 .status(AgencyAccountStatus.ACTIVE)
                 .role(UserRole.AGENCY)
                 .build();
-        agencyAccountRepository.save(account);
+        AgencyAccount savedAccount = agencyAccountRepository.save(account);
+
+        artistProfileRepository.save(ArtistProfile.builder()
+                .agencyId(savedAccount.getId())
+                .name(application.getTargetArtistName())
+                .joinedAt(LocalDateTime.now(ZoneOffset.UTC))
+                .build());
 
         emailNotificationPort.sendApplicationApprovedEmail(
                 application.getContactEmail(), loginId, tempPassword);
