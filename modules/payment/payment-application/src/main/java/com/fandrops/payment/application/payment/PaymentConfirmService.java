@@ -34,8 +34,10 @@ public class PaymentConfirmService {
             return PaymentConfirmResult.from(byTossKey.get());
         }
 
+        // Payment 레코드가 없으면 lazy-create — POST /orders 시 생성 누락 대응
         Payment payment = paymentRepository.findByOrderId(command.getOrderId())
-                .orElseThrow(() -> new PaymentNotFoundException(command.getOrderId()));
+                .orElseGet(() -> paymentRepository.save(
+                        Payment.create(command.getOrderId(), command.getAmount())));
 
         // orderId 기준 이미 SUCCESS → 멱등 200
         if (payment.getStatus() == PaymentStatus.SUCCESS) {

@@ -51,4 +51,9 @@ class PaymentRepositoryAdapter implements PaymentRepository {
                 .map(PaymentJpaEntity::toDomain)
                 .collect(Collectors.toList());
     }
+
+    @Override
+    public Optional<Payment> findById(Long id) {
+        return jpaRepository.findById(id).map(PaymentJpaEntity::toDomain);
+    }
 }
