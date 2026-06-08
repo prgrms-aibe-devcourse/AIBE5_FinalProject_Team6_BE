@@ -14,6 +14,7 @@ import com.fandrops.user.domain.AgencyAccountStatus;
 import com.fandrops.user.domain.AgencyApplication;
 import com.fandrops.user.domain.AgencyApplicationAlreadyReviewedException;
 import com.fandrops.user.domain.AgencyApplicationStatus;
+import com.fandrops.user.domain.ArtistProfile;
 import com.fandrops.user.domain.UserRole;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -213,6 +214,44 @@ class AgencyApplicationServiceTest {
         AgencyAccount saved = captor.getValue();
         assertEquals(AgencyAccountStatus.ACTIVE, saved.getStatus());
         assertEquals(UserRole.AGENCY, saved.getRole());
+    }
+
+    @Test
+    @DisplayName("승인 시 ArtistProfile 은 agencyId=저장된계정ID, name=targetArtistName 으로 생성된다")
+    void approveApplication_success_artistProfileHasCorrectFields() {
+        AgencyApplication application = buildPendingApplication(1L);
+        when(agencyApplicationRepository.findById(1L)).thenReturn(Optional.of(application));
+        when(agencyAccountRepository.existsByLoginId("contact@hybe.com")).thenReturn(false);
+        when(passwordEncoder.encode(anyString())).thenReturn("hashedTempPw");
+        when(agencyApplicationRepository.save(any())).thenReturn(application);
+        when(agencyAccountRepository.save(any())).thenReturn(buildSavedAccount(100L));
+        when(artistProfileRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.approveApplication(1L);
+
+        ArgumentCaptor<ArtistProfile> captor = ArgumentCaptor.forClass(ArtistProfile.class);
+        verify(artistProfileRepository).save(captor.capture());
+        ArtistProfile saved = captor.getValue();
+        assertEquals(100L, saved.getAgencyId());
+        assertEquals("BTS", saved.getName());
+        assertEquals(0L, saved.getFanCount());
+        assertNotNull(saved.getJoinedAt());
+    }
+
+    @Test
+    @DisplayName("ArtistProfile 저장 실패 시 예외가 전파된다 — DB 롤백 의도 확인")
+    void approveApplication_artistProfileSaveFails_exceptionPropagates() {
+        AgencyApplication application = buildPendingApplication(1L);
+        when(agencyApplicationRepository.findById(1L)).thenReturn(Optional.of(application));
+        when(agencyAccountRepository.existsByLoginId("contact@hybe.com")).thenReturn(false);
+        when(passwordEncoder.encode(anyString())).thenReturn("hashedTempPw");
+        when(agencyApplicationRepository.save(any())).thenReturn(application);
+        when(agencyAccountRepository.save(any())).thenReturn(buildSavedAccount(100L));
+        doThrow(new RuntimeException("DB 저장 실패"))
+                .when(artistProfileRepository).save(any());
+
+        assertThrows(RuntimeException.class, () -> service.approveApplication(1L));
+        verify(emailNotificationPort, never()).sendApplicationApprovedEmail(any(), any(), any());
     }
 
     @Test

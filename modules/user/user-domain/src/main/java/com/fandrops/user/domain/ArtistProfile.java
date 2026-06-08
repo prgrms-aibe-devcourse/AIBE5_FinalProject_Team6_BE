@@ -59,6 +59,16 @@ public class ArtistProfile {
     public String getYoutubeUrl() { return youtubeUrl; }
     public String getInstagramUrl() { return instagramUrl; }
 
+    public void updateProfile(String profileImageUrl, String coverImageUrl, String bio,
+                              String homepageUrl, String youtubeUrl, String instagramUrl) {
+        this.profileImageUrl = profileImageUrl;
+        this.coverImageUrl = coverImageUrl;
+        this.bio = bio;
+        this.homepageUrl = homepageUrl;
+        this.youtubeUrl = youtubeUrl;
+        this.instagramUrl = instagramUrl;
+    }
+
     public static class Builder {
         private Long id;
         private Long agencyId;
