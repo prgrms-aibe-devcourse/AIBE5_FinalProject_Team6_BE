@@ -3,6 +3,7 @@ package com.fandrops.user.application.service;
 import com.fandrops.user.application.dto.*;
 import com.fandrops.user.application.exception.*;
 import com.fandrops.user.application.port.*;
+import com.fandrops.user.domain.AdminAccount;
 import com.fandrops.user.domain.AuthProvider;
 import com.fandrops.user.domain.Fan;
 import com.fandrops.user.domain.UserRole;
@@ -26,6 +27,7 @@ import static org.mockito.Mockito.*;
 class AuthServiceTest {
 
     @Mock UserRepository userRepository;
+    @Mock AdminAccountRepository adminAccountRepository;
     @Mock PasswordEncoder passwordEncoder;
     @Mock JwtProvider jwtProvider;
     @Mock RefreshTokenStore refreshTokenStore;
@@ -39,7 +41,7 @@ class AuthServiceTest {
     void setUp() {
         when(passwordEncoder.encode("dummy")).thenReturn("$2a$10$mockedDummyHash");
         authService = new AuthService(
-                userRepository, passwordEncoder, jwtProvider,
+                userRepository, adminAccountRepository, passwordEncoder, jwtProvider,
                 refreshTokenStore, passwordResetTokenStore, oAuthClient, emailNotificationPort
         );
     }
@@ -132,6 +134,36 @@ class AuthServiceTest {
 
         AuthTokenResult result = authService.login(command);
         assertEquals("access", result.accessToken());
+    }
+
+    @Test
+    @DisplayName("Admin 로그인 성공 — role=ADMIN 토큰 발급")
+    void login_admin_success_returnsAdminToken() {
+        LoginCommand command = new LoginCommand("admin", "admin");
+        when(userRepository.findByEmail("admin")).thenReturn(Optional.empty());
+        AdminAccount admin = new AdminAccount(100L, "admin", "adminHash");
+        when(adminAccountRepository.findByLoginId("admin")).thenReturn(Optional.of(admin));
+        when(passwordEncoder.matches("admin", "adminHash")).thenReturn(true);
+        when(jwtProvider.generateAccessToken(100L, UserRole.ADMIN)).thenReturn("admin-access");
+        when(jwtProvider.generateRefreshToken(100L)).thenReturn("admin-refresh");
+        when(jwtProvider.getAccessTokenExpiresIn()).thenReturn(1800L);
+
+        AuthTokenResult result = authService.login(command);
+
+        assertEquals("admin-access", result.accessToken());
+        verify(jwtProvider).generateAccessToken(100L, UserRole.ADMIN);
+    }
+
+    @Test
+    @DisplayName("Admin 비밀번호 불일치 시 InvalidCredentialsException")
+    void login_admin_wrongPassword_throwsInvalidCredentials() {
+        LoginCommand command = new LoginCommand("admin", "wrong");
+        when(userRepository.findByEmail("admin")).thenReturn(Optional.empty());
+        AdminAccount admin = new AdminAccount(100L, "admin", "adminHash");
+        when(adminAccountRepository.findByLoginId("admin")).thenReturn(Optional.of(admin));
+        when(passwordEncoder.matches("wrong", "adminHash")).thenReturn(false);
+
+        assertThrows(InvalidCredentialsException.class, () -> authService.login(command));
     }
 
     // ── socialLogin ─────────────────────────────────────────────────────────
