@@ -9,7 +9,6 @@ public class NotificationResult {
     private final Long id;
     private final String type;
     private final String message;
-    @JsonProperty("isRead")
     private final boolean isRead;
     private final Instant sentAt;
     private final Long targetId;
@@ -38,6 +37,7 @@ public class NotificationResult {
     public Long getId() { return id; }
     public String getType() { return type; }
     public String getMessage() { return message; }
+    @JsonProperty("isRead")
     public boolean isRead() { return isRead; }
     public Instant getSentAt() { return sentAt; }
     public Long getTargetId() { return targetId; }
