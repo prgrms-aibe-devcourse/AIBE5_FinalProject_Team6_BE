@@ -9,18 +9,26 @@ import com.fandrops.order.domain.port.InventoryRestorePort;
 import com.fandrops.order.domain.port.OrderRepository;
 import com.fandrops.order.domain.port.ProductPricePort;
 import com.fandrops.order.application.CartService;
+import com.fandrops.order.application.ProductService;
 import com.fandrops.order.domain.port.CartItemRepository;
 import com.fandrops.order.domain.port.CartRepository;
+import com.fandrops.order.domain.port.InventoryCreatePort;
+import com.fandrops.order.domain.port.InventoryReadPort;
+import com.fandrops.order.domain.port.ProductRepository;
 import com.fandrops.order.infrastructure.adapter.CartItemRepositoryAdapter;
 import com.fandrops.order.infrastructure.adapter.CartRepositoryAdapter;
 import com.fandrops.order.infrastructure.adapter.InventoryConfirmAdapter;
+import com.fandrops.order.infrastructure.adapter.InventoryCreateAdapter;
+import com.fandrops.order.infrastructure.adapter.InventoryReadAdapter;
 import com.fandrops.order.infrastructure.adapter.InventoryReserveAdapter;
 import com.fandrops.order.infrastructure.adapter.InventoryRestoreAdapter;
-import com.fandrops.order.infrastructure.adapter.StubProductPriceAdapter;
+import com.fandrops.order.infrastructure.adapter.ProductPriceAdapter;
+import com.fandrops.order.infrastructure.adapter.ProductRepositoryAdapter;
 import com.fandrops.order.infrastructure.persistence.CartItemJpaRepository;
 import com.fandrops.order.infrastructure.persistence.CartJpaRepository;
 import com.fandrops.order.infrastructure.persistence.OrderJpaRepository;
 import com.fandrops.order.infrastructure.persistence.OrderRepositoryAdapter;
+import com.fandrops.order.infrastructure.persistence.ProductJpaRepository;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ThreadPoolExecutor;
 import org.slf4j.Logger;
@@ -69,8 +77,30 @@ public class OrderConfig implements AsyncConfigurer {
     }
 
     @Bean
-    public ProductPricePort productPricePort() {
-        return new StubProductPriceAdapter();
+    public InventoryCreatePort inventoryCreatePort(InventoryCommandService inventoryCommandService) {
+        return new InventoryCreateAdapter(inventoryCommandService);
+    }
+
+    @Bean
+    public InventoryReadPort inventoryReadPort(InventoryCommandService inventoryCommandService) {
+        return new InventoryReadAdapter(inventoryCommandService);
+    }
+
+    @Bean
+    public ProductRepository productRepository(ProductJpaRepository jpaRepository) {
+        return new ProductRepositoryAdapter(jpaRepository);
+    }
+
+    @Bean
+    public ProductService productService(ProductRepository productRepository,
+                                         InventoryCreatePort inventoryCreatePort,
+                                         InventoryReadPort inventoryReadPort) {
+        return new ProductService(productRepository, inventoryCreatePort, inventoryReadPort);
+    }
+
+    @Bean
+    public ProductPricePort productPricePort(ProductJpaRepository jpaRepository) {
+        return new ProductPriceAdapter(jpaRepository);
     }
 
     @Bean
