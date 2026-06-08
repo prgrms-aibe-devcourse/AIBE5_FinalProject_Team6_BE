@@ -1,25 +1,23 @@
 package com.fandrops.order.infrastructure.config;
 
 import com.fandrops.inventory.application.InventoryCommandService;
+import com.fandrops.order.application.CartService;
 import com.fandrops.order.application.OrderService;
+import com.fandrops.order.application.ProductService;
 import com.fandrops.order.domain.port.AccessTicketValidatePort;
+import com.fandrops.order.domain.port.CartItemRepository;
+import com.fandrops.order.domain.port.CartRepository;
 import com.fandrops.order.domain.port.InventoryConfirmPort;
+import com.fandrops.order.domain.port.InventoryCreatePort;
+import com.fandrops.order.domain.port.InventoryReadPort;
 import com.fandrops.order.domain.port.InventoryReservePort;
 import com.fandrops.order.domain.port.InventoryRestorePort;
 import com.fandrops.order.domain.port.OrderRepository;
 import com.fandrops.order.domain.port.ProductPricePort;
-import com.fandrops.order.application.CartService;
-import com.fandrops.order.application.ProductService;
-import com.fandrops.order.domain.port.CartItemRepository;
-import com.fandrops.order.domain.port.CartRepository;
-import com.fandrops.order.domain.port.InventoryCreatePort;
-import com.fandrops.order.domain.port.InventoryReadPort;
 import com.fandrops.order.domain.port.ProductRepository;
 import com.fandrops.order.infrastructure.adapter.CartItemRepositoryAdapter;
 import com.fandrops.order.infrastructure.adapter.CartRepositoryAdapter;
 import com.fandrops.order.infrastructure.adapter.InventoryConfirmAdapter;
-import com.fandrops.order.infrastructure.adapter.InventoryCreateAdapter;
-import com.fandrops.order.infrastructure.adapter.InventoryReadAdapter;
 import com.fandrops.order.infrastructure.adapter.InventoryReserveAdapter;
 import com.fandrops.order.infrastructure.adapter.InventoryRestoreAdapter;
 import com.fandrops.order.infrastructure.adapter.ProductPriceAdapter;
@@ -40,7 +38,9 @@ import org.springframework.scheduling.annotation.AsyncConfigurer;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
-/** order 모듈 빈 조립. 포트 구현체와 OrderService를 스프링 컨텍스트에 등록한다. */
+/** order 모듈 빈 조립. 포트 구현체와 OrderService를 스프링 컨텍스트에 등록한다.
+ *  InventoryCreatePort / InventoryReadPort 는 apps/api-server InventoryPortConfig에서 등록.
+ *  AccessTicketValidatePort 는 apps/api-server AccessTicketConfig에서 등록. */
 @Configuration
 @EnableAsync
 public class OrderConfig implements AsyncConfigurer {
@@ -59,8 +59,6 @@ public class OrderConfig implements AsyncConfigurer {
         return new OrderRepositoryAdapter(jpaRepository);
     }
 
-    // AccessTicketValidatePort 빈은 apps/api-server에서 PaymentAccessTicketValidator(payment-infrastructure)로 등록.
-
     @Bean
     public InventoryReservePort inventoryReservePort(InventoryCommandService inventoryCommandService) {
         return new InventoryReserveAdapter(inventoryCommandService);
@@ -74,16 +72,6 @@ public class OrderConfig implements AsyncConfigurer {
     @Bean
     public InventoryConfirmPort inventoryConfirmPort(InventoryCommandService inventoryCommandService) {
         return new InventoryConfirmAdapter(inventoryCommandService);
-    }
-
-    @Bean
-    public InventoryCreatePort inventoryCreatePort(InventoryCommandService inventoryCommandService) {
-        return new InventoryCreateAdapter(inventoryCommandService);
-    }
-
-    @Bean
-    public InventoryReadPort inventoryReadPort(InventoryCommandService inventoryCommandService) {
-        return new InventoryReadAdapter(inventoryCommandService);
     }
 
     @Bean
@@ -141,5 +129,4 @@ public class OrderConfig implements AsyncConfigurer {
         executor.initialize();
         return executor;
     }
-
 }
