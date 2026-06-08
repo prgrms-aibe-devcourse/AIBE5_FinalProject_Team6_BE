@@ -5,7 +5,8 @@ CREATE TABLE IF NOT EXISTS attendance_event (
     end_date    DATE         NOT NULL,
     reward_desc VARCHAR(255),
     is_active   TINYINT(1)   NOT NULL DEFAULT 1,
-    created_at  DATETIME     NOT NULL
+    created_at  DATETIME     NOT NULL,
+    INDEX idx_attendance_event_artist (artist_id, is_active, start_date, end_date)
 );
 
 CREATE TABLE IF NOT EXISTS attendance_log (
@@ -14,6 +15,5 @@ CREATE TABLE IF NOT EXISTS attendance_log (
     fan_id       BIGINT NOT NULL,
     checked_date DATE   NOT NULL,
     created_at   DATETIME NOT NULL,
-    UNIQUE INDEX uq_attendance_log (event_id, fan_id, checked_date),
-    INDEX idx_attendance_log_event_fan (event_id, fan_id)
+    UNIQUE INDEX uq_attendance_log (event_id, fan_id, checked_date)
 );

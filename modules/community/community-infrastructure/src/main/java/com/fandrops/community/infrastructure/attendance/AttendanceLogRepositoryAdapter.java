@@ -1,7 +1,7 @@
 package com.fandrops.community.infrastructure.attendance;
 
-import com.fandrops.community.application.exception.AlreadyCheckedInException;
 import com.fandrops.community.domain.attendance.AttendanceLog;
+import com.fandrops.community.domain.attendance.exception.DuplicateAttendanceException;
 import com.fandrops.community.domain.attendance.repository.AttendanceLogRepository;
 import com.fandrops.community.infrastructure.attendance.jpa.AttendanceLogJpaEntity;
 import com.fandrops.community.infrastructure.attendance.jpa.AttendanceLogJpaRepository;
@@ -22,11 +22,11 @@ public class AttendanceLogRepositoryAdapter implements AttendanceLogRepository {
     @Override
     public AttendanceLog save(AttendanceLog log) {
         try {
-            AttendanceLogJpaEntity saved = jpaRepository.save(toEntity(log));
+            // saveAndFlush: flush를 즉시 강제하여 UNIQUE 위반을 catch 범위 내에서 감지
+            AttendanceLogJpaEntity saved = jpaRepository.saveAndFlush(toEntity(log));
             return toDomain(saved);
         } catch (DataIntegrityViolationException e) {
-            // UNIQUE(event_id, fan_id, checked_date) 동시 요청 경합 처리
-            throw new AlreadyCheckedInException("오늘 이미 출석 체크를 완료했습니다.");
+            throw new DuplicateAttendanceException("오늘 이미 출석 체크를 완료했습니다.");
         }
     }
 

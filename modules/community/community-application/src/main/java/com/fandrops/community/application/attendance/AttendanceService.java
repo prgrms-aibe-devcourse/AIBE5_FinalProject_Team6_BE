@@ -2,10 +2,12 @@ package com.fandrops.community.application.attendance;
 
 import com.fandrops.community.application.exception.AlreadyCheckedInException;
 import com.fandrops.community.application.exception.AttendanceEventNotFoundException;
+import com.fandrops.community.application.exception.AttendanceEventNotOngoingException;
 import com.fandrops.community.application.exception.NotFanMemberException;
 import com.fandrops.community.application.port.FanMembershipPort;
 import com.fandrops.community.domain.attendance.AttendanceEvent;
 import com.fandrops.community.domain.attendance.AttendanceLog;
+import com.fandrops.community.domain.attendance.exception.DuplicateAttendanceException;
 import com.fandrops.community.domain.attendance.repository.AttendanceEventRepository;
 import com.fandrops.community.domain.attendance.repository.AttendanceLogRepository;
 import org.springframework.stereotype.Service;
@@ -48,7 +50,7 @@ public class AttendanceService {
 
         LocalDate today = LocalDate.now(clock);
         if (!event.isOngoing(today)) {
-            throw new IllegalArgumentException("진행 중인 출석 이벤트가 아닙니다.");
+            throw new AttendanceEventNotOngoingException("진행 중인 출석 이벤트가 아닙니다.");
         }
 
         if (!fanMembershipPort.isFanOf(fanId, event.getArtistId())) {
@@ -59,7 +61,12 @@ public class AttendanceService {
             throw new AlreadyCheckedInException("오늘 이미 출석 체크를 완료했습니다.");
         }
 
-        logRepository.save(AttendanceLog.create(eventId, fanId, clock));
+        try {
+            logRepository.save(AttendanceLog.create(eventId, fanId, clock));
+        } catch (DuplicateAttendanceException e) {
+            // saveAndFlush flush 이후 UNIQUE 제약 위반 (동시 요청 경합)
+            throw new AlreadyCheckedInException(e.getMessage());
+        }
         int streakDays = logRepository.countByEventIdAndFanId(eventId, fanId);
         return new CheckInResult(eventId, today, streakDays);
     }
