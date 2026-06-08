@@ -167,4 +167,38 @@ class WaitQueueServiceTest {
         assertThat(service.getStatus(2L, PRODUCT_ID).getPosition()).isEqualTo(1L);
         assertThat(service.getStatus(3L, PRODUCT_ID).getPosition()).isEqualTo(2L);
     }
+
+    @Test
+    @DisplayName("getActiveProductIds: WAITING 팬이 없으면 빈 집합 반환")
+    void getActiveProductIds_emptyWhenNoWaiting() {
+        assertThat(service.getActiveProductIds()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("getActiveProductIds: WAITING 팬이 있는 productId를 포함")
+    void getActiveProductIds_includesProductWithWaiting() {
+        service.join(new QueueJoinCommand(FAN_ID, PRODUCT_ID));
+
+        assertThat(service.getActiveProductIds()).containsExactly(PRODUCT_ID);
+    }
+
+    @Test
+    @DisplayName("getActiveProductIds: 전원 PROCESSING 전이 후에도 제외 (WAITING 없으면 포함 안 됨)")
+    void getActiveProductIds_excludesProductWithNoWaiting() {
+        service.join(new QueueJoinCommand(FAN_ID, PRODUCT_ID));
+        service.advanceQueue(PRODUCT_ID, 1, 10); // FAN_ID → PROCESSING
+
+        assertThat(service.getActiveProductIds()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("getActiveProductIds: 복수 productId 중 WAITING 보유 productId만 반환")
+    void getActiveProductIds_returnsOnlyProductsWithWaiting() {
+        Long otherProduct = 200L;
+        service.join(new QueueJoinCommand(FAN_ID, PRODUCT_ID));       // PRODUCT_ID: WAITING
+        service.join(new QueueJoinCommand(FAN_ID, otherProduct));     // otherProduct: WAITING
+        service.advanceQueue(otherProduct, 1, 10);                    // otherProduct → PROCESSING
+
+        assertThat(service.getActiveProductIds()).containsExactly(PRODUCT_ID);
+    }
 }

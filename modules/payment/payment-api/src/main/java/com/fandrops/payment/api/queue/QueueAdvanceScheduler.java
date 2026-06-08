@@ -4,6 +4,7 @@ import com.fandrops.payment.application.queue.QueueAdvanceResult;
 import com.fandrops.payment.application.queue.QueueStatusResult;
 import com.fandrops.payment.application.queue.WaitQueueService;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -39,7 +40,9 @@ public class QueueAdvanceScheduler {
 
     @Scheduled(fixedDelayString = "${fandrops.queue.scheduler.interval-ms:3000}")
     public void tick() {
-        Set<Long> productIds = registry.getActiveProductIds();
+        // SSE 단절 시에도 WAITING 팬을 처리하기 위해 SSE 연결 목록과 Redis WAITING 목록의 합집합을 순회
+        Set<Long> productIds = new HashSet<>(registry.getActiveProductIds());
+        productIds.addAll(waitQueueService.getActiveProductIds());
         for (Long productId : productIds) {
             processProduct(productId);
         }

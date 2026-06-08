@@ -5,10 +5,12 @@ import com.fandrops.payment.domain.queue.WaitQueueRepository;
 import com.fandrops.payment.domain.queue.WaitQueueStatus;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -167,6 +169,19 @@ public class LocalWaitQueueRepository implements WaitQueueRepository {
             pos++;
         }
         return -1L;
+    }
+
+    @Override
+    public synchronized Set<Long> findActiveProductIds() {
+        Set<Long> result = new HashSet<>();
+        for (Map.Entry<Long, LinkedHashMap<Long, WaitQueueEntry>> entry : store.entrySet()) {
+            boolean hasWaiting = entry.getValue().values().stream()
+                    .anyMatch(e -> e.getStatus() == WaitQueueStatus.WAITING);
+            if (hasWaiting) {
+                result.add(entry.getKey());
+            }
+        }
+        return result;
     }
 
     private long waitingCount(LinkedHashMap<Long, WaitQueueEntry> queue) {
