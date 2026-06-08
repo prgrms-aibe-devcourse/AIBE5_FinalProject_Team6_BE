@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS notification
     INDEX idx_notification_fan_unread (fan_id, is_read)
 );
 
-CREATE TABLE IF NOT EXISTS outbox_events
+CREATE TABLE IF NOT EXISTS notification_outbox_events
 (
     outbox_event_id BIGINT AUTO_INCREMENT PRIMARY KEY,
     event_type      VARCHAR(50) NOT NULL,
@@ -21,5 +21,5 @@ CREATE TABLE IF NOT EXISTS outbox_events
     retry_count     INT         NOT NULL DEFAULT 0,
     created_at      DATETIME(6) NOT NULL,
     published_at    DATETIME(6),
-    INDEX idx_outbox_status (status)
+    INDEX idx_notification_outbox_status (status)
 );

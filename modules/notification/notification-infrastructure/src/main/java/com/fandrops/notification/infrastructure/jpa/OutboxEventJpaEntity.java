@@ -6,7 +6,7 @@ import jakarta.persistence.*;
 import java.time.Instant;
 
 @Entity
-@Table(name = "outbox_events")
+@Table(name = "notification_outbox_events")
 public class OutboxEventJpaEntity {
 
     @Id
