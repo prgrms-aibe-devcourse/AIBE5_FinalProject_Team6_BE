@@ -23,7 +23,7 @@ Gradle 모듈·담당자: [architecture.md § 도메인 오너십](../architectu
 | F-ID | Endpoint (요약) | 모듈 |
 | --- | --- | --- |
 | F01-01~03 | `/auth/*` | `user` |
-| F01-04 | `POST /artists/{id}/join` | `community` |
+| F01-04 | `POST /artists/{id}/follow`, `DELETE /artists/{id}/follow` | `community` |
 | F02-01 | `POST /b2b/apply` (입점 신청) | `user` |
 | F02-02 | `/admin/artist-applications` (Admin 심사) | `user` |
 | F02-03 | `GET /artists/{id}` (프로필·SNS) | `community` |
