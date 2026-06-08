@@ -136,6 +136,21 @@ class PaymentConfirmServiceTest {
     }
 
     @Test
+    @DisplayName("P-8: Payment 레코드 미존재 → lazy-create 후 confirm 정상 진행")
+    void p8_noExistingPayment_lazyCreateAndConfirm() {
+        when(paymentRepository.findByTossPaymentKey(TOSS_KEY)).thenReturn(Optional.empty());
+        when(paymentRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.empty());
+        when(paymentRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(tossPaymentPort.confirm(TOSS_KEY, AMOUNT, ORDER_ID))
+                .thenReturn(TossConfirmResult.success("카드", Instant.now()));
+
+        PaymentConfirmResult result = service.confirm(new PaymentConfirmCommand(ORDER_ID, TOSS_KEY, AMOUNT));
+
+        assertThat(result.getStatus()).isEqualTo(PaymentStatus.SUCCESS);
+        verify(eventPublisher).publishEvent(any(PaymentApprovedEvent.class));
+    }
+
+    @Test
     @DisplayName("P-7: PG 서버 오류 → TossPaymentUnavailableException 전파")
     void p7_pgUnavailable_propagatesException() {
         when(paymentRepository.findByTossPaymentKey(TOSS_KEY)).thenReturn(Optional.empty());
