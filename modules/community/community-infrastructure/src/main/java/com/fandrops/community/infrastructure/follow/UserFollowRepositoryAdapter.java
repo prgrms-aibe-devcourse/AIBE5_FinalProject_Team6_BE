@@ -18,7 +18,7 @@ public class UserFollowRepositoryAdapter implements UserFollowRepository {
     @Override
     public UserFollow save(UserFollow follow) {
         UserFollowJpaEntity entity = new UserFollowJpaEntity(
-                null, follow.getFanId(), follow.getArtistId(), follow.getFollowedAt());
+                follow.getId(), follow.getFanId(), follow.getArtistId(), follow.getFollowedAt());
         UserFollowJpaEntity saved = jpaRepository.save(entity);
         return UserFollow.reconstruct(saved.getId(), saved.getFanId(), saved.getArtistId(), saved.getFollowedAt());
     }

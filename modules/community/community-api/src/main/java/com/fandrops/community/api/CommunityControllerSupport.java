@@ -1,5 +1,6 @@
 package com.fandrops.community.api;
 
+import com.fandrops.community.application.exception.ForbiddenException;
 import com.fandrops.community.application.exception.UnauthorizedException;
 import org.slf4j.MDC;
 import org.springframework.core.env.Environment;
@@ -75,5 +76,15 @@ public abstract class CommunityControllerSupport {
     protected static boolean hasFanRole(Authentication authentication) {
         return authentication.getAuthorities().stream()
                 .anyMatch(a -> a.getAuthority().equals("FAN"));
+    }
+
+    protected void assertFanRole(Authentication authentication) {
+        if (!isLocalProfile()
+                && authentication != null
+                && authentication.isAuthenticated()
+                && !"anonymousUser".equals(authentication.getPrincipal())
+                && !hasFanRole(authentication)) {
+            throw new ForbiddenException("팬 계정만 이용할 수 있습니다.");
+        }
     }
 }

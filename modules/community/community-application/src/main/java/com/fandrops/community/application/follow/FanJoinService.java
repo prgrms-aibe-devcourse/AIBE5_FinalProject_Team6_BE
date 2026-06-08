@@ -39,15 +39,16 @@ public class FanJoinService {
         if (fanMembershipPort.isFanOf(fanId, artistId)) {
             throw new AlreadyJoinedException("이미 팬 가입한 아티스트입니다.");
         }
+        UserFollow saved;
         try {
-            UserFollow saved = userFollowRepository.save(UserFollow.create(fanId, artistId, clock));
-            artistProfilePort.incrementFanCount(artistId);
-            return new FanJoinResult(saved.getArtistId(), saved.getFanId(),
-                    saved.getFollowedAt().atOffset(ZoneOffset.UTC));
+            saved = userFollowRepository.save(UserFollow.create(fanId, artistId, clock));
         } catch (DataIntegrityViolationException e) {
             // isFanOf 체크와 INSERT 사이 동시 요청에 의한 UK(uq_user_follow) 충돌
             throw new AlreadyJoinedException("이미 팬 가입한 아티스트입니다.");
         }
+        artistProfilePort.incrementFanCount(artistId);
+        return new FanJoinResult(saved.getArtistId(), saved.getFanId(),
+                saved.getFollowedAt().atOffset(ZoneOffset.UTC));
     }
 
     @Transactional

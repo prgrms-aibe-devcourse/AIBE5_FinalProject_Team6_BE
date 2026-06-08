@@ -2,7 +2,6 @@ package com.fandrops.community.api.artist;
 
 import com.fandrops.common.ApiResponse;
 import com.fandrops.community.api.CommunityControllerSupport;
-import com.fandrops.community.application.exception.ForbiddenException;
 import com.fandrops.community.application.follow.FanJoinResult;
 import com.fandrops.community.application.follow.FanJoinService;
 import org.springframework.core.env.Environment;
@@ -44,15 +43,5 @@ public class ArtistFollowController extends CommunityControllerSupport {
         Long fanId = resolveFanId(authentication, fanIdHeader);
         fanJoinService.leave(artistId, fanId);
         return ResponseEntity.noContent().build();
-    }
-
-    private void assertFanRole(Authentication authentication) {
-        if (!isLocalProfile()
-                && authentication != null
-                && authentication.isAuthenticated()
-                && !"anonymousUser".equals(authentication.getPrincipal())
-                && !hasFanRole(authentication)) {
-            throw new ForbiddenException("팬 계정만 이용할 수 있습니다.");
-        }
     }
 }

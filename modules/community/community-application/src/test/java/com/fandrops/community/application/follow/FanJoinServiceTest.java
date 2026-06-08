@@ -114,6 +114,19 @@ class FanJoinServiceTest {
         }
 
         @Test
+        @DisplayName("save 성공 후 incrementFanCount가 DataIntegrityViolationException을 던지면 그대로 전파 — AlreadyJoinedException 오변환 없음")
+        void incrementFanCount_dive_propagatesAsIs() {
+            when(artistProfilePort.exists(eq(10L))).thenReturn(true);
+            when(fanMembershipPort.isFanOf(eq(77L), eq(10L))).thenReturn(false);
+            when(userFollowRepository.save(any())).thenReturn(
+                    UserFollow.reconstruct(1L, 77L, 10L, LocalDateTime.of(2026, 6, 1, 0, 0, 0)));
+            doThrow(new DataIntegrityViolationException("artist_profile constraint"))
+                    .when(artistProfilePort).incrementFanCount(eq(10L));
+
+            assertThrows(DataIntegrityViolationException.class, () -> fanJoinService.join(10L, 77L));
+        }
+
+        @Test
         @DisplayName("가입 성공 시 fanCount 증가는 정확히 1회 호출됨")
         void incrementFanCount_calledOnce() {
             when(artistProfilePort.exists(eq(10L))).thenReturn(true);
