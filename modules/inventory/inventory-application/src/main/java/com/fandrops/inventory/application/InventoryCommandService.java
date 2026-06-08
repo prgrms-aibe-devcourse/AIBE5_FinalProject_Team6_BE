@@ -76,6 +76,17 @@ public class InventoryCommandService {
     }
 
     @Transactional
+    public void createInventory(Long productId, int totalQty) {
+        Inventory inventory = Inventory.create(productId, totalQty);
+        inventoryRepository.save(inventory);
+    }
+
+    @Transactional(readOnly = true)
+    public Inventory getInventoryByProductId(Long productId) {
+        return findByProductId(productId);
+    }
+
+    @Transactional
     public void increase(Long restockId, Long productId, int qty) {
         Inventory inventory = findByProductId(productId);
         InventoryHistory history = inventory.increase(qty, restockId);
