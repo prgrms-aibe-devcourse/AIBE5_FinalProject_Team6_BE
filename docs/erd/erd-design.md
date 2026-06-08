@@ -96,7 +96,7 @@ Saga 보상 트랜잭션의 **트리거 기준**이 되는 상태다. 보상이 
 
 ### 설계 결정 1 — `failed_at` 분리
 
-`paid_at`과 `failed_at`을 **분리된 컬럼**으로 둔다. `ORDER`와 1:1.
+`paid_at`과 `failed_at`을 **분리된 컬럼**으로 둔다. `ORDER`와 1:1. `order_id`에 **DB UNIQUE 제약**을 적용하여 하나의 주문에 결제 레코드가 하나만 존재하도록 강제한다 (V8 마이그레이션).
 
 ### 설계 결정 2 — `payment_key` Unique Index
 
@@ -114,7 +114,7 @@ ERD:    PAYMENT.payment_key (Unique Index)
 | 컬럼 | 타입 | 제약 | 설명 |
 | --- | --- | --- | --- |
 | `id` | BIGINT | PK, AUTO_INCREMENT | 내부 식별자 |
-| `order_id` | BIGINT | NOT NULL, FK → ORDER.id | 주문 참조 (1:1) |
+| `order_id` | BIGINT | NOT NULL, UNIQUE, FK → ORDER.id | 주문 참조 (1:1) — 결제 레코드 중복 방지 (V8) |
 | `payment_key` | VARCHAR | UNIQUE | `tossPaymentKey` 저장 — 멱등성 보장 (P-1) |
 | `amount` | BIGINT | NOT NULL | 결제 금액 — confirm 시 PG 금액 대조용 |
 | `method` | VARCHAR | | 결제수단 (토스 PG 반환 문자열, e.g. 카드) |

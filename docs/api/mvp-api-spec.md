@@ -23,7 +23,7 @@ Gradle 모듈·담당자: [architecture.md § 도메인 오너십](../architectu
 | F-ID | Endpoint (요약) | 모듈 |
 | --- | --- | --- |
 | F01-01~03 | `/auth/*` | `user` |
-| F01-04 | `POST /artists/{id}/join` | `community` |
+| F01-04 | `POST /artists/{id}/follow`, `DELETE /artists/{id}/follow` | `community` |
 | F02-01 | `POST /b2b/apply` (입점 신청) | `user` |
 | F02-02 | `/admin/artist-applications` (Admin 심사) | `user` |
 | F02-03 | `GET /artists/{id}` (프로필·SNS) | `community` |
@@ -86,10 +86,14 @@ Gradle 모듈·담당자: [architecture.md § 도메인 오너십](../architectu
 | POST | `/auth/password-reset/request` | 비밀번호 재설정 메일 발송 | `email` | `204 No Content` |
 | POST | `/auth/password-reset/confirm` | 재설정 토큰 검증 후 비밀번호 변경 | `token`, `newPassword` | `204 No Content` |
 | POST | `/auth/logout` | 로그아웃 (토큰 무효화) | — | `204 No Content` |
-| POST | `/auth/token/refresh` | Access Token 재발급 | `refreshToken` | `{ accessToken, expiresIn }` |
+| POST | `/auth/token/refresh` | Access Token 재발급 (RTR — 매 호출마다 새 refreshToken 발급) | `refreshToken` | `{ accessToken, refreshToken, expiresIn }` |
 | GET | `/fans/me` | 내 정보 조회 | — | `{ fanId, email, nickname, allowNotification, createdAt }` |
 | PUT | `/fans/me` | 내 정보 수정 | `nickname` (optional), `allowNotification` (optional) | `{ fanId, nickname, allowNotification }` |
 | POST | `/b2b/apply` | 운영 입점 신청 (F02-01) | `companyName`, `businessRegistrationNumber`, `representativeName`, `contactEmail`, `contactPhone`, `introduction`, `targetArtistName` | `201` `{ applicationId, status: "PENDING" }` |
+
+> **[프론트 연동 주의 — RTR]** `/auth/token/refresh` 응답에 `refreshToken`이 포함됩니다.
+> 클라이언트는 매 refresh 응답마다 저장된 refreshToken을 새 값으로 교체해야 합니다.
+> 로그아웃 시에는 현재 보유 중인 최신 refreshToken을 전송합니다.
 
 ---
 

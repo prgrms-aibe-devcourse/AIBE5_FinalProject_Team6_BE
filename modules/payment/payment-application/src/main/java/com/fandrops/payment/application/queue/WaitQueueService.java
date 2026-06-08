@@ -8,6 +8,7 @@ import com.fandrops.payment.domain.queue.WaitQueueStatus;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 public class WaitQueueService {
 
@@ -35,6 +36,11 @@ public class WaitQueueService {
         long estimatedWaitSec = position > 0 ? position * SECONDS_PER_POSITION : 0L;
 
         return new QueueStatusResult(position, entry.getStatus().name(), estimatedWaitSec);
+    }
+
+    /** SSE 연결과 무관하게 WAITING 항목이 존재하는 productId 집합 반환. */
+    public Set<Long> getActiveProductIds() {
+        return waitQueueRepository.findActiveProductIds();
     }
 
     /** 대기열 이탈 (WAITING 상태에서만 유효). */
