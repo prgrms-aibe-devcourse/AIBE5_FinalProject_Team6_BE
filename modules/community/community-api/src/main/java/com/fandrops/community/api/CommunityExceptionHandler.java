@@ -1,7 +1,9 @@
 package com.fandrops.community.api;
 
 import com.fandrops.common.ApiResponse;
+import com.fandrops.community.application.exception.AlreadyJoinedException;
 import com.fandrops.community.application.exception.AlreadyLikedException;
+import com.fandrops.community.application.exception.ArtistNotFoundException;
 import com.fandrops.community.application.exception.DuplicateVoteException;
 import com.fandrops.community.application.exception.GoodsVoteClosedException;
 import com.fandrops.community.application.exception.GoodsVoteNotFoundException;
@@ -27,6 +29,12 @@ import java.util.UUID;
 
 @RestControllerAdvice
 public class CommunityExceptionHandler {
+
+    @ExceptionHandler(ArtistNotFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> artistNotFound(ArtistNotFoundException e) {
+        return ResponseEntity.status(404)
+                .body(ApiResponse.fail("ARTIST_NOT_FOUND", e.getMessage(), false, traceId()));
+    }
 
     @ExceptionHandler(FeedNotFoundException.class)
     public ResponseEntity<ApiResponse<Void>> feedNotFound(FeedNotFoundException e) {
@@ -62,6 +70,12 @@ public class CommunityExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> duplicateVote(DuplicateVoteException e) {
         return ResponseEntity.status(409)
                 .body(ApiResponse.fail("DUPLICATE_VOTE", e.getMessage(), false, traceId()));
+    }
+
+    @ExceptionHandler(AlreadyJoinedException.class)
+    public ResponseEntity<ApiResponse<Void>> alreadyJoined(AlreadyJoinedException e) {
+        return ResponseEntity.status(409)
+                .body(ApiResponse.fail("ALREADY_JOINED", e.getMessage(), false, traceId()));
     }
 
     @ExceptionHandler(AlreadyLikedException.class)
