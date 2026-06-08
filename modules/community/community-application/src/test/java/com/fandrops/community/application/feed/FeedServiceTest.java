@@ -2,6 +2,8 @@ package com.fandrops.community.application.feed;
 
 import com.fandrops.community.application.exception.FeedNotFoundException;
 import com.fandrops.community.application.exception.FeedOwnershipException;
+import com.fandrops.community.application.port.OutboxEventPort;
+import com.fandrops.community.application.port.OutboxEventType;
 import com.fandrops.community.domain.feed.ArtistFeed;
 import com.fandrops.community.domain.feed.FeedImage;
 import com.fandrops.community.domain.feed.repository.ArtistFeedRepository;
@@ -26,9 +28,7 @@ import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyList;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -39,6 +39,7 @@ class FeedServiceTest {
     @Mock FeedLikeRepository feedLikeRepository;
     @Mock CommentRepository commentRepository;
     @Mock CommentLikeRepository commentLikeRepository;
+    @Mock OutboxEventPort outboxEventPort;
 
     FeedService feedService;
     Clock clock;
@@ -48,7 +49,7 @@ class FeedServiceTest {
         clock = Clock.fixed(Instant.parse("2026-06-01T00:00:00Z"), ZoneOffset.UTC);
         feedService = new FeedService(
                 feedRepository, imageRepository, feedLikeRepository,
-                commentRepository, commentLikeRepository, clock);
+                commentRepository, commentLikeRepository, outboxEventPort, clock);
     }
 
     @Nested
@@ -73,6 +74,8 @@ class FeedServiceTest {
             assertEquals(1, result.imageUrls().size());
             verify(feedRepository).save(any());
             verify(imageRepository).saveAll(anyList());
+            verify(outboxEventPort).publish(argThat(e ->
+                    OutboxEventType.NEW_FEED == e.type() && e.aggregateId().equals(1L)));
         }
 
         @Test

@@ -4,6 +4,7 @@ import com.fandrops.community.application.exception.CommentNotFoundException;
 import com.fandrops.community.application.exception.FeedNotFoundException;
 import com.fandrops.community.application.exception.NotFanMemberException;
 import com.fandrops.community.application.port.FanMembershipPort;
+import com.fandrops.community.application.port.OutboxEventPort;
 import com.fandrops.community.domain.feed.Comment;
 import com.fandrops.community.domain.feed.exception.FeedDomainException;
 import com.fandrops.community.domain.feed.repository.ArtistFeedRepository;
@@ -34,6 +35,7 @@ class CommentServiceTest {
     @Mock CommentRepository commentRepository;
     @Mock ArtistFeedRepository feedRepository;
     @Mock FanMembershipPort fanMembershipPort;
+    @Mock OutboxEventPort outboxEventPort;
 
     CommentService commentService;
     Clock clock;
@@ -41,7 +43,8 @@ class CommentServiceTest {
     @BeforeEach
     void setUp() {
         clock = Clock.fixed(Instant.parse("2026-06-01T00:00:00Z"), ZoneOffset.UTC);
-        commentService = new CommentService(commentRepository, feedRepository, fanMembershipPort, clock);
+        commentService = new CommentService(commentRepository, feedRepository, fanMembershipPort,
+                outboxEventPort, clock);
     }
 
     @Nested

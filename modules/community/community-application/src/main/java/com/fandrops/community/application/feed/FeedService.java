@@ -2,6 +2,9 @@ package com.fandrops.community.application.feed;
 
 import com.fandrops.community.application.exception.FeedNotFoundException;
 import com.fandrops.community.application.exception.FeedOwnershipException;
+import com.fandrops.community.application.port.OutboxEvent;
+import com.fandrops.community.application.port.OutboxEventPort;
+import com.fandrops.community.application.port.OutboxEventType;
 import com.fandrops.community.domain.feed.ArtistFeed;
 import com.fandrops.community.domain.feed.FeedImage;
 import com.fandrops.community.domain.feed.repository.ArtistFeedRepository;
@@ -29,6 +32,7 @@ public class FeedService {
     private final FeedLikeRepository feedLikeRepository;
     private final CommentRepository commentRepository;
     private final CommentLikeRepository commentLikeRepository;
+    private final OutboxEventPort outboxEventPort;
     private final Clock clock;
 
     public FeedService(ArtistFeedRepository feedRepository,
@@ -36,12 +40,14 @@ public class FeedService {
                        FeedLikeRepository feedLikeRepository,
                        CommentRepository commentRepository,
                        CommentLikeRepository commentLikeRepository,
+                       OutboxEventPort outboxEventPort,
                        Clock clock) {
         this.feedRepository = feedRepository;
         this.imageRepository = imageRepository;
         this.feedLikeRepository = feedLikeRepository;
         this.commentRepository = commentRepository;
         this.commentLikeRepository = commentLikeRepository;
+        this.outboxEventPort = outboxEventPort;
         this.clock = clock;
     }
 
@@ -55,6 +61,13 @@ public class FeedService {
                 .map(url -> FeedImage.create(saved.getId(), url, clock))
                 .toList();
         List<FeedImage> savedImages = imageRepository.saveAll(images);
+
+        outboxEventPort.publish(new OutboxEvent(
+                OutboxEventType.NEW_FEED, saved.getId(),
+                Map.of("feedId", saved.getId(),
+                       "artistId", saved.getArtistId(),
+                       "artistMemberId", saved.getArtistMemberId())
+        ));
 
         return toResult(saved, savedImages, false);
     }

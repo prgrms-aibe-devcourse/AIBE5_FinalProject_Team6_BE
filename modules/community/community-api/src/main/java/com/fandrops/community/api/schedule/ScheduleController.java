@@ -45,6 +45,21 @@ public class ScheduleController extends CommunityControllerSupport {
         return ResponseEntity.status(201).body(ApiResponse.ok(Map.of("eventId", result.id()), traceId()));
     }
 
+    // PATCH /api/v1/lives/{scheduleId}/start — 라이브 시작·ARTIST_SCHEDULE 알림 발행 (F03-04, ARTIST·AGENCY)
+    @PatchMapping("/api/v1/lives/{scheduleId}/start")
+    public ResponseEntity<ApiResponse<ScheduleResult>> startLive(
+            @PathVariable Long scheduleId,
+            Authentication authentication,
+            @RequestHeader(value = "X-Artist-Member-Id", required = false) Long artistMemberIdHeader) {
+
+        if (!isLocalProfile() && (authentication == null || !hasArtistOrAgencyRole(authentication))) {
+            throw new ForbiddenException("ARTIST 또는 AGENCY 권한이 필요합니다.");
+        }
+        Long artistMemberId = resolveArtistMemberId(authentication, artistMemberIdHeader);
+        ScheduleResult result = scheduleService.startLive(scheduleId, artistMemberId);
+        return ResponseEntity.ok(ApiResponse.ok(result, traceId()));
+    }
+
     // GET /api/v1/artists/{artistId}/calendar?from=...&to=... — 통합 스케줄 조회 (F03-05)
     // 의도적 익명 허용 — F03-05 캘린더는 공개 조회 (mvp-api-spec.md)
     @GetMapping("/api/v1/artists/{artistId}/calendar")
