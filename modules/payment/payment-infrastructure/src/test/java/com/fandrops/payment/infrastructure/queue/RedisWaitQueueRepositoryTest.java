@@ -20,18 +20,14 @@ import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactor
 import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.fail;
 
-@Testcontainers
 class RedisWaitQueueRepositoryTest {
 
-    @Container
-    static final GenericContainer<?> REDIS =
-            new GenericContainer<>("redis:7-alpine").withExposedPorts(6379);
+    // CI: REDIS_HOST env var 주입 시 서비스 컨테이너 사용, 없으면 Testcontainers 기동
+    private static GenericContainer<?> REDIS;
 
     private static LettuceConnectionFactory connectionFactory;
     private static StringRedisTemplate redisTemplate;
@@ -44,8 +40,18 @@ class RedisWaitQueueRepositoryTest {
 
     @BeforeAll
     static void initFactory() {
-        RedisStandaloneConfiguration config = new RedisStandaloneConfiguration(
-                REDIS.getHost(), REDIS.getMappedPort(6379));
+        String host = System.getenv("REDIS_HOST");
+        int port;
+        if (host != null) {
+            String portEnv = System.getenv("REDIS_PORT");
+            port = portEnv != null ? Integer.parseInt(portEnv) : 6379;
+        } else {
+            REDIS = new GenericContainer<>("redis:7-alpine").withExposedPorts(6379);
+            REDIS.start();
+            host = REDIS.getHost();
+            port = REDIS.getMappedPort(6379);
+        }
+        RedisStandaloneConfiguration config = new RedisStandaloneConfiguration(host, port);
         connectionFactory = new LettuceConnectionFactory(config);
         connectionFactory.afterPropertiesSet();
         redisTemplate = new StringRedisTemplate(connectionFactory);
@@ -54,6 +60,9 @@ class RedisWaitQueueRepositoryTest {
     @AfterAll
     static void destroyFactory() {
         connectionFactory.destroy();
+        if (REDIS != null) {
+            REDIS.stop();
+        }
     }
 
     @BeforeEach

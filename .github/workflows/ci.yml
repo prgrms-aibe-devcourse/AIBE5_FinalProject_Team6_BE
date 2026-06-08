@@ -13,6 +13,17 @@ jobs:
       checks: write
       contents: read
 
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@v4
 
@@ -24,6 +35,9 @@ jobs:
       - uses: gradle/actions/setup-gradle@v3
 
       - name: Build and test
+        env:
+          REDIS_HOST: localhost
+          REDIS_PORT: "6379"
         run: ./gradlew clean build --no-daemon
 
       - name: Publish test results
