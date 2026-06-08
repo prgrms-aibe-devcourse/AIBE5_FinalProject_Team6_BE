@@ -73,6 +73,18 @@
 3. 최적 방안을 선택하고 **선택 이유를 한 줄**로 명시한다.
 4. 그 후 Plan → Execute로 진행한다.
 
+### Execute 직후 자가 검증 (신규 코드 필수)
+
+코드를 작성한 직후, 빌드·테스트 전에 아래 4개 질문에 답한다.  
+하나라도 "미확인"이면 먼저 확인하고 나서 다음 단계로 진행한다.
+
+| # | 질문 | 확인 방법 |
+|---|---|---|
+| ① DB 제약 | 새 DB 접근 패턴에 필요한 **UNIQUE·FK 제약**이 DDL에 있는가? | 관련 `V*.sql` 파일을 열어 인덱스 타입 확인 — `orElseGet(save)` 패턴은 반드시 확인 |
+| ② 예외 핸들러 | 새 `throw`가 어느 `@ExceptionHandler`에서 잡히는가? | `@RestControllerAdvice` grep — 핸들러 없으면 500 반환됨 |
+| ③ 직렬화 설정 | 새 응답 필드(`Instant`, `LocalDate` 등)의 **Jackson 직렬화 형식**이 보장되는가? | `application.yml`에서 `spring.jackson` 설정 확인 — 기본값은 ISO-8601 아님 |
+| ④ 테스트 파일 | 신규 클래스(Service, Port 구현체 등)에 대응하는 **테스트 파일**이 있는가? | `src/test/`에 `<ClassName>Test.java` 생성 여부 — 새 클래스 = 새 테스트 |
+
 ---
 
 ## 필수 문서 (항상)

@@ -207,6 +207,18 @@ class AuthServiceTest {
         inOrder.verify(refreshTokenStore).getAndDelete("old-token");
         inOrder.verify(refreshTokenStore).save("new-refresh", 5L);
         assertEquals("new-access", result.accessToken());
+        assertEquals("new-refresh", result.refreshToken());
+    }
+
+    @Test
+    @DisplayName("Refresh Token Rotation — 토큰 생성 실패 시 InvalidTokenException (강제 재로그인)")
+    void refreshAccessToken_issueTokensFails_throwsInvalidTokenException() {
+        when(refreshTokenStore.getAndDelete("valid-token")).thenReturn(Optional.of(5L));
+        when(jwtProvider.generateAccessToken(5L, UserRole.FAN)).thenThrow(new RuntimeException("token generation failure"));
+
+        assertThrows(InvalidTokenException.class, () -> authService.refreshAccessToken("valid-token"));
+        verify(refreshTokenStore).getAndDelete("valid-token");
+        verify(refreshTokenStore, never()).save(anyString(), anyLong());
     }
 
     // ── confirmPasswordReset ────────────────────────────────────────────────
