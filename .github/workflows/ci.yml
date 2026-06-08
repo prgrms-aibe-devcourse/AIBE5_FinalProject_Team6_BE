@@ -13,8 +13,21 @@ jobs:
       checks: write
       contents: read
 
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-java@v4
         with:
@@ -22,8 +35,21 @@ jobs:
           distribution: 'temurin'
 
       - uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.14.5'
+
+      - name: Download Gradle distribution
+        run: |
+          for i in 1 2 3; do
+            ./gradlew --version && break
+            echo "Download attempt $i failed, retrying in 30s..."
+            sleep 30
+          done
 
       - name: Build and test
+        env:
+          REDIS_HOST: localhost
+          REDIS_PORT: "6379"
         run: ./gradlew clean build --no-daemon
 
       - name: Publish test results

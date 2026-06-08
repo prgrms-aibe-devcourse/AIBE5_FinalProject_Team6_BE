@@ -5,11 +5,16 @@ import com.fandrops.payment.domain.queue.WaitQueueRepository;
 import com.fandrops.payment.domain.queue.WaitQueueStatus;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.data.redis.core.Cursor;
+import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -19,6 +24,8 @@ import org.springframework.stereotype.Repository;
 @Repository
 @Profile("!local")
 public class RedisWaitQueueRepository implements WaitQueueRepository {
+
+    private static final Logger log = LoggerFactory.getLogger(RedisWaitQueueRepository.class);
 
     // WAITING 팬 정렬 셋 (score = joinedAt ms)
     private static final String WAITING_KEY    = "queue:%d:waiting";
@@ -201,6 +208,27 @@ public class RedisWaitQueueRepository implements WaitQueueRepository {
     public long countProcessing(Long productId) {
         Long count = redisTemplate.opsForZSet().zCard(processingKey(productId));
         return count != null ? count : 0L;
+    }
+
+    @Override
+    public Set<Long> findActiveProductIds() {
+        Set<Long> productIds = new HashSet<>();
+        ScanOptions options = ScanOptions.scanOptions().match("queue:*:waiting").count(100).build();
+        try (Cursor<String> cursor = redisTemplate.scan(options)) {
+            while (cursor.hasNext()) {
+                String key = cursor.next();
+                Long size = redisTemplate.opsForZSet().zCard(key);
+                if (size != null && size > 0) {
+                    String[] parts = key.split(":");
+                    if (parts.length >= 2) {
+                        productIds.add(Long.parseLong(parts[1]));
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("[WaitQueue] findActiveProductIds scan 실패", e);
+        }
+        return productIds;
     }
 
     private String waitingKey(Long productId) {

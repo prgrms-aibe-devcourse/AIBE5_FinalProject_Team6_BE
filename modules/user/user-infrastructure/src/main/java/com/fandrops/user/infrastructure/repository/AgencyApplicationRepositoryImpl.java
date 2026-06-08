@@ -10,6 +10,7 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 import java.util.Optional;
 
+
 @Repository
 public class AgencyApplicationRepositoryImpl implements AgencyApplicationRepository {
 
@@ -38,6 +39,13 @@ public class AgencyApplicationRepositoryImpl implements AgencyApplicationReposit
     @Override
     public List<AgencyApplication> findAll() {
         return jpaRepository.findAll().stream()
+                .map(AgencyApplicationJpaEntity::toDomain)
+                .toList();
+    }
+
+    @Override
+    public List<AgencyApplication> findAllByStatus(AgencyApplicationStatus status) {
+        return jpaRepository.findAllByStatus(status).stream()
                 .map(AgencyApplicationJpaEntity::toDomain)
                 .toList();
     }

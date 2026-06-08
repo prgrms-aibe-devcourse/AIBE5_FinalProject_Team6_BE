@@ -17,6 +17,22 @@ team: FANDROPS_Backend
 
 `payment` — 토스 PG, confirm, **웹훅(Webhook Receiver)**, 멱등, 결제 상태/재시도, **대기열·Access Ticket**, 결제 후 **주문·재고 E2E**, Saga 보상 orchestration, RateLimit 정책.
 
+---
+
+## MVP 구현 완료 상태 (2026-06-08 확인)
+
+| 항목 | 상태 | 핵심 파일 |
+|------|------|-----------|
+| F06-01 PG 연동 | ✅ | `PaymentController`, `TossPaymentGatewayAdapter` |
+| F06-02 멱등성·상태 머신 | ✅ | `PaymentConfirmService`, V2 + V8 DDL (`uq_payment_key`, `uq_payment_order_id`) |
+| F06-03 웹훅·Saga·타임아웃 | ✅ | `PaymentWebhookService`, `PaymentTimeoutJob` (PT15M) |
+| 대기열·Access Ticket | ✅ | `WaitQueueController`, `QueueAdvanceScheduler` (3초), `SseEmitterRegistry` (2000상한) |
+| RateLimit | ✅ | `RateLimitFilter` (queue/order/payment 3그룹, fanId 기준, fail-open) |
+| F07-02 단건 조회 | ✅ | `FanPaymentController` — `GET /api/v1/fans/me/payments/{id}` |
+| F07-02 **목록 조회** | **비스코프** | `orders.fan_id` 있으므로 order 모듈(형성빈)이 처리. payment에 별도 목록 API 없음 |
+| `PaymentControllerAdvice` 응답 형식 | ✅ | `com.fandrops.common.ApiResponse<Void>` 통일 (`ErrorEnvelope` 제거) |
+| `@Profile("!local")` 분리 | ✅ | `RedisWaitQueueRepository`, `RedisAccessTicketRepository`, `RateLimitConfig` |
+
 ## 수정 가능 경로
 
 ```
@@ -87,6 +103,9 @@ apps/api-server/**   # 대기열/RateLimit filter/config만 (지영재와 협의
 - [ ] `erd-design.md`에 새 테이블·컬럼을 추가할 때 **컬럼 목록 테이블**(컬럼명·타입·제약·설명)을 반드시 포함한다 — 누락 시 이슈 spec과 ERD 불일치로 JPA 엔티티 설계 오류 발생
 - [ ] **Redis 의존 Bean**(`WaitQueueRepository`, `AccessTicketRepository`, `RateLimitService` 등)은 **반드시 `@Profile("!local")`** 적용 — `local` 프로필은 Redis 없이 기동 가능해야 함 ([failure-policy §3.1](../../operations/failure-policy.md))
 - [ ] **Flyway DDL 규칙**: 기존 V1~V3는 prod 체크섬 기록 완료 → **절대 수정 금지**. **V4부터** 신규 파일은 `CREATE TABLE IF NOT EXISTS` + 인덱스를 테이블 내부 선언 필수 (MySQL `CREATE INDEX IF NOT EXISTS` 미지원)
+- [ ] **CI Redis 서비스 패턴**: Redis 의존 Testcontainers 테스트는 `REDIS_HOST` 환경변수 유무로 분기한다 — CI(`ci.yml services.redis` + 환경변수 주입) vs 로컬(Testcontainers 직접 기동). `@Testcontainers`/`@Container` 없이 `@BeforeAll`에서 수동 관리. ci.yml 변경 시 지영재 리뷰 필수
+- [ ] **에러 응답 형식**: `PaymentControllerAdvice`는 `com.fandrops.common.ApiResponse<Void>`를 사용한다 (`ErrorEnvelope` 아님). `payment-api/build.gradle.kts`에 `implementation(project(":modules:common"))` 의존성이 있으므로 신규 핸들러도 같은 형식 유지
+- [ ] **F07-02 결제 목록 조회는 payment 비스코프**: `orders` 테이블에 `fan_id`가 있으므로 목록은 order 모듈(형성빈)이 `fan_id → order_id → payment` 경로로 처리. payment는 단건(`GET /api/v1/fans/me/payments/{id}`)만 제공
 
 ---
 

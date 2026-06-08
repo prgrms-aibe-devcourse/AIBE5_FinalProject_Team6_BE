@@ -1,10 +1,12 @@
 package com.fandrops.payment.infrastructure.config;
 
 import com.fandrops.payment.application.payment.PaymentConfirmService;
+import com.fandrops.payment.application.payment.PaymentQueryService;
 import com.fandrops.payment.application.payment.PaymentTimeoutItemProcessor;
 import com.fandrops.payment.application.payment.PaymentTimeoutService;
 import com.fandrops.payment.application.payment.PaymentWebhookService;
 import com.fandrops.payment.application.payment.TossPaymentPort;
+import com.fandrops.payment.domain.payment.OrderFanQueryPort;
 import com.fandrops.payment.domain.payment.PaymentRepository;
 import jakarta.annotation.PostConstruct;
 import java.util.Arrays;
@@ -84,5 +86,11 @@ public class TossPaymentConfig {
     public PaymentWebhookService paymentWebhookService(PaymentRepository paymentRepository,
                                                         ApplicationEventPublisher eventPublisher) {
         return new PaymentWebhookService(paymentRepository, eventPublisher);
+    }
+
+    @Bean
+    public PaymentQueryService paymentQueryService(PaymentRepository paymentRepository,
+                                                   OrderFanQueryPort orderFanQueryPort) {
+        return new PaymentQueryService(paymentRepository, orderFanQueryPort);
     }
 }

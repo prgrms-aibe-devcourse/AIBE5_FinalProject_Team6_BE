@@ -3,6 +3,7 @@ package com.fandrops.payment.domain.queue;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 public interface WaitQueueRepository {
 
@@ -32,4 +33,7 @@ public interface WaitQueueRepository {
 
     /** 현재 PROCESSING 상태 entry 수. */
     long countProcessing(Long productId);
+
+    /** WAITING 항목이 하나 이상 존재하는 productId 집합 반환. SSE 단절 시에도 스케줄러가 순회할 수 있게 한다. */
+    Set<Long> findActiveProductIds();
 }
