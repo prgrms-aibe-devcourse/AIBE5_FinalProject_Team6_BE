@@ -71,7 +71,7 @@ public class OutboxEventScheduler {
 
     private Long resolveFanId(NotificationType type, OutboxEvent event) {
         return switch (type) {
-            case PAYMENT_SUCCESS -> fanIdResolverPort.findFanIdByOrderId(event.getResourceId()).orElse(null);
+            case PAYMENT_SUCCESS, PAYMENT_FAILED -> fanIdResolverPort.findFanIdByOrderId(event.getResourceId()).orElse(null);
             case ARTIST_APPLICATION_APPROVED -> extractLong(event.getPayload(), "fanId");
             default -> null;
         };
