@@ -106,14 +106,13 @@ public class WaitQueueController {
         return ResponseEntity.noContent().build();
     }
 
-    // TODO: user 모듈 Auth 계약 확정 후 JWT 클레임에서 fanId 추출로 교체 (표지민 협의)
     private Long resolveFanId(Authentication authentication, Long fanIdHeader) {
         if (fanIdHeader != null && isLocalProfile()) {
             return fanIdHeader;
         }
         if (authentication != null && authentication.isAuthenticated()
-                && !"anonymousUser".equals(authentication.getPrincipal())) {
-            return Long.parseLong(authentication.getName());
+                && authentication.getPrincipal() instanceof Long fanId) {
+            return fanId;
         }
         throw new IllegalArgumentException("인증 정보가 없습니다. Bearer 토큰을 제공하세요.");
     }

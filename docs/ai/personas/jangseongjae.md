@@ -87,6 +87,7 @@ apps/api-server/**   # 대기열/RateLimit filter/config만 (지영재와 협의
 - [ ] `erd-design.md`에 새 테이블·컬럼을 추가할 때 **컬럼 목록 테이블**(컬럼명·타입·제약·설명)을 반드시 포함한다 — 누락 시 이슈 spec과 ERD 불일치로 JPA 엔티티 설계 오류 발생
 - [ ] **Redis 의존 Bean**(`WaitQueueRepository`, `AccessTicketRepository`, `RateLimitService` 등)은 **반드시 `@Profile("!local")`** 적용 — `local` 프로필은 Redis 없이 기동 가능해야 함 ([failure-policy §3.1](../../operations/failure-policy.md))
 - [ ] **Flyway DDL 규칙**: 기존 V1~V3는 prod 체크섬 기록 완료 → **절대 수정 금지**. **V4부터** 신규 파일은 `CREATE TABLE IF NOT EXISTS` + 인덱스를 테이블 내부 선언 필수 (MySQL `CREATE INDEX IF NOT EXISTS` 미지원)
+- [ ] **CI Redis 서비스 패턴**: Redis 의존 Testcontainers 테스트는 `REDIS_HOST` 환경변수 유무로 분기한다 — CI(`ci.yml services.redis` + 환경변수 주입) vs 로컬(Testcontainers 직접 기동). `@Testcontainers`/`@Container` 없이 `@BeforeAll`에서 수동 관리. ci.yml 변경 시 지영재 리뷰 필수
 
 ---
 
