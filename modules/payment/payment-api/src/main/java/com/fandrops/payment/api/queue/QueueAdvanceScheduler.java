@@ -44,7 +44,11 @@ public class QueueAdvanceScheduler {
         Set<Long> productIds = new HashSet<>(registry.getActiveProductIds());
         productIds.addAll(waitQueueService.getActiveProductIds());
         for (Long productId : productIds) {
-            processProduct(productId);
+            try {
+                processProduct(productId);
+            } catch (Exception e) {
+                log.warn("[QueueScheduler] productId={} 처리 중 오류 — 다음 productId 계속 진행", productId, e);
+            }
         }
     }
 
