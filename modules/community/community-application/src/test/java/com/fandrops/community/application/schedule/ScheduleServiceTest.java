@@ -1,5 +1,8 @@
 package com.fandrops.community.application.schedule;
 
+import com.fandrops.community.application.exception.ScheduleNotFoundException;
+import com.fandrops.community.application.port.OutboxEventPort;
+import com.fandrops.community.application.port.OutboxEventType;
 import com.fandrops.community.domain.schedule.ArtistSchedule;
 import com.fandrops.community.domain.schedule.ArtistScheduleType;
 import com.fandrops.community.domain.schedule.repository.ArtistScheduleRepository;
@@ -15,16 +18,17 @@ import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class ScheduleServiceTest {
 
     @Mock ArtistScheduleRepository scheduleRepository;
+    @Mock OutboxEventPort outboxEventPort;
 
     ScheduleService scheduleService;
 
@@ -32,7 +36,7 @@ class ScheduleServiceTest {
 
     @BeforeEach
     void setUp() {
-        scheduleService = new ScheduleService(scheduleRepository);
+        scheduleService = new ScheduleService(scheduleRepository, outboxEventPort);
     }
 
     @Nested
@@ -114,6 +118,58 @@ class ScheduleServiceTest {
                     () -> scheduleService.createEvent(
                             new EventCreateCommand(10L, null, "행사", "EVENT", NOW.plusDays(1).atOffset(ZoneOffset.UTC))));
             verify(scheduleRepository, never()).save(any());
+        }
+    }
+
+    @Nested
+    @DisplayName("startLive")
+    class StartLiveTest {
+
+        @Test
+        @DisplayName("LIVE 타입 일정 → outbox LIVE_START 이벤트 발행 후 ScheduleResult 반환")
+        void liveSchedule_publishesAndReturns() {
+            ArtistSchedule live = schedule(1L, 10L, ArtistScheduleType.LIVE, "라이브", NOW);
+            when(scheduleRepository.findById(eq(1L))).thenReturn(Optional.of(live));
+            when(outboxEventPort.existsEvent(eq(1L), eq(OutboxEventType.LIVE_START))).thenReturn(false);
+
+            ScheduleResult result = scheduleService.startLive(1L, 5L);
+
+            assertEquals(1L, result.id());
+            assertEquals(ArtistScheduleType.LIVE, result.type());
+            verify(outboxEventPort).publish(argThat(e ->
+                    OutboxEventType.LIVE_START == e.type() && e.aggregateId().equals(1L)));
+        }
+
+        @Test
+        @DisplayName("이미 발행된 LIVE_START 이벤트 존재 → publish 생략, ScheduleResult 반환 (멱등)")
+        void alreadyPublished_skipsPublish() {
+            ArtistSchedule live = schedule(1L, 10L, ArtistScheduleType.LIVE, "라이브", NOW);
+            when(scheduleRepository.findById(eq(1L))).thenReturn(Optional.of(live));
+            when(outboxEventPort.existsEvent(eq(1L), eq(OutboxEventType.LIVE_START))).thenReturn(true);
+
+            ScheduleResult result = scheduleService.startLive(1L, 5L);
+
+            assertEquals(1L, result.id());
+            verify(outboxEventPort, never()).publish(any());
+        }
+
+        @Test
+        @DisplayName("존재하지 않는 scheduleId → ScheduleNotFoundException")
+        void notFound_throws() {
+            when(scheduleRepository.findById(eq(999L))).thenReturn(Optional.empty());
+
+            assertThrows(ScheduleNotFoundException.class, () -> scheduleService.startLive(999L, 5L));
+            verifyNoInteractions(outboxEventPort);
+        }
+
+        @Test
+        @DisplayName("LIVE 타입이 아닌 일정 → IllegalArgumentException, outbox 발행 안 함")
+        void nonLiveType_throws() {
+            ArtistSchedule drop = schedule(2L, 10L, ArtistScheduleType.DROP, "드롭", NOW);
+            when(scheduleRepository.findById(eq(2L))).thenReturn(Optional.of(drop));
+
+            assertThrows(IllegalArgumentException.class, () -> scheduleService.startLive(2L, 5L));
+            verifyNoInteractions(outboxEventPort);
         }
     }
 

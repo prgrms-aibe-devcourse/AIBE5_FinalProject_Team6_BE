@@ -8,6 +8,7 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public class ArtistScheduleRepositoryAdapter implements ArtistScheduleRepository {
@@ -16,6 +17,11 @@ public class ArtistScheduleRepositoryAdapter implements ArtistScheduleRepository
 
     public ArtistScheduleRepositoryAdapter(ArtistScheduleJpaRepository jpaRepository) {
         this.jpaRepository = jpaRepository;
+    }
+
+    @Override
+    public Optional<ArtistSchedule> findById(Long id) {
+        return jpaRepository.findById(id).map(this::toDomain);
     }
 
     @Override
