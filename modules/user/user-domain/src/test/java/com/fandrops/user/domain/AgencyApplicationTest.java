@@ -58,22 +58,22 @@ class AgencyApplicationTest {
     }
 
     @Test
-    @DisplayName("APPROVED 상태에서 다시 승인하면 예외가 발생한다 (AA-1)")
+    @DisplayName("APPROVED 상태에서 다시 승인하면 AgencyApplicationAlreadyReviewedException (AA-1)")
     void approve_after_approved_throws() {
         AgencyApplication app = newPendingApplication();
         app.approve(LocalDateTime.now());
 
-        assertThrows(IllegalStateException.class,
+        assertThrows(AgencyApplicationAlreadyReviewedException.class,
                 () -> app.approve(LocalDateTime.now()));
     }
 
     @Test
-    @DisplayName("REJECTED 상태에서 승인하면 예외가 발생한다 (AA-1)")
+    @DisplayName("REJECTED 상태에서 승인하면 AgencyApplicationAlreadyReviewedException (AA-1)")
     void approve_after_rejected_throws() {
         AgencyApplication app = newPendingApplication();
         app.reject("서류 미비", LocalDateTime.now());
 
-        assertThrows(IllegalStateException.class,
+        assertThrows(AgencyApplicationAlreadyReviewedException.class,
                 () -> app.approve(LocalDateTime.now()));
     }
 
@@ -88,12 +88,12 @@ class AgencyApplicationTest {
     }
 
     @Test
-    @DisplayName("REJECTED 상태에서 다시 반려하면 예외가 발생한다 (AA-1)")
+    @DisplayName("REJECTED 상태에서 다시 반려하면 AgencyApplicationAlreadyReviewedException (AA-1)")
     void reject_after_rejected_throws() {
         AgencyApplication app = newPendingApplication();
         app.reject("서류 미비", LocalDateTime.now(ZoneOffset.UTC));
 
-        assertThrows(IllegalStateException.class,
+        assertThrows(AgencyApplicationAlreadyReviewedException.class,
                 () -> app.reject("추가 사유", LocalDateTime.now(ZoneOffset.UTC)));
     }
 

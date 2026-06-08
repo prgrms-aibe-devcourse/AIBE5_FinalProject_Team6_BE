@@ -38,4 +38,35 @@ public class EmailNotificationPortImpl implements EmailNotificationPort {
         );
         mailSender.send(message);
     }
+
+    @Override
+    public void sendApplicationApprovedEmail(String toEmail, String loginId, String tempPassword) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(fromAddress);
+        message.setTo(toEmail);
+        message.setSubject("[FANDROPS] 입점 신청이 승인되었습니다");
+        message.setText(
+                "안녕하세요. FANDROPS 입점 신청이 승인되었습니다.\n\n"
+                + "아래 정보로 로그인하신 후 반드시 비밀번호를 변경해 주세요.\n\n"
+                + "로그인 ID: " + loginId + "\n"
+                + "임시 비밀번호: " + tempPassword + "\n\n"
+                + "로그인 페이지: " + frontendUrl + "/agency/login"
+        );
+        mailSender.send(message);
+    }
+
+    @Override
+    public void sendApplicationRejectedEmail(String toEmail, String rejectReason) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(fromAddress);
+        message.setTo(toEmail);
+        message.setSubject("[FANDROPS] 입점 신청 심사 결과 안내");
+        message.setText(
+                "안녕하세요. FANDROPS 입점 신청 심사 결과를 안내드립니다.\n\n"
+                + "아쉽게도 이번 신청은 승인되지 않았습니다.\n\n"
+                + "사유: " + rejectReason + "\n\n"
+                + "추가 문의는 고객센터로 연락해 주세요."
+        );
+        mailSender.send(message);
+    }
 }
