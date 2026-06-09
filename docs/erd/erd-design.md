@@ -179,7 +179,7 @@ ERD:    PAYMENT.payment_key (Unique Index)
 - **1인 크리에이터:** 안내 문구에 **「개인사업자 등록 번호 입력 가능」** 명시. 미등록 신청자는 `PENDING` 유지 후 Admin이 서류 보완 요청·반려·예외 승인.
 - **구현:** ERD 컬럼 추가 없이 nullable 허용 + API/프론트 validation·Admin 심사 UI만 조정 가능. 유형별 분기가 필요해지면 이후 `operator_type` enum 추가를 검토한다.
 - `**AGENCY_ACCOUNT`**: 운영 주체(B2B) 로그인 계정. `login_id`, `password_hash`, `company_name`(회사명·활동명·매니지먼트 명칭), `contact_email`, `status`, `invitation_token`, `token_expired_at`, `role` 기본 `ROLE_AGENCY`. 입점 심사 완료 후 생성되는 로그인/권한 계정.
-- `**ADMIN_ACCOUNT`** (신규, V15): 플랫폼 운영자 전용 로그인 계정. `login_id`, `password_hash`, `created_at`. Fan·Agency와 완전히 분리된 별도 주체. `POST /auth/login` 공용 엔드포인트 사용 → JWT `role=ADMIN` 발급. 앱 기동 시 mastercode(`admin/admin`) 자동 생성.
+- `**ADMIN_ACCOUNT`** (신규, V16): 플랫폼 운영자 전용 로그인 계정. `login_id`, `password_hash`, `created_at`. Fan·Agency와 완전히 분리된 별도 주체. `POST /auth/login` 공용 엔드포인트 사용 → JWT `role=ADMIN` 발급.
 - `**ARTIST_PROFILE`**: 아티스트 공간을 구성하는 앵커 엔티티 (`artist_id`).
   - `agency_id` FK → `AGENCY_ACCOUNT`.
   - `name`, `joined_at`.

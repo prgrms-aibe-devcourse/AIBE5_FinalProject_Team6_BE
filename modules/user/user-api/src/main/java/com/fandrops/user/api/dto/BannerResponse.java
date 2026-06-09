@@ -1,6 +1,7 @@
 package com.fandrops.user.api.dto;
 
 import com.fandrops.user.application.dto.BannerResult;
+import com.fasterxml.jackson.annotation.JsonFormat;
 
 import java.time.LocalDateTime;
 
@@ -11,8 +12,8 @@ public record BannerResponse(
         String landingUrl,
         int exposureOrder,
         boolean isActive,
-        LocalDateTime startAt,
-        LocalDateTime endAt
+        @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss", timezone = "Asia/Seoul") LocalDateTime startAt,
+        @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss", timezone = "Asia/Seoul") LocalDateTime endAt
 ) {
     public static BannerResponse from(BannerResult result) {
         return new BannerResponse(
