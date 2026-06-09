@@ -127,10 +127,10 @@ public class AuthService {
 
     // Access Token 재발급 (Refresh Token Rotation) — GETDEL로 조회+삭제 원자 처리
     public AuthTokenResult refreshAccessToken(String refreshToken) {
-        Long fanId = refreshTokenStore.getAndDelete(refreshToken)
+        RefreshTokenEntry entry = refreshTokenStore.getAndDelete(refreshToken)
                 .orElseThrow(() -> new InvalidTokenException("유효하지 않은 리프레시 토큰입니다."));
         try {
-            return issueTokens(fanId, UserRole.FAN);
+            return issueTokens(entry.userId(), entry.role());
         } catch (RuntimeException e) {
             // issueTokens 실패 시 구 토큰 소실 → 재로그인 필요.
             // Redis 장애 확률 < 토큰 재사용 방지를 우선한 의도적 선택.
@@ -164,7 +164,7 @@ public class AuthService {
     private AuthTokenResult issueTokens(Long userId, UserRole role) {
         String accessToken = jwtProvider.generateAccessToken(userId, role);
         String refreshToken = jwtProvider.generateRefreshToken(userId);
-        refreshTokenStore.save(refreshToken, userId);
+        refreshTokenStore.save(refreshToken, userId, role);
         return new AuthTokenResult(accessToken, refreshToken, jwtProvider.getAccessTokenExpiresIn());
     }
 
