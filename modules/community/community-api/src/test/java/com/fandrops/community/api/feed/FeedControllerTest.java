@@ -3,8 +3,8 @@ package com.fandrops.community.api.feed;
 import com.fandrops.community.application.feed.FeedListResult;
 import com.fandrops.community.application.feed.FeedService;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
+import static org.mockito.Mockito.lenient;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,9 +28,6 @@ import static org.mockito.Mockito.when;
 
 /**
  * FeedController.getFeeds — JWT viewer 분기 테스트.
- *
- * @Disabled 이유: JWT 필터 미구현 (표지민 담당). 완료 후 authority 접두사("ROLE_" 여부)
- *           확인하여 hasArtistOrAgencyRole / hasFanRole 문자열 맞춰 활성화.
  */
 @ExtendWith(MockitoExtension.class)
 class FeedControllerTest {
@@ -43,8 +40,8 @@ class FeedControllerTest {
     @BeforeEach
     void setUp() {
         feedController = new FeedController(feedService, environment);
-        // 비로컬 프로필 → 헤더 무시, JWT 분기 진입
-        when(environment.getActiveProfiles()).thenReturn(new String[]{});
+        // 비로컬 프로필 → 헤더 무시, JWT 분기 진입. lenient: header=null 시 단락 평가로 isLocalProfile() 미호출
+        lenient().when(environment.getActiveProfiles()).thenReturn(new String[]{});
     }
 
     @Nested
@@ -52,7 +49,6 @@ class FeedControllerTest {
     class JwtViewerBranchTest {
 
         @Test
-        @Disabled("JWT 필터 미구현 (표지민 담당) — 완료 후 authority 접두사(ROLE_ 여부) 확인 후 활성화")
         @DisplayName("ARTIST role JWT → viewerArtistMemberId로 FeedService 호출")
         void artistJwt_usesViewerArtistMemberId() {
             Authentication auth = mockAuth("5", "ARTIST");
@@ -65,7 +61,6 @@ class FeedControllerTest {
         }
 
         @Test
-        @Disabled("JWT 필터 미구현 (표지민 담당) — 완료 후 authority 접두사(ROLE_ 여부) 확인 후 활성화")
         @DisplayName("AGENCY role JWT → viewerArtistMemberId로 FeedService 호출")
         void agencyJwt_usesViewerArtistMemberId() {
             Authentication auth = mockAuth("7", "AGENCY");
@@ -78,7 +73,6 @@ class FeedControllerTest {
         }
 
         @Test
-        @Disabled("JWT 필터 미구현 (표지민 담당) — 완료 후 authority 접두사(ROLE_ 여부) 확인 후 활성화")
         @DisplayName("FAN role JWT → viewerFanId로 FeedService 호출")
         void fanJwt_usesViewerFanId() {
             Authentication auth = mockAuth("99", "FAN");
@@ -91,7 +85,6 @@ class FeedControllerTest {
         }
 
         @Test
-        @Disabled("JWT 필터 미구현 (표지민 담당) — 완료 후 authority 접두사(ROLE_ 여부) 확인 후 활성화")
         @DisplayName("알 수 없는 role JWT → IllegalStateException")
         void unknownRoleJwt_throwsIllegalState() {
             Authentication auth = mockAuth("1", "UNKNOWN_ROLE");
