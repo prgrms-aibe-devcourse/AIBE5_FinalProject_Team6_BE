@@ -4,17 +4,20 @@ import com.fandrops.inventory.application.InventoryCommandService;
 import com.fandrops.order.application.CartService;
 import com.fandrops.order.application.OrderService;
 import com.fandrops.order.application.ProductService;
+import com.fandrops.order.application.RestockAlertService;
 import com.fandrops.order.domain.port.AccessTicketValidatePort;
 import com.fandrops.order.domain.port.CartItemRepository;
 import com.fandrops.order.domain.port.CartRepository;
 import com.fandrops.order.domain.port.InventoryConfirmPort;
 import com.fandrops.order.domain.port.InventoryCreatePort;
+import com.fandrops.order.domain.port.InventoryIncreasePort;
 import com.fandrops.order.domain.port.InventoryReadPort;
 import com.fandrops.order.domain.port.InventoryReservePort;
 import com.fandrops.order.domain.port.InventoryRestorePort;
 import com.fandrops.order.domain.port.OrderRepository;
 import com.fandrops.order.domain.port.ProductPricePort;
 import com.fandrops.order.domain.port.ProductRepository;
+import com.fandrops.order.domain.port.RestockAlertRepository;
 import com.fandrops.order.infrastructure.adapter.CartItemRepositoryAdapter;
 import com.fandrops.order.infrastructure.adapter.CartRepositoryAdapter;
 import com.fandrops.order.infrastructure.adapter.InventoryConfirmAdapter;
@@ -22,11 +25,14 @@ import com.fandrops.order.infrastructure.adapter.InventoryReserveAdapter;
 import com.fandrops.order.infrastructure.adapter.InventoryRestoreAdapter;
 import com.fandrops.order.infrastructure.adapter.ProductPriceAdapter;
 import com.fandrops.order.infrastructure.adapter.ProductRepositoryAdapter;
+import com.fandrops.order.infrastructure.adapter.RestockAlertRepositoryAdapter;
 import com.fandrops.order.infrastructure.persistence.CartItemJpaRepository;
 import com.fandrops.order.infrastructure.persistence.CartJpaRepository;
 import com.fandrops.order.infrastructure.persistence.OrderJpaRepository;
 import com.fandrops.order.infrastructure.persistence.OrderRepositoryAdapter;
 import com.fandrops.order.infrastructure.persistence.ProductJpaRepository;
+import com.fandrops.order.infrastructure.persistence.RestockAlertJpaRepository;
+import org.springframework.context.ApplicationEventPublisher;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ThreadPoolExecutor;
 import org.slf4j.Logger;
@@ -116,6 +122,21 @@ public class OrderConfig implements AsyncConfigurer {
                                    CartItemRepository cartItemRepository,
                                    ProductPricePort productPricePort) {
         return new CartService(cartRepository, cartItemRepository, productPricePort);
+    }
+
+    @Bean
+    public RestockAlertRepository restockAlertRepository(RestockAlertJpaRepository jpaRepository) {
+        return new RestockAlertRepositoryAdapter(jpaRepository);
+    }
+
+    @Bean
+    public RestockAlertService restockAlertService(RestockAlertRepository restockAlertRepository,
+                                                   ProductRepository productRepository,
+                                                   InventoryIncreasePort inventoryIncreasePort,
+                                                   InventoryReadPort inventoryReadPort,
+                                                   ApplicationEventPublisher eventPublisher) {
+        return new RestockAlertService(restockAlertRepository, productRepository,
+                inventoryIncreasePort, inventoryReadPort, eventPublisher);
     }
 
     @Bean(name = "sagaExecutor")
