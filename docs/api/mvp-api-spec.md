@@ -305,6 +305,7 @@ Toss PG → 서버 비동기 결제 상태 수신. 상세: [payment-flow-reason.
 | POST | `/internal/inventory/reserve` | 재고 예약 (`reserved_qty` ↑, `available_qty` ↓, 이력 기록) | `productId`, `quantity` | `OrderService` |
 | POST | `/internal/inventory/confirm` | 결제 확정 (`reserved_qty` ↓, `total_qty` ↓, 이력 기록) | `productId`, `quantity` | `PaymentService` (웹훅 후) |
 | POST | `/internal/inventory/restore` | 결제 실패 복구 (`reserved_qty` ↓ rollback, `available_qty` ↑, 이력 기록) | `productId`, `quantity` | Saga 보상 |
+| POST | `/internal/inventory/increase` | 재입고 (`total_qty` ↑, `available_qty` ↑, 이력 기록) | `productId`, `quantity` | `RestockAlertService` (F04-05) |
 
 > 멀티모듈 모놀리스에서는 위 표는 **계약(포트) 문서화**용이다. 실제 구현은 HTTP가 아닌 `InventoryReservePort` 등 **interface 직접 호출**.
 
