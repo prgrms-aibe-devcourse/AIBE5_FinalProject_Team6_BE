@@ -71,6 +71,7 @@ public class RestockAlertService {
             productRepository.save(product);
         }
 
+        // TODO: 구독자 증가 시 saveAll() + 배치 이벤트 발행으로 전환 필요 (현재 N번 UPDATE)
         List<RestockAlert> pending = restockAlertRepository.findAllPendingByProductId(productId);
         for (RestockAlert alert : pending) {
             alert.markSent();
