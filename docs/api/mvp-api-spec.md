@@ -81,7 +81,7 @@ Gradle 모듈·담당자: [architecture.md § 도메인 오너십](../architectu
 | Method | Endpoint | 설명 | Request Body | Response |
 | --- | --- | --- | --- | --- |
 | POST | `/auth/signup` | 이메일 회원가입 + 약관 동의 | `email`, `password`, `nickname`, `termsAgreed: true` | `201` `{ fanId, accessToken, refreshToken }` |
-| POST | `/auth/login` | 이메일 로그인 | `email`, `password` | `{ accessToken, refreshToken }` |
+| POST | `/auth/login` | 이메일 로그인 (Fan · Admin 공용) | `email`, `password` | `{ accessToken, refreshToken }` — Fan이면 `role=FAN`, Admin(`admin_account`)이면 `role=ADMIN` JWT 발급 |
 | POST | `/auth/social/{provider}` | 소셜 로그인·가입 (`kakao` · `google`) | `code` | `{ accessToken, refreshToken }` — `FAN` 행 upsert |
 | POST | `/auth/password-reset/request` | 비밀번호 재설정 메일 발송 | `email` | `204 No Content` |
 | POST | `/auth/password-reset/confirm` | 재설정 토큰 검증 후 비밀번호 변경 | `token`, `newPassword` | `204 No Content` |

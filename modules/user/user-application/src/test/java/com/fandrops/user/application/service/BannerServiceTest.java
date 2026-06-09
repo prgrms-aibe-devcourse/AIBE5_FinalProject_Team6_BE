@@ -116,4 +116,20 @@ class BannerServiceTest {
         when(bannerRepository.findById(999L)).thenReturn(Optional.empty());
         assertThrows(BannerNotFoundException.class, () -> bannerService.deleteBanner(999L));
     }
+
+    @Test
+    @DisplayName("Admin 전체 배너 목록 조회 — 비활성 포함 전체 반환")
+    void getAllMainBanners_returnsAll() {
+        Banner active = sampleBanner(1L);
+        Banner inactive = Banner.builder()
+                .id(2L).bannerType(BannerType.MAIN)
+                .title("비활성 배너").imageUrl("https://cdn.fandrops.com/x.jpg")
+                .landingUrl("https://fandrops.com").exposureOrder(2).isActive(false).build();
+        when(bannerRepository.findAllMainBanners()).thenReturn(List.of(active, inactive));
+
+        List<BannerResult> results = bannerService.getAllMainBanners();
+
+        assertEquals(2, results.size());
+        assertTrue(results.stream().anyMatch(r -> !r.isActive()));
+    }
 }

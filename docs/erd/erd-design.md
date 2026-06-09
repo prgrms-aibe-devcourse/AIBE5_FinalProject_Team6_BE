@@ -10,7 +10,7 @@
 
 | 도메인          | 테이블                                                                                                                 | 비고                                                                                      |
 | ------------ | ------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| **사용자·아티스트** | `FAN`, `AGENCY_APPLICATION`, `AGENCY_ACCOUNT`, `ARTIST_PROFILE`, `ARTIST_MEMBER`, `USER_FOLLOW`                     | 팬(B2C) · 입점신청(B2B) · **운영 주체(B2B)** · 아티스트 프로필·멤버 · 팔로우(팬 가입)                           |
+| **사용자·아티스트** | `FAN`, `AGENCY_APPLICATION`, `AGENCY_ACCOUNT`, `ARTIST_PROFILE`, `ARTIST_MEMBER`, `USER_FOLLOW`, `ADMIN_ACCOUNT`     | 팬(B2C) · 입점신청(B2B) · **운영 주체(B2B)** · 아티스트 프로필·멤버 · 팔로우(팬 가입) · 플랫폼 운영자(Admin)           |
 | **커뮤니티**     | `ARTIST_FEED`, `FEED_IMAGE`, `ARTIST_NOTICE`, `COMMENT`, `FEED_LIKE`, `COMMENT_LIKE`                                | 피드 · 피드 다중 이미지 · 공지 · 댓글(대댓글) · 피드/댓글 좋아요                                               |
 | **커머스**      | `PRODUCT`, `INVENTORY`, `INVENTORY_HISTORY`, `CART`, `CART_ITEM`, `ORDER`, `ORDER_ITEM`, `PAYMENT`, `RESTOCK_ALERT` | 상품·재고·재고 이력·**장바구니(RDB)** ·주문·결제 — [ADR-003](../adr/ADR-003-cart-storage-rdb-phase1.md) |
 | **일정**       | `ARTIST_SCHEDULE`                                                                                                   | 아티스트 스케줄(일정) 및 공지 연동 캘린더                                                                |
@@ -179,6 +179,7 @@ ERD:    PAYMENT.payment_key (Unique Index)
 - **1인 크리에이터:** 안내 문구에 **「개인사업자 등록 번호 입력 가능」** 명시. 미등록 신청자는 `PENDING` 유지 후 Admin이 서류 보완 요청·반려·예외 승인.
 - **구현:** ERD 컬럼 추가 없이 nullable 허용 + API/프론트 validation·Admin 심사 UI만 조정 가능. 유형별 분기가 필요해지면 이후 `operator_type` enum 추가를 검토한다.
 - `**AGENCY_ACCOUNT`**: 운영 주체(B2B) 로그인 계정. `login_id`, `password_hash`, `company_name`(회사명·활동명·매니지먼트 명칭), `contact_email`, `status`, `invitation_token`, `token_expired_at`, `role` 기본 `ROLE_AGENCY`. 입점 심사 완료 후 생성되는 로그인/권한 계정.
+- `**ADMIN_ACCOUNT`** (신규, V15): 플랫폼 운영자 전용 로그인 계정. `login_id`, `password_hash`, `created_at`. Fan·Agency와 완전히 분리된 별도 주체. `POST /auth/login` 공용 엔드포인트 사용 → JWT `role=ADMIN` 발급. 앱 기동 시 mastercode(`admin/admin`) 자동 생성.
 - `**ARTIST_PROFILE`**: 아티스트 공간을 구성하는 앵커 엔티티 (`artist_id`).
   - `agency_id` FK → `AGENCY_ACCOUNT`.
   - `name`, `joined_at`.

@@ -166,6 +166,26 @@ class AuthServiceTest {
         assertThrows(InvalidCredentialsException.class, () -> authService.login(command));
     }
 
+    @Test
+    @DisplayName("Fan과 Admin이 동일 loginId를 가질 때 Fan이 우선")
+    void login_fanTakesPriorityOverAdmin_whenSameLoginId() {
+        LoginCommand command = new LoginCommand("duplicate@email.com", "pass");
+        Fan fan = Fan.builder().id(1L).email("duplicate@email.com").nickname("nick")
+                .authProvider(AuthProvider.LOCAL).passwordHash("fanHash").build();
+        when(userRepository.findByEmail("duplicate@email.com")).thenReturn(Optional.of(fan));
+        AdminAccount admin = new AdminAccount(100L, "duplicate@email.com", "adminHash");
+        when(adminAccountRepository.findByLoginId("duplicate@email.com")).thenReturn(Optional.of(admin));
+        when(passwordEncoder.matches("pass", "fanHash")).thenReturn(true);
+        when(jwtProvider.generateAccessToken(1L, UserRole.FAN)).thenReturn("fan-token");
+        when(jwtProvider.generateRefreshToken(1L)).thenReturn("fan-refresh");
+        when(jwtProvider.getAccessTokenExpiresIn()).thenReturn(1800L);
+
+        AuthTokenResult result = authService.login(command);
+
+        verify(jwtProvider).generateAccessToken(1L, UserRole.FAN);
+        assertEquals("fan-token", result.accessToken());
+    }
+
     // ── socialLogin ─────────────────────────────────────────────────────────
 
     @Test
