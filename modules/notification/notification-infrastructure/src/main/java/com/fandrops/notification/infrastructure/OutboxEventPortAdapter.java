@@ -3,7 +3,7 @@ package com.fandrops.notification.infrastructure;
 import com.fandrops.notification.domain.OutboxEvent;
 import com.fandrops.notification.domain.OutboxStatus;
 import com.fandrops.notification.domain.port.OutboxEventPort;
-import com.fandrops.notification.infrastructure.jpa.OutboxEventJpaEntity;
+import com.fandrops.notification.infrastructure.jpa.NotificationOutboxEventJpaEntity;
 import com.fandrops.notification.infrastructure.jpa.NotificationOutboxEventJpaRepository;
 import java.util.List;
 import org.springframework.data.domain.PageRequest;
@@ -20,7 +20,7 @@ public class OutboxEventPortAdapter implements OutboxEventPort {
 
     @Override
     public OutboxEvent save(OutboxEvent outboxEvent) {
-        return outboxEventJpaRepository.save(OutboxEventJpaEntity.from(outboxEvent)).toDomain();
+        return outboxEventJpaRepository.save(NotificationOutboxEventJpaEntity.from(outboxEvent)).toDomain();
     }
 
     @Override
@@ -28,12 +28,12 @@ public class OutboxEventPortAdapter implements OutboxEventPort {
         return outboxEventJpaRepository
                 .findByStatusOrderByCreatedAtAsc(OutboxStatus.PENDING, PageRequest.of(0, limit))
                 .stream()
-                .map(OutboxEventJpaEntity::toDomain)
+                .map(NotificationOutboxEventJpaEntity::toDomain)
                 .toList();
     }
 
     @Override
     public void update(OutboxEvent outboxEvent) {
-        outboxEventJpaRepository.save(OutboxEventJpaEntity.from(outboxEvent));
+        outboxEventJpaRepository.save(NotificationOutboxEventJpaEntity.from(outboxEvent));
     }
 }
