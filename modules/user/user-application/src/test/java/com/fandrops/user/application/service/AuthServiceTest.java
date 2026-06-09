@@ -3,6 +3,7 @@ package com.fandrops.user.application.service;
 import com.fandrops.user.application.dto.*;
 import com.fandrops.user.application.exception.*;
 import com.fandrops.user.application.port.*;
+import com.fandrops.user.domain.AdminAccount;
 import com.fandrops.user.domain.AuthProvider;
 import com.fandrops.user.domain.Fan;
 import com.fandrops.user.domain.UserRole;
@@ -26,6 +27,7 @@ import static org.mockito.Mockito.*;
 class AuthServiceTest {
 
     @Mock UserRepository userRepository;
+    @Mock AdminAccountRepository adminAccountRepository;
     @Mock PasswordEncoder passwordEncoder;
     @Mock JwtProvider jwtProvider;
     @Mock RefreshTokenStore refreshTokenStore;
@@ -39,7 +41,7 @@ class AuthServiceTest {
     void setUp() {
         when(passwordEncoder.encode("dummy")).thenReturn("$2a$10$mockedDummyHash");
         authService = new AuthService(
-                userRepository, passwordEncoder, jwtProvider,
+                userRepository, adminAccountRepository, passwordEncoder, jwtProvider,
                 refreshTokenStore, passwordResetTokenStore, oAuthClient, emailNotificationPort
         );
     }
@@ -134,7 +136,64 @@ class AuthServiceTest {
         assertEquals("access", result.accessToken());
     }
 
+    // ── adminLogin ──────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("Admin 로그인 성공 — role=ADMIN 토큰 발급")
+    void adminLogin_success_returnsAdminToken() {
+        LoginCommand command = new LoginCommand("admin@fandrops.com", "admin");
+        AdminAccount admin = new AdminAccount(100L, "admin@fandrops.com", "adminHash");
+        when(adminAccountRepository.findByLoginId("admin@fandrops.com")).thenReturn(Optional.of(admin));
+        when(passwordEncoder.matches("admin", "adminHash")).thenReturn(true);
+        when(jwtProvider.generateAccessToken(100L, UserRole.ADMIN)).thenReturn("admin-access");
+        when(jwtProvider.generateRefreshToken(100L)).thenReturn("admin-refresh");
+        when(jwtProvider.getAccessTokenExpiresIn()).thenReturn(1800L);
+
+        AuthTokenResult result = authService.adminLogin(command);
+
+        assertEquals("admin-access", result.accessToken());
+        verify(jwtProvider).generateAccessToken(100L, UserRole.ADMIN);
+    }
+
+    @Test
+    @DisplayName("Admin 비밀번호 불일치 시 InvalidCredentialsException")
+    void adminLogin_wrongPassword_throwsInvalidCredentials() {
+        LoginCommand command = new LoginCommand("admin@fandrops.com", "wrong");
+        AdminAccount admin = new AdminAccount(100L, "admin@fandrops.com", "adminHash");
+        when(adminAccountRepository.findByLoginId("admin@fandrops.com")).thenReturn(Optional.of(admin));
+        when(passwordEncoder.matches("wrong", "adminHash")).thenReturn(false);
+
+        assertThrows(InvalidCredentialsException.class, () -> authService.adminLogin(command));
+    }
+
+    @Test
+    @DisplayName("Admin 미등록 이메일 로그인 시 InvalidCredentialsException (타이밍 공격 방어)")
+    void adminLogin_emailNotFound_throwsInvalidCredentials() {
+        LoginCommand command = new LoginCommand("unknown@fandrops.com", "pass");
+        when(adminAccountRepository.findByLoginId("unknown@fandrops.com")).thenReturn(Optional.empty());
+        when(passwordEncoder.matches("pass", "$2a$10$mockedDummyHash")).thenReturn(false);
+
+        assertThrows(InvalidCredentialsException.class, () -> authService.adminLogin(command));
+        verify(passwordEncoder).matches("pass", "$2a$10$mockedDummyHash");
+    }
+
     // ── socialLogin ─────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("소셜 로그인 — 이메일 없는 계정은 로컬 충돌 검사 없이 처리된다")
+    void socialLogin_emailNull_skipsConflictCheck() {
+        SocialLoginCommand command = new SocialLoginCommand(AuthProvider.KAKAO, "code");
+        OAuthUserInfo userInfo = new OAuthUserInfo("kakao-id", null, "nick");
+        when(oAuthClient.getUserInfo(AuthProvider.KAKAO, "code")).thenReturn(userInfo);
+        Fan existingFan = Fan.builder().id(5L).nickname("nick").authProvider(AuthProvider.KAKAO).providerId("kakao-id").build();
+        when(userRepository.findByProviderAndProviderId(AuthProvider.KAKAO, "kakao-id")).thenReturn(Optional.of(existingFan));
+        when(jwtProvider.generateAccessToken(5L, UserRole.FAN)).thenReturn("access");
+        when(jwtProvider.generateRefreshToken(5L)).thenReturn("refresh");
+        when(jwtProvider.getAccessTokenExpiresIn()).thenReturn(1800L);
+
+        assertDoesNotThrow(() -> authService.socialLogin(command));
+        verify(userRepository, never()).findByEmail(any());
+    }
 
     @Test
     @DisplayName("소셜 로그인 — 같은 이메일로 로컬 계정 존재 시 InvalidCredentialsException")
@@ -196,7 +255,7 @@ class AuthServiceTest {
     @Test
     @DisplayName("Refresh Token Rotation — GETDEL 원자 처리 후 신규 토큰 발급")
     void refreshAccessToken_rotation_deletesOldAndIssuesNew() {
-        when(refreshTokenStore.getAndDelete("old-token")).thenReturn(Optional.of(5L));
+        when(refreshTokenStore.getAndDelete("old-token")).thenReturn(Optional.of(new RefreshTokenEntry(5L, UserRole.FAN)));
         when(jwtProvider.generateAccessToken(5L, UserRole.FAN)).thenReturn("new-access");
         when(jwtProvider.generateRefreshToken(5L)).thenReturn("new-refresh");
         when(jwtProvider.getAccessTokenExpiresIn()).thenReturn(1800L);
@@ -205,20 +264,34 @@ class AuthServiceTest {
 
         InOrder inOrder = inOrder(refreshTokenStore);
         inOrder.verify(refreshTokenStore).getAndDelete("old-token");
-        inOrder.verify(refreshTokenStore).save("new-refresh", 5L);
+        inOrder.verify(refreshTokenStore).save("new-refresh", 5L, UserRole.FAN);
         assertEquals("new-access", result.accessToken());
         assertEquals("new-refresh", result.refreshToken());
     }
 
     @Test
+    @DisplayName("Admin Refresh Token Rotation — role=ADMIN 역할 보존")
+    void refreshAccessToken_admin_preservesAdminRole() {
+        when(refreshTokenStore.getAndDelete("admin-old-token")).thenReturn(Optional.of(new RefreshTokenEntry(100L, UserRole.ADMIN)));
+        when(jwtProvider.generateAccessToken(100L, UserRole.ADMIN)).thenReturn("new-admin-access");
+        when(jwtProvider.generateRefreshToken(100L)).thenReturn("new-admin-refresh");
+        when(jwtProvider.getAccessTokenExpiresIn()).thenReturn(1800L);
+
+        AuthTokenResult result = authService.refreshAccessToken("admin-old-token");
+
+        verify(jwtProvider).generateAccessToken(100L, UserRole.ADMIN);
+        assertEquals("new-admin-access", result.accessToken());
+    }
+
+    @Test
     @DisplayName("Refresh Token Rotation — 토큰 생성 실패 시 InvalidTokenException (강제 재로그인)")
     void refreshAccessToken_issueTokensFails_throwsInvalidTokenException() {
-        when(refreshTokenStore.getAndDelete("valid-token")).thenReturn(Optional.of(5L));
+        when(refreshTokenStore.getAndDelete("valid-token")).thenReturn(Optional.of(new RefreshTokenEntry(5L, UserRole.FAN)));
         when(jwtProvider.generateAccessToken(5L, UserRole.FAN)).thenThrow(new RuntimeException("token generation failure"));
 
         assertThrows(InvalidTokenException.class, () -> authService.refreshAccessToken("valid-token"));
         verify(refreshTokenStore).getAndDelete("valid-token");
-        verify(refreshTokenStore, never()).save(anyString(), anyLong());
+        verify(refreshTokenStore, never()).save(anyString(), anyLong(), any(UserRole.class));
     }
 
     // ── confirmPasswordReset ────────────────────────────────────────────────
@@ -228,6 +301,17 @@ class AuthServiceTest {
     void confirmPasswordReset_invalidToken_throwsInvalidTokenException() {
         when(passwordResetTokenStore.getAndDelete("expired")).thenReturn(Optional.empty());
         assertThrows(InvalidTokenException.class, () -> authService.confirmPasswordReset("expired", "newPass"));
+    }
+
+    @Test
+    @DisplayName("비밀번호 재설정 — 토큰 유효하나 Fan이 탈퇴된 경우 FanNotFoundException")
+    void confirmPasswordReset_validToken_fanDeleted_throwsFanNotFoundException() {
+        when(passwordResetTokenStore.getAndDelete("valid-token")).thenReturn(Optional.of(99L));
+        when(userRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThrows(FanNotFoundException.class,
+                () -> authService.confirmPasswordReset("valid-token", "newPass"));
+        verify(userRepository, never()).save(any());
     }
 
     @Test
@@ -248,6 +332,20 @@ class AuthServiceTest {
     }
 
     // ── requestPasswordReset ────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("로컬 계정 비밀번호 재설정 요청 시 토큰 생성 후 이메일 발송")
+    void requestPasswordReset_localAccount_generatesTokenAndSendsEmail() {
+        Fan localFan = Fan.builder().id(10L).email("local@email.com").nickname("nick")
+                .authProvider(AuthProvider.LOCAL).passwordHash("hash").build();
+        when(userRepository.findByEmail("local@email.com")).thenReturn(Optional.of(localFan));
+        when(passwordResetTokenStore.generate(10L)).thenReturn("reset-token-abc");
+
+        authService.requestPasswordReset("local@email.com");
+
+        verify(passwordResetTokenStore).generate(10L);
+        verify(emailNotificationPort).sendPasswordResetEmail("local@email.com", "reset-token-abc");
+    }
 
     @Test
     @DisplayName("미가입 이메일 재설정 요청 시 예외 없이 정상 처리 (Enumeration 방어)")

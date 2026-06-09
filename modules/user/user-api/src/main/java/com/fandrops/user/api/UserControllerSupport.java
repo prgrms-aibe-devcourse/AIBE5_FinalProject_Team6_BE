@@ -1,5 +1,7 @@
 package com.fandrops.user.api;
 
+import com.fandrops.user.api.dto.AuthTokenResponse;
+import com.fandrops.user.application.dto.AuthTokenResult;
 import com.fandrops.user.application.exception.InvalidCredentialsException;
 import org.slf4j.MDC;
 import org.springframework.core.env.Environment;
@@ -23,6 +25,10 @@ public abstract class UserControllerSupport {
     protected static String traceId() {
         String id = MDC.get("traceId");
         return id != null ? id : UUID.randomUUID().toString();
+    }
+
+    protected AuthTokenResponse toAuthTokenResponse(AuthTokenResult result) {
+        return new AuthTokenResponse(result.accessToken(), result.refreshToken(), result.expiresIn());
     }
 
     protected Long resolveFanId(Authentication authentication, Long localFanIdHeader) {

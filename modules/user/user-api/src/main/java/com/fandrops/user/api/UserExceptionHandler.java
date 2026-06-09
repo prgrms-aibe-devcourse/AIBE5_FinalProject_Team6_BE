@@ -2,6 +2,7 @@ package com.fandrops.user.api;
 
 import com.fandrops.common.ApiResponse;
 import com.fandrops.user.application.exception.AgencyApplicationNotFoundException;
+import com.fandrops.user.application.exception.BannerNotFoundException;
 import com.fandrops.user.application.exception.DuplicateAgencyAccountException;
 import com.fandrops.user.application.exception.DuplicateApplicationException;
 import com.fandrops.user.application.exception.DuplicateEmailException;
@@ -64,6 +65,12 @@ public class UserExceptionHandler {
     @ResponseStatus(HttpStatus.NOT_FOUND)
     public ApiResponse<Void> handleAgencyApplicationNotFound(AgencyApplicationNotFoundException e) {
         return ApiResponse.fail("APPLICATION_NOT_FOUND", e.getMessage(), false, traceId());
+    }
+
+    @ExceptionHandler(BannerNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public ApiResponse<Void> handleBannerNotFound(BannerNotFoundException e) {
+        return ApiResponse.fail("BANNER_NOT_FOUND", e.getMessage(), false, traceId());
     }
 
     @ExceptionHandler(DuplicateApplicationException.class)

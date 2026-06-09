@@ -49,15 +49,17 @@ public class AgencyApplicationService {
     // F02-01: 입점 신청서 제출
     @Transactional
     public AgencyApplicationResult submitApplication(CreateAgencyApplicationCommand command) {
-        if (command.businessRegistrationNumber() != null
-                && agencyApplicationRepository.existsPendingByBusinessRegistrationNumber(
-                        command.businessRegistrationNumber())) {
+        // 빈 문자열은 null과 동일하게 처리 (1인 크리에이터 — 사업자등록번호 없음)
+        String brn = (command.businessRegistrationNumber() != null && !command.businessRegistrationNumber().isBlank())
+                ? command.businessRegistrationNumber() : null;
+
+        if (brn != null && agencyApplicationRepository.existsPendingByBusinessRegistrationNumber(brn)) {
             throw new DuplicateApplicationException("이미 심사 중인 신청서가 있습니다.");
         }
 
         AgencyApplication application = AgencyApplication.builder()
                 .companyName(command.companyName())
-                .businessRegistrationNumber(command.businessRegistrationNumber())
+                .businessRegistrationNumber(brn)
                 .representativeName(command.representativeName())
                 .contactEmail(command.contactEmail())
                 .contactPhone(command.contactPhone())
