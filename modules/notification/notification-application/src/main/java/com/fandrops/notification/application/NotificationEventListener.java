@@ -1,6 +1,7 @@
 package com.fandrops.notification.application;
 
 import com.fandrops.notification.application.dto.PublishNotificationCommand;
+import com.fandrops.order.application.event.RestockAlertEvent;
 import com.fandrops.payment.application.payment.PaymentApprovedEvent;
 import com.fandrops.payment.application.payment.PaymentFailedEvent;
 import org.slf4j.Logger;
@@ -42,13 +43,15 @@ public class NotificationEventListener {
         publishNotificationUseCase.publish(command);
     }
 
-    // TODO [형성빈]: inventory-application에 RestockAlertEvent(Long fanId, Long productId, String productName) 추가 후 아래 활성화
-    // @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    // public void handleRestockAlert(RestockAlertEvent event) {
-    //     PublishNotificationCommand command = new PublishNotificationCommand(
-    //             "RESTOCK", event.getProductId(), "{\"fanId\":" + event.getFanId() + ",\"productId\":" + event.getProductId() + "}");
-    //     publishNotificationUseCase.publish(command);
-    // }
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void handleRestockAlert(RestockAlertEvent event) {
+        log.info("재입고 알림 이벤트 수신: fanId={}, productId={}", event.getFanId(), event.getProductId());
+        PublishNotificationCommand command = new PublishNotificationCommand(
+                "RESTOCK",
+                event.getProductId(),
+                "{\"fanId\":" + event.getFanId() + ",\"productId\":" + event.getProductId() + "}");
+        publishNotificationUseCase.publish(command);
+    }
 
     // TODO [정환철]: community-application에 NewFeedEvent(Long fanId, Long feedId, Long artistId) 추가 후 아래 활성화
     // @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)

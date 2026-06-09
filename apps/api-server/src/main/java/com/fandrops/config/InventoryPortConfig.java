@@ -3,6 +3,7 @@ package com.fandrops.config;
 import com.fandrops.inventory.application.InventoryCommandService;
 import com.fandrops.order.domain.InventoryInfo;
 import com.fandrops.order.domain.port.InventoryCreatePort;
+import com.fandrops.order.domain.port.InventoryIncreasePort;
 import com.fandrops.order.domain.port.InventoryReadPort;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -14,6 +15,11 @@ public class InventoryPortConfig {
     @Bean
     public InventoryCreatePort inventoryCreatePort(InventoryCommandService inventoryCommandService) {
         return (productId, totalQty) -> inventoryCommandService.createInventory(productId, totalQty);
+    }
+
+    @Bean
+    public InventoryIncreasePort inventoryIncreasePort(InventoryCommandService inventoryCommandService) {
+        return (productId, qty) -> inventoryCommandService.increase(productId, productId, qty);
     }
 
     @Bean
