@@ -180,6 +180,22 @@ class AuthServiceTest {
     // ── socialLogin ─────────────────────────────────────────────────────────
 
     @Test
+    @DisplayName("소셜 로그인 — 이메일 없는 계정은 로컬 충돌 검사 없이 처리된다")
+    void socialLogin_emailNull_skipsConflictCheck() {
+        SocialLoginCommand command = new SocialLoginCommand(AuthProvider.KAKAO, "code");
+        OAuthUserInfo userInfo = new OAuthUserInfo("kakao-id", null, "nick");
+        when(oAuthClient.getUserInfo(AuthProvider.KAKAO, "code")).thenReturn(userInfo);
+        Fan existingFan = Fan.builder().id(5L).nickname("nick").authProvider(AuthProvider.KAKAO).providerId("kakao-id").build();
+        when(userRepository.findByProviderAndProviderId(AuthProvider.KAKAO, "kakao-id")).thenReturn(Optional.of(existingFan));
+        when(jwtProvider.generateAccessToken(5L, UserRole.FAN)).thenReturn("access");
+        when(jwtProvider.generateRefreshToken(5L)).thenReturn("refresh");
+        when(jwtProvider.getAccessTokenExpiresIn()).thenReturn(1800L);
+
+        assertDoesNotThrow(() -> authService.socialLogin(command));
+        verify(userRepository, never()).findByEmail(any());
+    }
+
+    @Test
     @DisplayName("소셜 로그인 — 같은 이메일로 로컬 계정 존재 시 InvalidCredentialsException")
     void socialLogin_localAccountConflict_throwsInvalidCredentials() {
         SocialLoginCommand command = new SocialLoginCommand(AuthProvider.KAKAO, "code");
@@ -316,6 +332,20 @@ class AuthServiceTest {
     }
 
     // ── requestPasswordReset ────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("로컬 계정 비밀번호 재설정 요청 시 토큰 생성 후 이메일 발송")
+    void requestPasswordReset_localAccount_generatesTokenAndSendsEmail() {
+        Fan localFan = Fan.builder().id(10L).email("local@email.com").nickname("nick")
+                .authProvider(AuthProvider.LOCAL).passwordHash("hash").build();
+        when(userRepository.findByEmail("local@email.com")).thenReturn(Optional.of(localFan));
+        when(passwordResetTokenStore.generate(10L)).thenReturn("reset-token-abc");
+
+        authService.requestPasswordReset("local@email.com");
+
+        verify(passwordResetTokenStore).generate(10L);
+        verify(emailNotificationPort).sendPasswordResetEmail("local@email.com", "reset-token-abc");
+    }
 
     @Test
     @DisplayName("미가입 이메일 재설정 요청 시 예외 없이 정상 처리 (Enumeration 방어)")

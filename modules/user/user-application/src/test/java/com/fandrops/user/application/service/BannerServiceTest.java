@@ -92,6 +92,18 @@ class BannerServiceTest {
     }
 
     @Test
+    @DisplayName("배너 생성 — 시작 시각과 종료 시각이 같으면 정상 저장 (경계값)")
+    void createBanner_startAtEqualsEndAt_succeeds() {
+        LocalDateTime same = LocalDateTime.of(2025, 6, 1, 12, 0);
+        CreateBannerCommand command = new CreateBannerCommand(
+                "배너", "https://img.jpg", "https://landing.com", 1, same, same);
+        when(bannerRepository.save(any(Banner.class))).thenReturn(sampleBanner(3L));
+
+        assertDoesNotThrow(() -> bannerService.createBanner(command));
+        verify(bannerRepository).save(any());
+    }
+
+    @Test
     @DisplayName("배너 생성 — MAIN 타입으로 저장")
     void createBanner_savesWithMainType() {
         CreateBannerCommand command = new CreateBannerCommand(
@@ -126,6 +138,20 @@ class BannerServiceTest {
 
         assertEquals("변경된 제목", banner.getTitle());
         assertEquals("https://cdn.fandrops.com/banner.jpg", banner.getImageUrl()); // 유지
+    }
+
+    @Test
+    @DisplayName("배너 수정 — 모든 필드가 null 이면 기존 값 그대로 저장된다")
+    void updateBanner_allNullFields_preservesAllExisting() {
+        Banner banner = sampleBanner(1L);
+        when(bannerRepository.findById(1L)).thenReturn(Optional.of(banner));
+        when(bannerRepository.save(any(Banner.class))).thenReturn(banner);
+
+        bannerService.updateBanner(1L, new UpdateBannerCommand(null, null, null, null, null, null, null));
+
+        verify(bannerRepository).save(banner);
+        assertEquals("테스트 배너", banner.getTitle());
+        assertEquals("https://cdn.fandrops.com/banner.jpg", banner.getImageUrl());
     }
 
     @Test
