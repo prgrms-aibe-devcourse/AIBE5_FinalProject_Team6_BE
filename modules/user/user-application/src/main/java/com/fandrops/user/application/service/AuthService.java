@@ -68,25 +68,29 @@ public class AuthService {
         return issueTokens(saved.getId(), UserRole.FAN);
     }
 
-    // F01-02: 이메일 로그인 — Fan + Admin 통합 (트랜잭션 불필요, 커넥션 즉시 반납)
+    // F01-02: 이메일 로그인 — Fan 전용 (Admin은 /api/v1/admin/auth/login 사용)
     public AuthTokenResult login(LoginCommand command) {
         Fan fan = userRepository.findByEmail(command.email()).orElse(null);
-        AdminAccount admin = adminAccountRepository.findByLoginId(command.email()).orElse(null);
 
         // 타이밍 공격 방어: 후보가 없어도 항상 bcrypt 실행해 응답 시간 평준화
-        String hashToCheck;
-        if (fan != null && fan.isLocalAccount()) {
-            hashToCheck = fan.getPasswordHash();
-        } else if (admin != null) {
-            hashToCheck = admin.getPasswordHash();
-        } else {
-            hashToCheck = dummyPasswordHash;
-        }
+        String hashToCheck = (fan != null && fan.isLocalAccount())
+                ? fan.getPasswordHash() : dummyPasswordHash;
         boolean matches = passwordEncoder.matches(command.password(), hashToCheck);
 
         if (fan != null && fan.isLocalAccount() && matches) {
             return issueTokens(fan.getId(), UserRole.FAN);
         }
+        throw new InvalidCredentialsException("이메일 또는 비밀번호가 일치하지 않습니다.");
+    }
+
+    // Admin 전용 로그인 — /api/v1/admin/auth/login 전용
+    public AuthTokenResult adminLogin(LoginCommand command) {
+        AdminAccount admin = adminAccountRepository.findByLoginId(command.email()).orElse(null);
+
+        // 타이밍 공격 방어: 후보가 없어도 항상 bcrypt 실행해 응답 시간 평준화
+        String hashToCheck = admin != null ? admin.getPasswordHash() : dummyPasswordHash;
+        boolean matches = passwordEncoder.matches(command.password(), hashToCheck);
+
         if (admin != null && matches) {
             return issueTokens(admin.getId(), UserRole.ADMIN);
         }

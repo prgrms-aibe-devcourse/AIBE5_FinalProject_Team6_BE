@@ -136,19 +136,20 @@ class AuthServiceTest {
         assertEquals("access", result.accessToken());
     }
 
+    // ── adminLogin ──────────────────────────────────────────────────────────
+
     @Test
     @DisplayName("Admin 로그인 성공 — role=ADMIN 토큰 발급")
-    void login_admin_success_returnsAdminToken() {
-        LoginCommand command = new LoginCommand("admin", "admin");
-        when(userRepository.findByEmail("admin")).thenReturn(Optional.empty());
-        AdminAccount admin = new AdminAccount(100L, "admin", "adminHash");
-        when(adminAccountRepository.findByLoginId("admin")).thenReturn(Optional.of(admin));
+    void adminLogin_success_returnsAdminToken() {
+        LoginCommand command = new LoginCommand("admin@fandrops.com", "admin");
+        AdminAccount admin = new AdminAccount(100L, "admin@fandrops.com", "adminHash");
+        when(adminAccountRepository.findByLoginId("admin@fandrops.com")).thenReturn(Optional.of(admin));
         when(passwordEncoder.matches("admin", "adminHash")).thenReturn(true);
         when(jwtProvider.generateAccessToken(100L, UserRole.ADMIN)).thenReturn("admin-access");
         when(jwtProvider.generateRefreshToken(100L)).thenReturn("admin-refresh");
         when(jwtProvider.getAccessTokenExpiresIn()).thenReturn(1800L);
 
-        AuthTokenResult result = authService.login(command);
+        AuthTokenResult result = authService.adminLogin(command);
 
         assertEquals("admin-access", result.accessToken());
         verify(jwtProvider).generateAccessToken(100L, UserRole.ADMIN);
@@ -156,34 +157,24 @@ class AuthServiceTest {
 
     @Test
     @DisplayName("Admin 비밀번호 불일치 시 InvalidCredentialsException")
-    void login_admin_wrongPassword_throwsInvalidCredentials() {
-        LoginCommand command = new LoginCommand("admin", "wrong");
-        when(userRepository.findByEmail("admin")).thenReturn(Optional.empty());
-        AdminAccount admin = new AdminAccount(100L, "admin", "adminHash");
-        when(adminAccountRepository.findByLoginId("admin")).thenReturn(Optional.of(admin));
+    void adminLogin_wrongPassword_throwsInvalidCredentials() {
+        LoginCommand command = new LoginCommand("admin@fandrops.com", "wrong");
+        AdminAccount admin = new AdminAccount(100L, "admin@fandrops.com", "adminHash");
+        when(adminAccountRepository.findByLoginId("admin@fandrops.com")).thenReturn(Optional.of(admin));
         when(passwordEncoder.matches("wrong", "adminHash")).thenReturn(false);
 
-        assertThrows(InvalidCredentialsException.class, () -> authService.login(command));
+        assertThrows(InvalidCredentialsException.class, () -> authService.adminLogin(command));
     }
 
     @Test
-    @DisplayName("Fan과 Admin이 동일 loginId를 가질 때 Fan이 우선")
-    void login_fanTakesPriorityOverAdmin_whenSameLoginId() {
-        LoginCommand command = new LoginCommand("duplicate@email.com", "pass");
-        Fan fan = Fan.builder().id(1L).email("duplicate@email.com").nickname("nick")
-                .authProvider(AuthProvider.LOCAL).passwordHash("fanHash").build();
-        when(userRepository.findByEmail("duplicate@email.com")).thenReturn(Optional.of(fan));
-        AdminAccount admin = new AdminAccount(100L, "duplicate@email.com", "adminHash");
-        when(adminAccountRepository.findByLoginId("duplicate@email.com")).thenReturn(Optional.of(admin));
-        when(passwordEncoder.matches("pass", "fanHash")).thenReturn(true);
-        when(jwtProvider.generateAccessToken(1L, UserRole.FAN)).thenReturn("fan-token");
-        when(jwtProvider.generateRefreshToken(1L)).thenReturn("fan-refresh");
-        when(jwtProvider.getAccessTokenExpiresIn()).thenReturn(1800L);
+    @DisplayName("Admin 미등록 이메일 로그인 시 InvalidCredentialsException (타이밍 공격 방어)")
+    void adminLogin_emailNotFound_throwsInvalidCredentials() {
+        LoginCommand command = new LoginCommand("unknown@fandrops.com", "pass");
+        when(adminAccountRepository.findByLoginId("unknown@fandrops.com")).thenReturn(Optional.empty());
+        when(passwordEncoder.matches("pass", "$2a$10$mockedDummyHash")).thenReturn(false);
 
-        AuthTokenResult result = authService.login(command);
-
-        verify(jwtProvider).generateAccessToken(1L, UserRole.FAN);
-        assertEquals("fan-token", result.accessToken());
+        assertThrows(InvalidCredentialsException.class, () -> authService.adminLogin(command));
+        verify(passwordEncoder).matches("pass", "$2a$10$mockedDummyHash");
     }
 
     // ── socialLogin ─────────────────────────────────────────────────────────

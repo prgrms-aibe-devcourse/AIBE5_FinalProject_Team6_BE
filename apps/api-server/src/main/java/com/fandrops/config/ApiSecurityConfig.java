@@ -44,6 +44,7 @@ public class ApiSecurityConfig {
                         .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/artists/*/feeds").permitAll()
                         .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/banners/main").permitAll()
                         .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/v1/b2b/apply").permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/v1/admin/auth/login").permitAll()
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/**").authenticated()
                         .anyRequest().denyAll()
