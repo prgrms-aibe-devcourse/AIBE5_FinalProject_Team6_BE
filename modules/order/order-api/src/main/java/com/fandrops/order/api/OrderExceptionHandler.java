@@ -5,6 +5,7 @@ import com.fandrops.order.api.dto.ApiResponse;
 import com.fandrops.order.domain.exception.AccessTicketInvalidException;
 import com.fandrops.order.domain.exception.CartAccessDeniedException;
 import com.fandrops.order.domain.exception.ProductNotFoundException;
+import com.fandrops.order.domain.exception.RestockAlertNotFoundException;
 import com.fandrops.order.domain.exception.CartItemNotFoundException;
 import com.fandrops.order.domain.exception.CartNotFoundException;
 import com.fandrops.order.domain.exception.OrderNotFoundException;
@@ -74,6 +75,14 @@ public class OrderExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(ApiResponse.error(
                         new ApiError("PRODUCT_NOT_FOUND", e.getMessage(), false),
+                        MDC.get("traceId") != null ? MDC.get("traceId") : UUID.randomUUID().toString()));
+    }
+
+    @ExceptionHandler(RestockAlertNotFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> handleRestockAlertNotFound(RestockAlertNotFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.error(
+                        new ApiError("RESTOCK_ALERT_NOT_FOUND", e.getMessage(), false),
                         MDC.get("traceId") != null ? MDC.get("traceId") : UUID.randomUUID().toString()));
     }
 
