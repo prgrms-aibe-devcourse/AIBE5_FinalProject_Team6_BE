@@ -297,6 +297,17 @@ class AuthServiceTest {
     }
 
     @Test
+    @DisplayName("비밀번호 재설정 — 토큰 유효하나 Fan이 탈퇴된 경우 FanNotFoundException")
+    void confirmPasswordReset_validToken_fanDeleted_throwsFanNotFoundException() {
+        when(passwordResetTokenStore.getAndDelete("valid-token")).thenReturn(Optional.of(99L));
+        when(userRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThrows(FanNotFoundException.class,
+                () -> authService.confirmPasswordReset("valid-token", "newPass"));
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
     @DisplayName("비밀번호 재설정 — getAndDelete 원자 처리 후 비밀번호 변경")
     void confirmPasswordReset_tokenDeletedBeforePasswordChange() {
         when(passwordResetTokenStore.getAndDelete("valid-token")).thenReturn(Optional.of(6L));

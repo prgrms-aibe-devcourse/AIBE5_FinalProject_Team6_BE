@@ -41,6 +41,10 @@ public class BannerService {
     /** POST /admin/main-banners — 배너 생성 (Admin) */
     @Transactional
     public BannerResult createBanner(CreateBannerCommand command) {
+        if (command.startAt() != null && command.endAt() != null
+                && command.startAt().isAfter(command.endAt())) {
+            throw new IllegalArgumentException("배너 종료 시각이 시작 시각보다 이를 수 없습니다.");
+        }
         Banner banner = Banner.builder()
                 .bannerType(BannerType.MAIN)
                 .title(command.title())
@@ -59,6 +63,11 @@ public class BannerService {
     public BannerResult updateBanner(Long id, UpdateBannerCommand command) {
         Banner banner = bannerRepository.findById(id)
                 .orElseThrow(() -> new BannerNotFoundException("존재하지 않는 배너입니다. id=" + id));
+        LocalDateTime effectiveStart = command.startAt() != null ? command.startAt() : banner.getStartAt();
+        LocalDateTime effectiveEnd = command.endAt() != null ? command.endAt() : banner.getEndAt();
+        if (effectiveStart != null && effectiveEnd != null && effectiveStart.isAfter(effectiveEnd)) {
+            throw new IllegalArgumentException("배너 종료 시각이 시작 시각보다 이를 수 없습니다.");
+        }
         banner.update(
                 command.title(), command.imageUrl(), command.landingUrl(),
                 command.exposureOrder(), command.isActive(),

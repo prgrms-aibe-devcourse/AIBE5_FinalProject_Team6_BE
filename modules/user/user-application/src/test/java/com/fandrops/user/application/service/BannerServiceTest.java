@@ -20,6 +20,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -58,6 +59,36 @@ class BannerServiceTest {
 
         assertEquals(1, results.size());
         assertEquals("테스트 배너", results.get(0).title());
+    }
+
+    @Test
+    @DisplayName("배너 생성 — 종료 시각이 시작 시각보다 이르면 IllegalArgumentException")
+    void createBanner_endBeforeStart_throwsIllegalArgumentException() {
+        LocalDateTime start = LocalDateTime.of(2025, 12, 31, 0, 0);
+        LocalDateTime end = LocalDateTime.of(2025, 1, 1, 0, 0);
+        CreateBannerCommand command = new CreateBannerCommand(
+                "배너", "https://img.jpg", "https://landing.com", 1, start, end);
+
+        assertThrows(IllegalArgumentException.class, () -> bannerService.createBanner(command));
+        verify(bannerRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("배너 수정 — 기존 startAt 유지 상태에서 endAt을 이전 시각으로 변경 시 IllegalArgumentException")
+    void updateBanner_endBeforeExistingStart_throwsIllegalArgumentException() {
+        LocalDateTime existingStart = LocalDateTime.of(2025, 6, 1, 0, 0);
+        Banner banner = Banner.builder()
+                .id(1L).bannerType(BannerType.MAIN).title("배너").imageUrl("https://img.jpg")
+                .landingUrl("https://landing.com").exposureOrder(1).isActive(true)
+                .startAt(existingStart).build();
+        when(bannerRepository.findById(1L)).thenReturn(Optional.of(banner));
+
+        UpdateBannerCommand command = new UpdateBannerCommand(
+                null, null, null, null, null, null,
+                LocalDateTime.of(2025, 1, 1, 0, 0)); // start보다 이전
+
+        assertThrows(IllegalArgumentException.class, () -> bannerService.updateBanner(1L, command));
+        verify(bannerRepository, never()).save(any());
     }
 
     @Test

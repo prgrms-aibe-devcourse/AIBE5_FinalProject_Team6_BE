@@ -82,6 +82,24 @@ class AgencyApplicationServiceTest {
     }
 
     @Test
+    @DisplayName("사업자등록번호 빈 문자열은 null로 정규화되어 중복 체크를 건너뛴다")
+    void submitApplication_blankRegistrationNumber_treatedAsNull() {
+        CreateAgencyApplicationCommand command = new CreateAgencyApplicationCommand(
+                "홍길동", "   ", "홍길동", "hong@test.com",
+                "010-1234-5678", "소개글", "홍아티스트");
+        AgencyApplication saved = AgencyApplication.builder()
+                .companyName("홍길동").businessRegistrationNumber(null)
+                .representativeName("홍길동").contactEmail("hong@test.com")
+                .contactPhone("010-1234-5678").introduction("소개글")
+                .targetArtistName("홍아티스트").build();
+        when(agencyApplicationRepository.save(any())).thenReturn(saved);
+
+        assertDoesNotThrow(() -> service.submitApplication(command));
+        verify(agencyApplicationRepository, never())
+                .existsPendingByBusinessRegistrationNumber(any());
+    }
+
+    @Test
     @DisplayName("사업자등록번호 null 이면 중복 체크를 건너뛴다 (1인 크리에이터 허용)")
     void submitApplication_nullRegistrationNumber_skipsCheck() {
         CreateAgencyApplicationCommand command = new CreateAgencyApplicationCommand(
