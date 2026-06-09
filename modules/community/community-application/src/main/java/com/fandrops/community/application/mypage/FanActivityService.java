@@ -108,6 +108,8 @@ public class FanActivityService {
         try {
             String json = new String(Base64.getDecoder().decode(cursor), StandardCharsets.UTF_8);
             return new Long[]{extractLong(json, "c"), extractLong(json, "l")};
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("cursor 형식이 올바르지 않습니다.");
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (Exception e) {
