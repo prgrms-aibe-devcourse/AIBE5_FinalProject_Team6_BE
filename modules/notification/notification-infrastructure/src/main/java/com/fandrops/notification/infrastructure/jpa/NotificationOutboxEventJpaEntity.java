@@ -7,7 +7,7 @@ import java.time.Instant;
 
 @Entity
 @Table(name = "notification_outbox_events")
-public class OutboxEventJpaEntity {
+public class NotificationOutboxEventJpaEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -36,10 +36,10 @@ public class OutboxEventJpaEntity {
     @Column(name = "published_at")
     private Instant publishedAt;
 
-    protected OutboxEventJpaEntity() {}
+    protected NotificationOutboxEventJpaEntity() {}
 
-    public static OutboxEventJpaEntity from(OutboxEvent event) {
-        OutboxEventJpaEntity entity = new OutboxEventJpaEntity();
+    public static NotificationOutboxEventJpaEntity from(OutboxEvent event) {
+        NotificationOutboxEventJpaEntity entity = new NotificationOutboxEventJpaEntity();
         entity.id = event.getId();
         entity.eventType = event.getEventType();
         entity.resourceId = event.getResourceId();
