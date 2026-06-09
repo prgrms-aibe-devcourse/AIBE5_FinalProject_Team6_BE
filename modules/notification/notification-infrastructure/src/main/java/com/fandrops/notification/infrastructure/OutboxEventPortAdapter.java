@@ -4,7 +4,7 @@ import com.fandrops.notification.domain.OutboxEvent;
 import com.fandrops.notification.domain.OutboxStatus;
 import com.fandrops.notification.domain.port.OutboxEventPort;
 import com.fandrops.notification.infrastructure.jpa.OutboxEventJpaEntity;
-import com.fandrops.notification.infrastructure.jpa.OutboxEventJpaRepository;
+import com.fandrops.notification.infrastructure.jpa.NotificationOutboxEventJpaRepository;
 import java.util.List;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Repository;
@@ -12,9 +12,9 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class OutboxEventPortAdapter implements OutboxEventPort {
 
-    private final OutboxEventJpaRepository outboxEventJpaRepository;
+    private final NotificationOutboxEventJpaRepository outboxEventJpaRepository;
 
-    public OutboxEventPortAdapter(OutboxEventJpaRepository outboxEventJpaRepository) {
+    public OutboxEventPortAdapter(NotificationOutboxEventJpaRepository outboxEventJpaRepository) {
         this.outboxEventJpaRepository = outboxEventJpaRepository;
     }
 
