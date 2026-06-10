@@ -16,6 +16,7 @@ import com.fandrops.user.domain.AgencyApplicationAlreadyReviewedException;
 import com.fandrops.user.domain.AgencyApplicationStatus;
 import com.fandrops.user.domain.ArtistProfile;
 import com.fandrops.user.domain.UserRole;
+import com.fandrops.user.application.event.AgencyApprovedEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -23,6 +24,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.LocalDateTime;
@@ -42,6 +44,7 @@ class AgencyApplicationServiceTest {
     @Mock ArtistProfileRepository artistProfileRepository;
     @Mock EmailNotificationPort emailNotificationPort;
     @Mock PasswordEncoder passwordEncoder;
+    @Mock ApplicationEventPublisher eventPublisher;
 
     AgencyApplicationService service;
 
@@ -49,7 +52,7 @@ class AgencyApplicationServiceTest {
     void setUp() {
         service = new AgencyApplicationService(
                 agencyApplicationRepository, agencyAccountRepository,
-                artistProfileRepository, emailNotificationPort, passwordEncoder);
+                artistProfileRepository, emailNotificationPort, passwordEncoder, eventPublisher);
     }
 
     // ── submitApplication ────────────────────────────────────────────────────
@@ -257,6 +260,27 @@ class AgencyApplicationServiceTest {
     }
 
     @Test
+    @DisplayName("승인 성공 시 AgencyApprovedEvent가 artistId·agencyId·artistName 포함하여 발행된다")
+    void approveApplication_success_publishesAgencyApprovedEvent() {
+        AgencyApplication application = buildPendingApplication(1L);
+        when(agencyApplicationRepository.findById(1L)).thenReturn(Optional.of(application));
+        when(agencyAccountRepository.existsByLoginId("contact@hybe.com")).thenReturn(false);
+        when(passwordEncoder.encode(anyString())).thenReturn("hashedTempPw");
+        when(agencyApplicationRepository.save(any())).thenReturn(application);
+        when(agencyAccountRepository.save(any())).thenReturn(buildSavedAccount(100L));
+        when(artistProfileRepository.save(any())).thenReturn(buildSavedProfile(42L));
+
+        service.approveApplication(1L);
+
+        ArgumentCaptor<AgencyApprovedEvent> captor = ArgumentCaptor.forClass(AgencyApprovedEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        AgencyApprovedEvent event = captor.getValue();
+        assertEquals(42L, event.getArtistId());
+        assertEquals(100L, event.getAgencyId());
+        assertEquals("BTS", event.getArtistName());
+    }
+
+    @Test
     @DisplayName("ArtistProfile 저장 실패 시 예외가 전파된다 — DB 롤백 의도 확인")
     void approveApplication_artistProfileSaveFails_exceptionPropagates() {
         AgencyApplication application = buildPendingApplication(1L);
@@ -379,6 +403,14 @@ class AgencyApplicationServiceTest {
                 AgencyApplicationStatus.REJECTED, "서류 미비",
                 LocalDateTime.of(2025, 1, 1, 0, 0),
                 LocalDateTime.of(2025, 1, 5, 0, 0));
+    }
+
+    private ArtistProfile buildSavedProfile(Long id) {
+        return ArtistProfile.builder()
+                .id(id)
+                .agencyId(100L)
+                .name("BTS")
+                .build();
     }
 
     private AgencyAccount buildSavedAccount(Long id) {

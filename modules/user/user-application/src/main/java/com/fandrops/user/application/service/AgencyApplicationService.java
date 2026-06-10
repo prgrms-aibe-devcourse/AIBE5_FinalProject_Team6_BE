@@ -2,6 +2,7 @@ package com.fandrops.user.application.service;
 
 import com.fandrops.user.application.dto.AgencyApplicationResult;
 import com.fandrops.user.application.dto.CreateAgencyApplicationCommand;
+import com.fandrops.user.application.event.AgencyApprovedEvent;
 import com.fandrops.user.application.exception.AgencyApplicationNotFoundException;
 import com.fandrops.user.application.exception.DuplicateAgencyAccountException;
 import com.fandrops.user.application.exception.DuplicateApplicationException;
@@ -15,6 +16,7 @@ import com.fandrops.user.domain.AgencyApplication;
 import com.fandrops.user.domain.AgencyApplicationStatus;
 import com.fandrops.user.domain.ArtistProfile;
 import com.fandrops.user.domain.UserRole;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,18 +34,21 @@ public class AgencyApplicationService {
     private final ArtistProfileRepository artistProfileRepository;
     private final EmailNotificationPort emailNotificationPort;
     private final PasswordEncoder passwordEncoder;
+    private final ApplicationEventPublisher eventPublisher;
 
     public AgencyApplicationService(
             AgencyApplicationRepository agencyApplicationRepository,
             AgencyAccountRepository agencyAccountRepository,
             ArtistProfileRepository artistProfileRepository,
             EmailNotificationPort emailNotificationPort,
-            PasswordEncoder passwordEncoder) {
+            PasswordEncoder passwordEncoder,
+            ApplicationEventPublisher eventPublisher) {
         this.agencyApplicationRepository = agencyApplicationRepository;
         this.agencyAccountRepository = agencyAccountRepository;
         this.artistProfileRepository = artistProfileRepository;
         this.emailNotificationPort = emailNotificationPort;
         this.passwordEncoder = passwordEncoder;
+        this.eventPublisher = eventPublisher;
     }
 
     // F02-01: 입점 신청서 제출
@@ -108,11 +113,17 @@ public class AgencyApplicationService {
                 .build();
         AgencyAccount savedAccount = agencyAccountRepository.save(account);
 
-        artistProfileRepository.save(ArtistProfile.builder()
+        ArtistProfile savedProfile = artistProfileRepository.save(ArtistProfile.builder()
                 .agencyId(savedAccount.getId())
                 .name(application.getTargetArtistName())
                 .joinedAt(LocalDateTime.now(ZoneOffset.UTC))
                 .build());
+
+        eventPublisher.publishEvent(new AgencyApprovedEvent(
+                savedProfile.getId(),
+                savedAccount.getId(),
+                application.getTargetArtistName()
+        ));
 
         emailNotificationPort.sendApplicationApprovedEmail(
                 application.getContactEmail(), loginId, tempPassword);
