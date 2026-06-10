@@ -63,6 +63,7 @@ management:
     distribution:
       percentiles-histogram:
         http.server.requests: true  # histogram_quantile(P95) 활성화
+        lettuce.command.completion.delay: true
   health:
     redis:
       enabled: true
