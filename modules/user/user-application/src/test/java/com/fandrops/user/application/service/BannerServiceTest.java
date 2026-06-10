@@ -155,6 +155,25 @@ class BannerServiceTest {
     }
 
     @Test
+    @DisplayName("배너 수정 — Optional.of(value)로 startAt 값 변경")
+    void updateBanner_setStartAtWithOptionalOf_updatesStartAt() {
+        Banner banner = Banner.builder()
+                .id(1L).bannerType(BannerType.MAIN).title("배너").imageUrl("https://img.jpg")
+                .landingUrl("https://landing.com").exposureOrder(1).isActive(true)
+                .startAt(LocalDateTime.of(2025, 1, 1, 0, 0))
+                .endAt(LocalDateTime.of(2025, 12, 31, 0, 0)).build();
+        when(bannerRepository.findById(1L)).thenReturn(Optional.of(banner));
+        when(bannerRepository.save(any(Banner.class))).thenReturn(banner);
+
+        LocalDateTime newStart = LocalDateTime.of(2025, 7, 1, 0, 0);
+        bannerService.updateBanner(1L, new UpdateBannerCommand(
+                null, null, null, null, null, Optional.of(newStart), null));
+
+        assertEquals(newStart, banner.getStartAt());
+        assertEquals(LocalDateTime.of(2025, 12, 31, 0, 0), banner.getEndAt()); // endAt 유지
+    }
+
+    @Test
     @DisplayName("배너 수정 — startAt Optional.empty() → null로 클리어 (상시 배너 전환)")
     void updateBanner_clearStartAt_setsNullStartAt() {
         Banner banner = Banner.builder()
