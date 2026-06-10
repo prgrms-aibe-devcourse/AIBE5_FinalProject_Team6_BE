@@ -1,5 +1,6 @@
 package com.fandrops.community.application.comment;
 
+import com.fandrops.community.application.event.NewCommentEvent;
 import com.fandrops.community.application.exception.CommentNotFoundException;
 import com.fandrops.community.application.exception.FeedNotFoundException;
 import com.fandrops.community.application.exception.NotFanMemberException;
@@ -8,6 +9,7 @@ import com.fandrops.community.application.port.OutboxEvent;
 import com.fandrops.community.application.port.OutboxEventPort;
 import com.fandrops.community.application.port.OutboxEventType;
 import com.fandrops.community.domain.feed.Comment;
+import org.springframework.context.ApplicationEventPublisher;
 import com.fandrops.community.domain.feed.repository.ArtistFeedRepository;
 import com.fandrops.community.domain.feed.repository.CommentRepository;
 import org.springframework.stereotype.Service;
@@ -26,17 +28,20 @@ public class CommentService {
     private final ArtistFeedRepository feedRepository;
     private final FanMembershipPort fanMembershipPort;
     private final OutboxEventPort outboxEventPort;
+    private final ApplicationEventPublisher applicationEventPublisher;
     private final Clock clock;
 
     public CommentService(CommentRepository commentRepository,
                           ArtistFeedRepository feedRepository,
                           FanMembershipPort fanMembershipPort,
                           OutboxEventPort outboxEventPort,
+                          ApplicationEventPublisher applicationEventPublisher,
                           Clock clock) {
         this.commentRepository = commentRepository;
         this.feedRepository = feedRepository;
         this.fanMembershipPort = fanMembershipPort;
         this.outboxEventPort = outboxEventPort;
+        this.applicationEventPublisher = applicationEventPublisher;
         this.clock = clock;
     }
 
@@ -74,6 +79,8 @@ public class CommentService {
         payload.put("fanId", saved.getFanId());
         payload.put("artistMemberId", saved.getArtistMemberId());
         outboxEventPort.publish(new OutboxEvent(OutboxEventType.NEW_COMMENT, saved.getId(), payload));
+        applicationEventPublisher.publishEvent(
+                new NewCommentEvent(saved.getId(), saved.getFeedId(), saved.getParentId(), saved.getArtistId()));
 
         return toResult(saved);
     }

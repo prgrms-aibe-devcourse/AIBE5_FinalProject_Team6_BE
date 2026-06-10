@@ -4,6 +4,7 @@ import com.fandrops.community.application.exception.FeedNotFoundException;
 import com.fandrops.community.application.exception.FeedOwnershipException;
 import com.fandrops.community.application.port.OutboxEventPort;
 import com.fandrops.community.application.port.OutboxEventType;
+import org.springframework.context.ApplicationEventPublisher;
 import com.fandrops.community.domain.feed.ArtistFeed;
 import com.fandrops.community.domain.feed.FeedImage;
 import com.fandrops.community.domain.feed.repository.ArtistFeedRepository;
@@ -40,6 +41,7 @@ class FeedServiceTest {
     @Mock CommentRepository commentRepository;
     @Mock CommentLikeRepository commentLikeRepository;
     @Mock OutboxEventPort outboxEventPort;
+    @Mock ApplicationEventPublisher applicationEventPublisher;
 
     FeedService feedService;
     Clock clock;
@@ -49,7 +51,8 @@ class FeedServiceTest {
         clock = Clock.fixed(Instant.parse("2026-06-01T00:00:00Z"), ZoneOffset.UTC);
         feedService = new FeedService(
                 feedRepository, imageRepository, feedLikeRepository,
-                commentRepository, commentLikeRepository, outboxEventPort, clock);
+                commentRepository, commentLikeRepository, outboxEventPort,
+                applicationEventPublisher, clock);
     }
 
     @Nested

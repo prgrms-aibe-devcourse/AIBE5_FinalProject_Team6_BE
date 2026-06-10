@@ -1,11 +1,13 @@
 package com.fandrops.community.application.feed;
 
+import com.fandrops.community.application.event.NewFeedEvent;
 import com.fandrops.community.application.exception.FeedNotFoundException;
 import com.fandrops.community.application.exception.FeedOwnershipException;
 import com.fandrops.community.application.port.OutboxEvent;
 import com.fandrops.community.application.port.OutboxEventPort;
 import com.fandrops.community.application.port.OutboxEventType;
 import com.fandrops.community.domain.feed.ArtistFeed;
+import org.springframework.context.ApplicationEventPublisher;
 import com.fandrops.community.domain.feed.FeedImage;
 import com.fandrops.community.domain.feed.repository.ArtistFeedRepository;
 import com.fandrops.community.domain.feed.repository.CommentLikeRepository;
@@ -33,6 +35,7 @@ public class FeedService {
     private final CommentRepository commentRepository;
     private final CommentLikeRepository commentLikeRepository;
     private final OutboxEventPort outboxEventPort;
+    private final ApplicationEventPublisher applicationEventPublisher;
     private final Clock clock;
 
     public FeedService(ArtistFeedRepository feedRepository,
@@ -41,6 +44,7 @@ public class FeedService {
                        CommentRepository commentRepository,
                        CommentLikeRepository commentLikeRepository,
                        OutboxEventPort outboxEventPort,
+                       ApplicationEventPublisher applicationEventPublisher,
                        Clock clock) {
         this.feedRepository = feedRepository;
         this.imageRepository = imageRepository;
@@ -48,6 +52,7 @@ public class FeedService {
         this.commentRepository = commentRepository;
         this.commentLikeRepository = commentLikeRepository;
         this.outboxEventPort = outboxEventPort;
+        this.applicationEventPublisher = applicationEventPublisher;
         this.clock = clock;
     }
 
@@ -68,6 +73,7 @@ public class FeedService {
                        "artistId", saved.getArtistId(),
                        "artistMemberId", saved.getArtistMemberId())
         ));
+        applicationEventPublisher.publishEvent(new NewFeedEvent(saved.getId(), saved.getArtistId()));
 
         return toResult(saved, savedImages, false);
     }

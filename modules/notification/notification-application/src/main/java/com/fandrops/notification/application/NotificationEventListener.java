@@ -53,19 +53,30 @@ public class NotificationEventListener {
         publishNotificationUseCase.publish(command);
     }
 
-    // TODO [정환철]: community-application에 NewFeedEvent(Long fanId, Long feedId, Long artistId) 추가 후 아래 활성화
+    // TODO [표지민]: community-application dependency 추가 후 활성화
+    // NewFeedEvent(Long feedId, Long artistId) — artistId로 팔로워 전체 조회 후 발송
     // @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     // public void handleNewFeed(NewFeedEvent event) {
     //     PublishNotificationCommand command = new PublishNotificationCommand(
-    //             "NEW_FEED", event.getFeedId(), "{\"fanId\":" + event.getFanId() + ",\"feedId\":" + event.getFeedId() + "}");
+    //             "NEW_FEED", event.getFeedId(), "{\"artistId\":" + event.getArtistId() + ",\"feedId\":" + event.getFeedId() + "}");
     //     publishNotificationUseCase.publish(command);
     // }
 
-    // TODO [정환철]: community-application에 NewCommentEvent(Long fanId, Long feedId, Long commentId) 추가 후 아래 활성화
+    // TODO [표지민]: community-application dependency 추가 후 활성화
+    // NewCommentEvent(Long commentId, Long feedId, Long parentId, Long artistId) — artistId로 팔로워 전체 조회 후 발송
     // @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    // public void handleNewComment(NewCommentEvent event) { ... }
+    // public void handleNewComment(NewCommentEvent event) {
+    //     PublishNotificationCommand command = new PublishNotificationCommand(
+    //             "NEW_COMMENT", event.getFeedId(), "{\"artistId\":" + event.getArtistId() + ",\"commentId\":" + event.getCommentId() + "}");
+    //     publishNotificationUseCase.publish(command);
+    // }
 
-    // TODO [정환철]: community-application에 ArtistScheduleEvent(Long fanId, Long scheduleId, Long artistId) 추가 후 아래 활성화
+    // TODO [표지민]: community-application dependency 추가 후 활성화
+    // ArtistScheduleEvent(Long scheduleId, Long artistId) — artistId로 팔로워 전체 조회 후 발송
     // @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    // public void handleArtistSchedule(ArtistScheduleEvent event) { ... }
+    // public void handleArtistSchedule(ArtistScheduleEvent event) {
+    //     PublishNotificationCommand command = new PublishNotificationCommand(
+    //             "ARTIST_SCHEDULE", event.getScheduleId(), "{\"artistId\":" + event.getArtistId() + ",\"scheduleId\":" + event.getScheduleId() + "}");
+    //     publishNotificationUseCase.publish(command);
+    // }
 }
