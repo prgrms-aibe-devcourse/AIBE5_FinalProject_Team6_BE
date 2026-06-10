@@ -59,7 +59,7 @@ jobs:
           aws elasticache modify-replication-group \
             --replication-group-id fandrops-prod-redis \
             --auth-token "$PASSWORD" \
-            --auth-token-update-strategy SET \
+            --auth-token-update-strategy ROTATE \
             --apply-immediately \
             --region ap-northeast-2
 
