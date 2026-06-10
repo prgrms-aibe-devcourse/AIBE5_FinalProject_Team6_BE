@@ -225,6 +225,19 @@ class AuthServiceTest {
     }
 
     @Test
+    @DisplayName("소셜 로그인 — 동시 요청으로 중복 저장 시 DuplicateSocialAccountException")
+    void socialLogin_concurrentDuplicate_throwsDuplicateSocialAccountException() {
+        SocialLoginCommand command = new SocialLoginCommand(AuthProvider.KAKAO, "code");
+        OAuthUserInfo userInfo = new OAuthUserInfo("kakao-id", "new@email.com", "nick");
+        when(oAuthClient.getUserInfo(AuthProvider.KAKAO, "code")).thenReturn(userInfo);
+        when(userRepository.findByEmail("new@email.com")).thenReturn(Optional.empty());
+        when(userRepository.findByProviderAndProviderId(AuthProvider.KAKAO, "kakao-id")).thenReturn(Optional.empty());
+        when(userRepository.save(any(Fan.class))).thenThrow(new DuplicateSocialAccountException("이미 등록된 소셜 계정입니다."));
+
+        assertThrows(DuplicateSocialAccountException.class, () -> authService.socialLogin(command));
+    }
+
+    @Test
     @DisplayName("소셜 로그인 — 신규 팬 저장 후 토큰 반환")
     void socialLogin_newFan_savesAndReturnsTokens() {
         SocialLoginCommand command = new SocialLoginCommand(AuthProvider.GOOGLE, "code");

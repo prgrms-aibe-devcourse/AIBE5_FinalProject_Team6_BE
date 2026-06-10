@@ -6,6 +6,7 @@ import com.fandrops.user.application.exception.BannerNotFoundException;
 import com.fandrops.user.application.exception.DuplicateAgencyAccountException;
 import com.fandrops.user.application.exception.DuplicateApplicationException;
 import com.fandrops.user.application.exception.DuplicateEmailException;
+import com.fandrops.user.application.exception.DuplicateSocialAccountException;
 import com.fandrops.user.application.exception.FanNotFoundException;
 import com.fandrops.user.application.exception.InvalidCredentialsException;
 import com.fandrops.user.application.exception.InvalidTokenException;
@@ -41,6 +42,12 @@ public class UserExceptionHandler {
     @ResponseStatus(HttpStatus.CONFLICT)
     public ApiResponse<Void> handleDuplicateEmail(DuplicateEmailException e) {
         return ApiResponse.fail("DUPLICATE_EMAIL", e.getMessage(), false, traceId());
+    }
+
+    @ExceptionHandler(DuplicateSocialAccountException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public ApiResponse<Void> handleDuplicateSocialAccount(DuplicateSocialAccountException e) {
+        return ApiResponse.fail("DUPLICATE_SOCIAL_ACCOUNT", e.getMessage(), false, traceId());
     }
 
     @ExceptionHandler(InvalidCredentialsException.class)

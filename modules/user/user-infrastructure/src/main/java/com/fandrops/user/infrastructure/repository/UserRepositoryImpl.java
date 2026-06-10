@@ -1,5 +1,6 @@
 package com.fandrops.user.infrastructure.repository;
 
+import com.fandrops.user.application.exception.DuplicateSocialAccountException;
 import com.fandrops.user.application.port.UserRepository;
 import com.fandrops.user.domain.AuthProvider;
 import com.fandrops.user.domain.Fan;
@@ -30,7 +31,7 @@ public class UserRepositoryImpl implements UserRepository {
                 if (cause instanceof ConstraintViolationException cve
                         && cve.getConstraintName() != null
                         && cve.getConstraintName().contains("uq_fan_auth_provider_id")) {
-                    throw new IllegalStateException("이미 등록된 소셜 계정입니다.", e);
+                    throw new DuplicateSocialAccountException("이미 등록된 소셜 계정입니다.");
                 }
                 cause = cause.getCause();
             }
