@@ -1,6 +1,9 @@
 package com.fandrops.user.infrastructure.auth;
 
+import com.fandrops.user.application.port.RefreshTokenEntry;
 import com.fandrops.user.application.port.RefreshTokenStore;
+import com.fandrops.user.domain.UserRole;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
@@ -8,6 +11,7 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 import java.util.Optional;
 
+@Slf4j
 @Component
 public class RefreshTokenStoreImpl implements RefreshTokenStore {
 
@@ -24,21 +28,14 @@ public class RefreshTokenStoreImpl implements RefreshTokenStore {
     }
 
     @Override
-    public void save(String refreshToken, Long fanId) {
+    public void save(String refreshToken, Long userId, UserRole role) {
+        // 저장 포맷: "userId:ROLENAME" (예: "42:ADMIN")
+        String value = userId + ":" + role.name();
         redisTemplate.opsForValue().set(
                 KEY_PREFIX + refreshToken,
-                String.valueOf(fanId),
+                value,
                 Duration.ofSeconds(refreshTokenExpireSeconds)
         );
-    }
-
-    @Override
-    public Optional<Long> findFanIdByToken(String refreshToken) {
-        String value = redisTemplate.opsForValue().get(KEY_PREFIX + refreshToken);
-        if (value == null) {
-            return Optional.empty();
-        }
-        return RedisStoreUtils.parseFanId(value);
     }
 
     @Override
@@ -47,11 +44,30 @@ public class RefreshTokenStoreImpl implements RefreshTokenStore {
     }
 
     @Override
-    public Optional<Long> getAndDelete(String refreshToken) {
+    public Optional<RefreshTokenEntry> getAndDelete(String refreshToken) {
         String value = redisTemplate.opsForValue().getAndDelete(KEY_PREFIX + refreshToken);
-        if (value == null) {
+        return parseEntry(value);
+    }
+
+    private Optional<RefreshTokenEntry> parseEntry(String value) {
+        if (value == null) return Optional.empty();
+        int sep = value.indexOf(':');
+        if (sep < 0) {
+            // 이전 포맷(userId만 저장) 하위호환 — FAN으로 간주
+            try {
+                return Optional.of(new RefreshTokenEntry(Long.parseLong(value), UserRole.FAN));
+            } catch (NumberFormatException e) {
+                log.warn("Invalid refresh token payload in Redis");
+                return Optional.empty();
+            }
+        }
+        try {
+            Long userId = Long.parseLong(value.substring(0, sep));
+            UserRole role = UserRole.valueOf(value.substring(sep + 1));
+            return Optional.of(new RefreshTokenEntry(userId, role));
+        } catch (Exception e) {
+            log.warn("Invalid refresh token payload in Redis");
             return Optional.empty();
         }
-        return RedisStoreUtils.parseFanId(value);
     }
 }

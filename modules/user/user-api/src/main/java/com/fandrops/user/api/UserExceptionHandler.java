@@ -2,9 +2,11 @@ package com.fandrops.user.api;
 
 import com.fandrops.common.ApiResponse;
 import com.fandrops.user.application.exception.AgencyApplicationNotFoundException;
+import com.fandrops.user.application.exception.BannerNotFoundException;
 import com.fandrops.user.application.exception.DuplicateAgencyAccountException;
 import com.fandrops.user.application.exception.DuplicateApplicationException;
 import com.fandrops.user.application.exception.DuplicateEmailException;
+import com.fandrops.user.application.exception.DuplicateSocialAccountException;
 import com.fandrops.user.application.exception.FanNotFoundException;
 import com.fandrops.user.application.exception.InvalidCredentialsException;
 import com.fandrops.user.application.exception.InvalidTokenException;
@@ -42,6 +44,12 @@ public class UserExceptionHandler {
         return ApiResponse.fail("DUPLICATE_EMAIL", e.getMessage(), false, traceId());
     }
 
+    @ExceptionHandler(DuplicateSocialAccountException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public ApiResponse<Void> handleDuplicateSocialAccount(DuplicateSocialAccountException e) {
+        return ApiResponse.fail("DUPLICATE_SOCIAL_ACCOUNT", e.getMessage(), false, traceId());
+    }
+
     @ExceptionHandler(InvalidCredentialsException.class)
     @ResponseStatus(HttpStatus.UNAUTHORIZED)
     public ApiResponse<Void> handleInvalidCredentials(InvalidCredentialsException e) {
@@ -64,6 +72,12 @@ public class UserExceptionHandler {
     @ResponseStatus(HttpStatus.NOT_FOUND)
     public ApiResponse<Void> handleAgencyApplicationNotFound(AgencyApplicationNotFoundException e) {
         return ApiResponse.fail("APPLICATION_NOT_FOUND", e.getMessage(), false, traceId());
+    }
+
+    @ExceptionHandler(BannerNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public ApiResponse<Void> handleBannerNotFound(BannerNotFoundException e) {
+        return ApiResponse.fail("BANNER_NOT_FOUND", e.getMessage(), false, traceId());
     }
 
     @ExceptionHandler(DuplicateApplicationException.class)

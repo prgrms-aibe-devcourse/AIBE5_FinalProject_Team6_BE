@@ -78,7 +78,4 @@ public class AuthController extends UserControllerSupport {
         return ResponseEntity.noContent().build();
     }
 
-    private AuthTokenResponse toAuthTokenResponse(AuthTokenResult result) {
-        return new AuthTokenResponse(result.accessToken(), result.refreshToken(), result.expiresIn());
-    }
 }

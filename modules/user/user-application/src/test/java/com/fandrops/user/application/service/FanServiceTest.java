@@ -67,6 +67,32 @@ class FanServiceTest {
     }
 
     @Test
+    @DisplayName("allowNotification만 변경 시 nickname은 그대로 유지")
+    void updateMyInfo_onlyAllowNotification_nicknameUnchanged() {
+        Fan fan = Fan.builder().id(8L).email("a@b.com").nickname("nick")
+                .authProvider(AuthProvider.LOCAL).passwordHash("h").build(); // allowNotification=true (기본값)
+        when(userRepository.findById(8L)).thenReturn(Optional.of(fan));
+        when(userRepository.save(any(Fan.class))).thenReturn(fan);
+
+        fanService.updateMyInfo(new UpdateFanCommand(8L, null, false));
+
+        verify(userRepository).save(argThat(f -> !f.isAllowNotification() && "nick".equals(f.getNickname())));
+    }
+
+    @Test
+    @DisplayName("nickname·allowNotification 모두 null 이면 기존 값 그대로 저장된다")
+    void updateMyInfo_bothFieldsNull_savesWithNoChanges() {
+        Fan fan = Fan.builder().id(8L).email("a@b.com").nickname("nick")
+                .authProvider(AuthProvider.LOCAL).passwordHash("h").build();
+        when(userRepository.findById(8L)).thenReturn(Optional.of(fan));
+        when(userRepository.save(any(Fan.class))).thenReturn(fan);
+
+        fanService.updateMyInfo(new UpdateFanCommand(8L, null, null));
+
+        verify(userRepository).save(argThat(f -> "nick".equals(f.getNickname()) && f.isAllowNotification()));
+    }
+
+    @Test
     @DisplayName("존재하지 않는 fanId 수정 시 FanNotFoundException")
     void updateMyInfo_notFound_throwsFanNotFoundException() {
         when(userRepository.findById(99L)).thenReturn(Optional.empty());

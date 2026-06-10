@@ -42,8 +42,12 @@ public class ApiSecurityConfig {
                         .requestMatchers("/actuator/health", "/actuator/prometheus").permitAll()
                         // 공개 피드 조회 — 비인증 브라우징 허용 (타 모듈 공개 경로 추가 시 여기에 등록)
                         .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/artists/*/feeds").permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/banners/main").permitAll()
                         .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/v1/b2b/apply").permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/v1/admin/auth/login").permitAll()
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
+                        // 재입고 처리 — 운영자(AGENCY) 또는 ADMIN만 호출 가능. Fan 호출 차단.
+                        .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/v1/products/*/restock").hasAnyRole("AGENCY", "ADMIN")
                         .requestMatchers("/api/v1/**").authenticated()
                         .anyRequest().denyAll()
                 )

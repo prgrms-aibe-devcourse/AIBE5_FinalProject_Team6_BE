@@ -81,7 +81,7 @@ Gradle 모듈·담당자: [architecture.md § 도메인 오너십](../architectu
 | Method | Endpoint | 설명 | Request Body | Response |
 | --- | --- | --- | --- | --- |
 | POST | `/auth/signup` | 이메일 회원가입 + 약관 동의 | `email`, `password`, `nickname`, `termsAgreed: true` | `201` `{ fanId, accessToken, refreshToken }` |
-| POST | `/auth/login` | 이메일 로그인 | `email`, `password` | `{ accessToken, refreshToken }` |
+| POST | `/auth/login` | 이메일 로그인 (Fan 전용) | `email`, `password` | `{ accessToken, refreshToken }` — `role=FAN` JWT 발급 |
 | POST | `/auth/social/{provider}` | 소셜 로그인·가입 (`kakao` · `google`) | `code` | `{ accessToken, refreshToken }` — `FAN` 행 upsert |
 | POST | `/auth/password-reset/request` | 비밀번호 재설정 메일 발송 | `email` | `204 No Content` |
 | POST | `/auth/password-reset/confirm` | 재설정 토큰 검증 후 비밀번호 변경 | `token`, `newPassword` | `204 No Content` |
@@ -305,6 +305,7 @@ Toss PG → 서버 비동기 결제 상태 수신. 상세: [payment-flow-reason.
 | POST | `/internal/inventory/reserve` | 재고 예약 (`reserved_qty` ↑, `available_qty` ↓, 이력 기록) | `productId`, `quantity` | `OrderService` |
 | POST | `/internal/inventory/confirm` | 결제 확정 (`reserved_qty` ↓, `total_qty` ↓, 이력 기록) | `productId`, `quantity` | `PaymentService` (웹훅 후) |
 | POST | `/internal/inventory/restore` | 결제 실패 복구 (`reserved_qty` ↓ rollback, `available_qty` ↑, 이력 기록) | `productId`, `quantity` | Saga 보상 |
+| POST | `/internal/inventory/increase` | 재입고 (`total_qty` ↑, `available_qty` ↑, 이력 기록) | `productId`, `quantity` | `RestockAlertService` (F04-05) |
 
 > 멀티모듈 모놀리스에서는 위 표는 **계약(포트) 문서화**용이다. 실제 구현은 HTTP가 아닌 `InventoryReservePort` 등 **interface 직접 호출**.
 
@@ -339,6 +340,7 @@ Toss PG → 서버 비동기 결제 상태 수신. 상세: [payment-flow-reason.
 
 | Method | Endpoint | 모듈 | 담당 | 설명 |
 | --- | --- | --- | --- | --- |
+| POST | `/admin/auth/login` | `user` | 표지민 | Admin 전용 로그인 — `email`, `password` → `role=ADMIN` JWT 발급 (seed: `admin@fandrops.com`) |
 | GET | `/admin/artist-applications` | `user` | 표지민 | 입점 신청 목록 `?status=PENDING` — DB `AGENCY_APPLICATION` ([ERD §4](../erd/erd-design.md#4-agency_account--artist_profile--artist_member--fan)) |
 | PATCH | `/admin/artist-applications/{id}` | `user` | 표지민 | 승인·반려 `status` ("APPROVED | REJECTED"), `rejectReason` (반려 시 필수) |
 | GET | `/admin/monitoring` | platform | 지영재 | 주문·결제·재고 모니터링 `?from`, `to` |
