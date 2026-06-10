@@ -2,6 +2,7 @@ package com.fandrops.user.domain;
 
 import java.time.LocalDateTime;
 import java.util.Objects;
+import java.util.Optional;
 
 public class Banner {
 
@@ -31,17 +32,22 @@ public class Banner {
         return new Builder();
     }
 
-    /** PATCH용 — null 필드는 변경하지 않는다 */
+    /**
+     * PATCH용 — 각 파라미터 의미:
+     *   null            → 변경 없음
+     *   Optional.empty() → null로 클리어 (상시 배너로 전환)
+     *   Optional.of(v)  → v로 변경
+     */
     public void update(String title, String imageUrl, String landingUrl,
                        Integer exposureOrder, Boolean isActive,
-                       LocalDateTime startAt, LocalDateTime endAt) {
+                       Optional<LocalDateTime> startAt, Optional<LocalDateTime> endAt) {
         if (title != null) this.title = title;
         if (imageUrl != null) this.imageUrl = imageUrl;
         if (landingUrl != null) this.landingUrl = landingUrl;
         if (exposureOrder != null) this.exposureOrder = exposureOrder;
         if (isActive != null) this.isActive = isActive;
-        if (startAt != null) this.startAt = startAt;
-        if (endAt != null) this.endAt = endAt;
+        if (startAt != null) this.startAt = startAt.orElse(null);
+        if (endAt != null) this.endAt = endAt.orElse(null);
     }
 
     /** DELETE soft delete */

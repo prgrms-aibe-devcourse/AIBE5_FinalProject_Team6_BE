@@ -35,7 +35,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             try {
                 var claims = jwtProvider.parse(token);
                 var auth = new UsernamePasswordAuthenticationToken(
-                        claims.fanId(),
+                        claims.userId(),
                         null,
                         List.of(new SimpleGrantedAuthority("ROLE_" + claims.role()))
                 );

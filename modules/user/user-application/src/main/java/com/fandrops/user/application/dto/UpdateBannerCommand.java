@@ -1,6 +1,7 @@
 package com.fandrops.user.application.dto;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 public record UpdateBannerCommand(
         String title,
@@ -8,6 +9,6 @@ public record UpdateBannerCommand(
         String landingUrl,
         Integer exposureOrder,
         Boolean isActive,
-        LocalDateTime startAt,
-        LocalDateTime endAt
+        Optional<LocalDateTime> startAt,
+        Optional<LocalDateTime> endAt
 ) {}
