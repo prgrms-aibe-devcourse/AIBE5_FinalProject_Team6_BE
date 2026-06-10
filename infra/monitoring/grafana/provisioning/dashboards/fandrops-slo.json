@@ -296,13 +296,13 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "histogram_quantile(0.95, sum(rate(lettuce_command_completion_delay_seconds_bucket{job=\"fandrops-api\"}[1m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(lettuce_command_completion_seconds_bucket{job=\"fandrops-api\"}[1m])) by (le))",
           "legendFormat": "P95 전체",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "histogram_quantile(0.50, sum(rate(lettuce_command_completion_delay_seconds_bucket{job=\"fandrops-api\"}[1m])) by (le))",
+          "expr": "histogram_quantile(0.50, sum(rate(lettuce_command_completion_seconds_bucket{job=\"fandrops-api\"}[1m])) by (le))",
           "legendFormat": "P50 전체",
           "refId": "B"
         }
@@ -335,7 +335,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(lettuce_command_completion_delay_seconds_count{job=\"fandrops-api\"}[1m])) by (command)",
+          "expr": "sum(rate(lettuce_command_completion_seconds_count{job=\"fandrops-api\"}[1m])) by (command)",
           "legendFormat": "{{command}}",
           "refId": "A"
         }
