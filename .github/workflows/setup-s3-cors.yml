@@ -1,0 +1,66 @@
+name: Setup S3 CORS
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'S3 버킷에 CORS 정책을 적용합니다. 진행하려면 "yes" 입력'
+        required: true
+        default: 'no'
+
+jobs:
+  setup-s3-cors:
+    if: ${{ github.event.inputs.confirm == 'yes' }}
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: AWS 자격증명 설정 (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-northeast-2
+
+      - name: S3 CORS 정책 적용
+        run: |
+          BUCKET="fandrops-prod-storage-495264909330-ap-northeast-2-an"
+
+          aws s3api put-bucket-cors \
+            --bucket "$BUCKET" \
+            --cors-configuration '{
+              "CORSRules": [
+                {
+                  "AllowedOrigins": [
+                    "https://fandrops.site",
+                    "http://localhost:3000"
+                  ],
+                  "AllowedMethods": ["PUT"],
+                  "AllowedHeaders": ["*"],
+                  "ExposeHeaders": ["ETag"],
+                  "MaxAgeSeconds": 3000
+                }
+              ]
+            }'
+
+          echo "CORS 정책 적용 완료"
+
+      - name: CORS 정책 확인
+        run: |
+          BUCKET="fandrops-prod-storage-495264909330-ap-northeast-2-an"
+
+          echo "적용된 CORS 정책:"
+          aws s3api get-bucket-cors --bucket "$BUCKET"
+
+      - name: 완료
+        run: |
+          echo "✅ S3 CORS 설정 완료"
+          echo ""
+          echo "적용 내용:"
+          echo "  버킷: fandrops-prod-storage-495264909330-ap-northeast-2-an"
+          echo "  허용 오리진: https://fandrops.site, http://localhost:3000"
+          echo "  허용 메서드: PUT"
+          echo "  허용 헤더: *"
+          echo "  노출 헤더: ETag"
+          echo "  MaxAgeSeconds: 3000"
