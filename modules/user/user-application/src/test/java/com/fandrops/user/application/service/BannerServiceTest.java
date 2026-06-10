@@ -85,7 +85,7 @@ class BannerServiceTest {
 
         UpdateBannerCommand command = new UpdateBannerCommand(
                 null, null, null, null, null, null,
-                LocalDateTime.of(2025, 1, 1, 0, 0)); // start보다 이전
+                Optional.of(LocalDateTime.of(2025, 1, 1, 0, 0))); // start보다 이전
 
         assertThrows(IllegalArgumentException.class, () -> bannerService.updateBanner(1L, command));
         verify(bannerRepository, never()).save(any());
@@ -152,6 +152,113 @@ class BannerServiceTest {
         verify(bannerRepository).save(banner);
         assertEquals("테스트 배너", banner.getTitle());
         assertEquals("https://cdn.fandrops.com/banner.jpg", banner.getImageUrl());
+    }
+
+    @Test
+    @DisplayName("배너 수정 — Optional.of(value)로 startAt 값 변경")
+    void updateBanner_setStartAtWithOptionalOf_updatesStartAt() {
+        Banner banner = Banner.builder()
+                .id(1L).bannerType(BannerType.MAIN).title("배너").imageUrl("https://img.jpg")
+                .landingUrl("https://landing.com").exposureOrder(1).isActive(true)
+                .startAt(LocalDateTime.of(2025, 1, 1, 0, 0))
+                .endAt(LocalDateTime.of(2025, 12, 31, 0, 0)).build();
+        when(bannerRepository.findById(1L)).thenReturn(Optional.of(banner));
+        when(bannerRepository.save(any(Banner.class))).thenReturn(banner);
+
+        LocalDateTime newStart = LocalDateTime.of(2025, 7, 1, 0, 0);
+        bannerService.updateBanner(1L, new UpdateBannerCommand(
+                null, null, null, null, null, Optional.of(newStart), null));
+
+        assertEquals(newStart, banner.getStartAt());
+        assertEquals(LocalDateTime.of(2025, 12, 31, 0, 0), banner.getEndAt()); // endAt 유지
+    }
+
+    @Test
+    @DisplayName("배너 수정 — 새 startAt이 기존 endAt보다 이후이면 IllegalArgumentException")
+    void updateBanner_setStartAtAfterExistingEndAt_throwsIllegalArgumentException() {
+        Banner banner = Banner.builder()
+                .id(1L).bannerType(BannerType.MAIN).title("배너").imageUrl("https://img.jpg")
+                .landingUrl("https://landing.com").exposureOrder(1).isActive(true)
+                .startAt(LocalDateTime.of(2025, 1, 1, 0, 0))
+                .endAt(LocalDateTime.of(2025, 6, 1, 0, 0)).build();
+        when(bannerRepository.findById(1L)).thenReturn(Optional.of(banner));
+
+        UpdateBannerCommand command = new UpdateBannerCommand(
+                null, null, null, null, null,
+                Optional.of(LocalDateTime.of(2025, 12, 31, 0, 0)), // 기존 endAt(6월)보다 이후
+                null);
+
+        assertThrows(IllegalArgumentException.class, () -> bannerService.updateBanner(1L, command));
+        verify(bannerRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("배너 수정 — startAt/endAt 모두 Optional.of()인데 start가 end보다 이후이면 IllegalArgumentException")
+    void updateBanner_bothOptionalOfWithInvalidRange_throwsIllegalArgumentException() {
+        Banner banner = sampleBanner(1L);
+        when(bannerRepository.findById(1L)).thenReturn(Optional.of(banner));
+
+        UpdateBannerCommand command = new UpdateBannerCommand(
+                null, null, null, null, null,
+                Optional.of(LocalDateTime.of(2025, 12, 31, 0, 0)),
+                Optional.of(LocalDateTime.of(2025, 6, 1, 0, 0))); // end < start
+
+        assertThrows(IllegalArgumentException.class, () -> bannerService.updateBanner(1L, command));
+        verify(bannerRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("배너 수정 — startAt Optional.empty() → null로 클리어 (상시 배너 전환)")
+    void updateBanner_clearStartAt_setsNullStartAt() {
+        Banner banner = Banner.builder()
+                .id(1L).bannerType(BannerType.MAIN).title("배너").imageUrl("https://img.jpg")
+                .landingUrl("https://landing.com").exposureOrder(1).isActive(true)
+                .startAt(LocalDateTime.of(2025, 6, 1, 0, 0))
+                .endAt(LocalDateTime.of(2025, 12, 31, 0, 0)).build();
+        when(bannerRepository.findById(1L)).thenReturn(Optional.of(banner));
+        when(bannerRepository.save(any(Banner.class))).thenReturn(banner);
+
+        bannerService.updateBanner(1L, new UpdateBannerCommand(
+                null, null, null, null, null, Optional.empty(), null));
+
+        assertNull(banner.getStartAt());
+        assertEquals(LocalDateTime.of(2025, 12, 31, 0, 0), banner.getEndAt()); // endAt 유지
+    }
+
+    @Test
+    @DisplayName("배너 수정 — endAt Optional.empty() → null로 클리어 (상시 배너 전환)")
+    void updateBanner_clearEndAt_setsNullEndAt() {
+        Banner banner = Banner.builder()
+                .id(1L).bannerType(BannerType.MAIN).title("배너").imageUrl("https://img.jpg")
+                .landingUrl("https://landing.com").exposureOrder(1).isActive(true)
+                .startAt(LocalDateTime.of(2025, 6, 1, 0, 0))
+                .endAt(LocalDateTime.of(2025, 12, 31, 0, 0)).build();
+        when(bannerRepository.findById(1L)).thenReturn(Optional.of(banner));
+        when(bannerRepository.save(any(Banner.class))).thenReturn(banner);
+
+        bannerService.updateBanner(1L, new UpdateBannerCommand(
+                null, null, null, null, null, null, Optional.empty()));
+
+        assertEquals(LocalDateTime.of(2025, 6, 1, 0, 0), banner.getStartAt()); // startAt 유지
+        assertNull(banner.getEndAt());
+    }
+
+    @Test
+    @DisplayName("배너 수정 — startAt/endAt 모두 Optional.empty() → 둘 다 null (완전 상시 배너)")
+    void updateBanner_clearBothDates_setsNullDates() {
+        Banner banner = Banner.builder()
+                .id(1L).bannerType(BannerType.MAIN).title("배너").imageUrl("https://img.jpg")
+                .landingUrl("https://landing.com").exposureOrder(1).isActive(true)
+                .startAt(LocalDateTime.of(2025, 6, 1, 0, 0))
+                .endAt(LocalDateTime.of(2025, 12, 31, 0, 0)).build();
+        when(bannerRepository.findById(1L)).thenReturn(Optional.of(banner));
+        when(bannerRepository.save(any(Banner.class))).thenReturn(banner);
+
+        bannerService.updateBanner(1L, new UpdateBannerCommand(
+                null, null, null, null, null, Optional.empty(), Optional.empty()));
+
+        assertNull(banner.getStartAt());
+        assertNull(banner.getEndAt());
     }
 
     @Test

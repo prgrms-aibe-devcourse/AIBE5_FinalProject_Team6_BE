@@ -1,0 +1,135 @@
+name: Setup Redis AUTH Token
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'ElastiCache AUTH Token을 활성화합니다. 재시작 시 약 30초 Redis 연결 중단. 진행하려면 "yes" 입력'
+        required: true
+        default: 'no'
+
+jobs:
+  setup-redis-auth:
+    if: ${{ github.event.inputs.confirm == 'yes' }}
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: AWS 자격증명 설정 (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-northeast-2
+
+      - name: EC2 환경파일에 REDIS_PASSWORD 추가 (SSM)
+        run: |
+          INSTANCE="${{ secrets.EC2_INSTANCE_ID }}"
+          PASSWORD="${{ secrets.REDIS_PASSWORD }}"
+
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE" \
+            --document-name "AWS-RunShellScript" \
+            --parameters "{\"commands\":[
+              \"if grep -q '^REDIS_PASSWORD=' /etc/fandrops/fandrops-prod.conf; then sed -i 's|^REDIS_PASSWORD=.*|REDIS_PASSWORD=${PASSWORD}|' /etc/fandrops/fandrops-prod.conf; else echo 'REDIS_PASSWORD=${PASSWORD}' >> /etc/fandrops/fandrops-prod.conf; fi\",
+              \"echo 'REDIS_PASSWORD 설정 완료'\"
+            ]}" \
+            --query "Command.CommandId" \
+            --output text)
+
+          echo "SSM Command ID: $COMMAND_ID"
+
+          for i in $(seq 1 12); do
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" \
+              --instance-id "$INSTANCE" \
+              --query "Status" --output text 2>/dev/null || echo "Pending")
+            echo "[$i/12] 상태: $STATUS"
+            [ "$STATUS" = "Success"  ] && break
+            [ "$STATUS" = "Failed"   ] && { echo "환경파일 수정 실패"; exit 1; }
+            sleep 5
+          done
+          [ "$STATUS" = "Success" ] || { echo "타임아웃"; exit 1; }
+
+      - name: ElastiCache AUTH Token 활성화 (apply-immediately)
+        run: |
+          PASSWORD="${{ secrets.REDIS_PASSWORD }}"
+
+          aws elasticache modify-replication-group \
+            --replication-group-id fandrops-prod-redis \
+            --auth-token "$PASSWORD" \
+            --auth-token-update-strategy ROTATE \
+            --apply-immediately \
+            --region ap-northeast-2
+
+          echo "ElastiCache 수정 요청 완료. MODIFYING → AVAILABLE 대기 중..."
+
+          for i in $(seq 1 24); do
+            STATE=$(aws elasticache describe-replication-groups \
+              --replication-group-id fandrops-prod-redis \
+              --query "ReplicationGroups[0].Status" \
+              --output text)
+            echo "[$i/24] 상태: $STATE"
+            [ "$STATE" = "available" ] && break
+            sleep 15
+          done
+          [ "$STATE" = "available" ] || { echo "ElastiCache AVAILABLE 타임아웃 (6분 초과)"; exit 1; }
+
+      - name: 앱 재시작 (SSM)
+        run: |
+          INSTANCE="${{ secrets.EC2_INSTANCE_ID }}"
+
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE" \
+            --document-name "AWS-RunShellScript" \
+            --parameters '{"commands":[
+              "systemctl restart fandrops",
+              "echo 앱 재시작 완료"
+            ]}' \
+            --query "Command.CommandId" \
+            --output text)
+
+          sleep 30
+
+          STATUS=$(aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$INSTANCE" \
+            --query "Status" --output text 2>/dev/null || echo "Unknown")
+          echo "재시작 결과: $STATUS"
+          [ "$STATUS" = "Success" ] || { echo "앱 재시작 실패"; exit 1; }
+
+      - name: 헬스체크
+        run: |
+          INSTANCE="${{ secrets.EC2_INSTANCE_ID }}"
+
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE" \
+            --document-name "AWS-RunShellScript" \
+            --parameters '{"commands":[
+              "curl -sf http://localhost:8080/actuator/health | grep -q UP && echo APP_OK"
+            ]}' \
+            --query "Command.CommandId" \
+            --output text)
+
+          sleep 20
+
+          OUTPUT=$(aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$INSTANCE" \
+            --query "StandardOutputContent" --output text 2>/dev/null || true)
+
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep -q "APP_OK" || { echo "헬스체크 실패 — Redis 연결 확인 필요"; exit 1; }
+
+      - name: 완료
+        run: |
+          echo "✅ Redis AUTH Token 설정 완료"
+          echo ""
+          echo "사전 준비 확인:"
+          echo "  GitHub Secret REDIS_PASSWORD 등록 여부"
+          echo ""
+          echo "적용 내용:"
+          echo "  EC2 /etc/fandrops/fandrops-prod.conf — REDIS_PASSWORD 추가"
+          echo "  ElastiCache fandrops-prod-redis — AUTH Token 활성화"
+          echo "  fandrops 앱 재시작 완료"
