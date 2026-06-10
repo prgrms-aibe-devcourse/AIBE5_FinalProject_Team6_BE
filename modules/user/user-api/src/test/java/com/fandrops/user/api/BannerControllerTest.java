@@ -42,4 +42,15 @@ class BannerControllerTest {
         assertEquals(HttpStatus.OK, response.getStatusCode());
         verify(bannerService).getActiveMainBanners();
     }
+
+    @Test
+    @DisplayName("활성 배너 없을 때 → 200 OK, 빈 목록 반환")
+    void getMainBanners_emptyList_returns200() {
+        when(bannerService.getActiveMainBanners()).thenReturn(List.of());
+
+        ResponseEntity<?> response = controller.getMainBanners();
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        verify(bannerService).getActiveMainBanners();
+    }
 }

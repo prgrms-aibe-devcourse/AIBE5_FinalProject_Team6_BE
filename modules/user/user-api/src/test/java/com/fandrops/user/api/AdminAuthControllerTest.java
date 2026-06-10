@@ -3,6 +3,7 @@ package com.fandrops.user.api;
 import com.fandrops.user.api.dto.LoginRequest;
 import com.fandrops.user.application.dto.AuthTokenResult;
 import com.fandrops.user.application.dto.LoginCommand;
+import com.fandrops.user.application.exception.InvalidCredentialsException;
 import com.fandrops.user.application.service.AuthService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -15,6 +16,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -43,5 +45,15 @@ class AdminAuthControllerTest {
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         verify(authService).adminLogin(any(LoginCommand.class));
+    }
+
+    @Test
+    @DisplayName("잘못된 자격증명 → InvalidCredentialsException 전파")
+    void adminLogin_invalidCredentials_propagatesException() {
+        LoginRequest request = new LoginRequest("admin@test.com", "wrong-pass");
+        when(authService.adminLogin(any(LoginCommand.class)))
+                .thenThrow(new InvalidCredentialsException("이메일 또는 비밀번호가 올바르지 않습니다."));
+
+        assertThrows(InvalidCredentialsException.class, () -> controller.adminLogin(request));
     }
 }
