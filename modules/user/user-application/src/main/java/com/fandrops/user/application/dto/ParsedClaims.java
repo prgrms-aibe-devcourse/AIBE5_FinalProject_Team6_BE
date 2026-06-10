@@ -1,3 +1,3 @@
 package com.fandrops.user.application.dto;
 
-public record ParsedClaims(Long fanId, String role) {}
+public record ParsedClaims(Long userId, String role) {}
