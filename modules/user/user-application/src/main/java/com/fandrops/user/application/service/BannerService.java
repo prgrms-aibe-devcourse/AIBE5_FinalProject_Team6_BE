@@ -63,8 +63,8 @@ public class BannerService {
     public BannerResult updateBanner(Long id, UpdateBannerCommand command) {
         Banner banner = bannerRepository.findById(id)
                 .orElseThrow(() -> new BannerNotFoundException("존재하지 않는 배너입니다. id=" + id));
-        LocalDateTime effectiveStart = command.startAt() != null ? command.startAt() : banner.getStartAt();
-        LocalDateTime effectiveEnd = command.endAt() != null ? command.endAt() : banner.getEndAt();
+        LocalDateTime effectiveStart = command.startAt() != null ? command.startAt().orElse(null) : banner.getStartAt();
+        LocalDateTime effectiveEnd = command.endAt() != null ? command.endAt().orElse(null) : banner.getEndAt();
         if (effectiveStart != null && effectiveEnd != null && effectiveStart.isAfter(effectiveEnd)) {
             throw new IllegalArgumentException("배너 종료 시각이 시작 시각보다 이를 수 없습니다.");
         }
