@@ -174,6 +174,40 @@ class BannerServiceTest {
     }
 
     @Test
+    @DisplayName("배너 수정 — 새 startAt이 기존 endAt보다 이후이면 IllegalArgumentException")
+    void updateBanner_setStartAtAfterExistingEndAt_throwsIllegalArgumentException() {
+        Banner banner = Banner.builder()
+                .id(1L).bannerType(BannerType.MAIN).title("배너").imageUrl("https://img.jpg")
+                .landingUrl("https://landing.com").exposureOrder(1).isActive(true)
+                .startAt(LocalDateTime.of(2025, 1, 1, 0, 0))
+                .endAt(LocalDateTime.of(2025, 6, 1, 0, 0)).build();
+        when(bannerRepository.findById(1L)).thenReturn(Optional.of(banner));
+
+        UpdateBannerCommand command = new UpdateBannerCommand(
+                null, null, null, null, null,
+                Optional.of(LocalDateTime.of(2025, 12, 31, 0, 0)), // 기존 endAt(6월)보다 이후
+                null);
+
+        assertThrows(IllegalArgumentException.class, () -> bannerService.updateBanner(1L, command));
+        verify(bannerRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("배너 수정 — startAt/endAt 모두 Optional.of()인데 start가 end보다 이후이면 IllegalArgumentException")
+    void updateBanner_bothOptionalOfWithInvalidRange_throwsIllegalArgumentException() {
+        Banner banner = sampleBanner(1L);
+        when(bannerRepository.findById(1L)).thenReturn(Optional.of(banner));
+
+        UpdateBannerCommand command = new UpdateBannerCommand(
+                null, null, null, null, null,
+                Optional.of(LocalDateTime.of(2025, 12, 31, 0, 0)),
+                Optional.of(LocalDateTime.of(2025, 6, 1, 0, 0))); // end < start
+
+        assertThrows(IllegalArgumentException.class, () -> bannerService.updateBanner(1L, command));
+        verify(bannerRepository, never()).save(any());
+    }
+
+    @Test
     @DisplayName("배너 수정 — startAt Optional.empty() → null로 클리어 (상시 배너 전환)")
     void updateBanner_clearStartAt_setsNullStartAt() {
         Banner banner = Banner.builder()
