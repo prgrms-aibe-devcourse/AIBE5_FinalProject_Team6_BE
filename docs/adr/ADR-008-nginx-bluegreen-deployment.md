@@ -168,6 +168,20 @@ B안(단일 EC2 Blue/Green)은 추가 비용 없이 배포 다운타임을 0~2�
 
 ---
 
+## 포트폴리오 스토리라인
+
+> AWS 예산 90,000원 제약으로 ALB를 사용할 수 없는 환경에서, Nginx upstream과 systemd 이중 슬롯 구조를 직접 구현해 무중단 Blue/Green 배포를 달성했습니다.
+
+> 배포 중 t3.small(2GB) 메모리에서 두 Spring Boot 프로세스가 동시 기동되는 구간의 OOM 위험을 `-Xmx768m` heap 제한과 Graceful Shutdown 30초 유예로 해소했으며, `proxy_next_upstream`으로 Nginx reload 순간 클라이언트 오류 노출을 최소화했습니다.
+
+> Phase 4에서 EC2-2를 단기 기동해 k6 부하 테스트를 분산 환경에서 실행했습니다. 재고는 DB 단일 UPDATE(`WHERE availableQty >= qty`) + 낙관락, 결제는 `PESSIMISTIC_WRITE` + unique index 조합으로 어느 서버에서 요청을 처리해도 오버셀·중복결제가 발생하지 않음을 수치로 검증했습니다.
+
+> 코드 분석 과정에서 `SseEmitterRegistry`가 in-memory `ConcurrentHashMap`으로 SSE 연결을 관리해 분산 환경에서 대기열 상태 메시지가 유실될 수 있음을 직접 발견했습니다. 정합성(오버셀·중복결제)은 DB 레벨에서 보장되므로 비즈니스 무결성에는 영향이 없으나, Redis Pub/Sub 브로드캐스트로 해소할 수 있는 UX 한계로 명시했습니다.
+
+> ALB 없는 구조의 SPOF 한계와 SSE 분산 문제를 직접 발견하고 개선 방향까지 제시한 것이 단순 구현을 넘어 운영 관점의 설계 사고를 보여주는 포인트입니다.
+
+---
+
 ## 관련 문서
 
 | 문서 | 경로 |
