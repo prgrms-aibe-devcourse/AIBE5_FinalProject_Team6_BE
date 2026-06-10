@@ -49,6 +49,13 @@ class OutboxEventSchedulerTest {
                 .build();
     }
 
+    @SuppressWarnings("unchecked")
+    private List<Notification> capturedSaveAll() {
+        ArgumentCaptor<List<Notification>> captor = ArgumentCaptor.forClass((Class) List.class);
+        verify(notificationPort).saveAll(captor.capture());
+        return captor.getValue();
+    }
+
     @Test
     @DisplayName("PAYMENT_SUCCESS 처리 성공 — notification 저장, status=PUBLISHED")
     void process_paymentSuccess_savesNotificationAndPublishes() {
@@ -60,10 +67,10 @@ class OutboxEventSchedulerTest {
 
         assertEquals(OutboxStatus.PUBLISHED, event.getStatus());
         assertNotNull(event.getPublishedAt());
-        ArgumentCaptor<Notification> captor = ArgumentCaptor.forClass(Notification.class);
-        verify(notificationPort).save(captor.capture());
-        assertEquals(42L, captor.getValue().getFanId());
-        assertEquals(NotificationType.PAYMENT_SUCCESS, captor.getValue().getType());
+        List<Notification> saved = capturedSaveAll();
+        assertEquals(1, saved.size());
+        assertEquals(42L, saved.get(0).getFanId());
+        assertEquals(NotificationType.PAYMENT_SUCCESS, saved.get(0).getType());
         verify(outboxEventPort).update(event);
     }
 
@@ -77,11 +84,11 @@ class OutboxEventSchedulerTest {
         scheduler.process();
 
         assertEquals(OutboxStatus.PUBLISHED, event.getStatus());
-        ArgumentCaptor<Notification> captor = ArgumentCaptor.forClass(Notification.class);
-        verify(notificationPort).save(captor.capture());
-        assertEquals(NotificationType.PAYMENT_FAILED, captor.getValue().getType());
-        assertEquals("결제가 실패하였습니다. 다시 시도해 주세요.", captor.getValue().getMessage());
-        assertEquals(55L, captor.getValue().getFanId());
+        List<Notification> saved = capturedSaveAll();
+        assertEquals(1, saved.size());
+        assertEquals(NotificationType.PAYMENT_FAILED, saved.get(0).getType());
+        assertEquals("결제가 실패하였습니다. 다시 시도해 주세요.", saved.get(0).getMessage());
+        assertEquals(55L, saved.get(0).getFanId());
     }
 
     @Test
@@ -92,9 +99,9 @@ class OutboxEventSchedulerTest {
 
         scheduler.process();
 
-        ArgumentCaptor<Notification> captor = ArgumentCaptor.forClass(Notification.class);
-        verify(notificationPort).save(captor.capture());
-        assertEquals(77L, captor.getValue().getFanId());
+        List<Notification> saved = capturedSaveAll();
+        assertEquals(1, saved.size());
+        assertEquals(77L, saved.get(0).getFanId());
         verify(fanIdResolverPort, never()).findFanIdByOrderId(any());
     }
 
@@ -109,7 +116,7 @@ class OutboxEventSchedulerTest {
 
         assertEquals(1, event.getRetryCount());
         assertEquals(OutboxStatus.PENDING, event.getStatus());
-        verify(notificationPort, never()).save(any());
+        verify(notificationPort, never()).saveAll(any());
         verify(outboxEventPort).update(event);
     }
 
@@ -122,11 +129,11 @@ class OutboxEventSchedulerTest {
         scheduler.process();
 
         assertEquals(OutboxStatus.PUBLISHED, event.getStatus());
-        ArgumentCaptor<Notification> captor = ArgumentCaptor.forClass(Notification.class);
-        verify(notificationPort).save(captor.capture());
-        assertEquals(88L, captor.getValue().getFanId());
-        assertEquals(NotificationType.RESTOCK, captor.getValue().getType());
-        assertEquals("관심 상품이 재입고되었습니다.", captor.getValue().getMessage());
+        List<Notification> saved = capturedSaveAll();
+        assertEquals(1, saved.size());
+        assertEquals(88L, saved.get(0).getFanId());
+        assertEquals(NotificationType.RESTOCK, saved.get(0).getType());
+        assertEquals("관심 상품이 재입고되었습니다.", saved.get(0).getMessage());
         verify(fanIdResolverPort, never()).findFanIdByOrderId(any());
     }
 
@@ -137,7 +144,7 @@ class OutboxEventSchedulerTest {
 
         scheduler.process();
 
-        verify(notificationPort, never()).save(any());
+        verify(notificationPort, never()).saveAll(any());
         verify(outboxEventPort, never()).update(any());
     }
 
@@ -151,7 +158,7 @@ class OutboxEventSchedulerTest {
 
         assertEquals(1, event.getRetryCount());
         assertEquals(OutboxStatus.PENDING, event.getStatus());
-        verify(notificationPort, never()).save(any());
+        verify(notificationPort, never()).saveAll(any());
         verify(outboxEventPort).update(event);
     }
 
@@ -168,5 +175,77 @@ class OutboxEventSchedulerTest {
 
         assertEquals(5, event.getRetryCount());
         assertEquals(OutboxStatus.FAILED, event.getStatus());
+    }
+
+    @Test
+    @DisplayName("NEW_FEED — artistId 팔로워 전체에게 Batch 알림 저장")
+    void process_newFeed_sendsToAllFollowers() {
+        OutboxEvent event = buildEvent("NEW_FEED", 10L, "{\"artistId\":1,\"feedId\":10}");
+        when(outboxEventPort.findPending(50)).thenReturn(List.of(event));
+        when(fanIdResolverPort.findFollowerFanIdsByArtistId(1L)).thenReturn(List.of(101L, 102L, 103L));
+
+        scheduler.process();
+
+        assertEquals(OutboxStatus.PUBLISHED, event.getStatus());
+        List<Notification> saved = capturedSaveAll();
+        assertEquals(3, saved.size());
+        assertTrue(saved.stream().allMatch(n -> n.getType() == NotificationType.NEW_FEED));
+        assertEquals(List.of(101L, 102L, 103L), saved.stream().map(Notification::getFanId).toList());
+    }
+
+    @Test
+    @DisplayName("NEW_FEED — 팔로워 없으면 알림 저장 없이 PUBLISHED")
+    void process_newFeed_noFollowers_publishedWithoutNotification() {
+        OutboxEvent event = buildEvent("NEW_FEED", 10L, "{\"artistId\":1,\"feedId\":10}");
+        when(outboxEventPort.findPending(50)).thenReturn(List.of(event));
+        when(fanIdResolverPort.findFollowerFanIdsByArtistId(1L)).thenReturn(List.of());
+
+        scheduler.process();
+
+        assertEquals(OutboxStatus.PUBLISHED, event.getStatus());
+        verify(notificationPort, never()).saveAll(any());
+    }
+
+    @Test
+    @DisplayName("NEW_COMMENT — parentId 있음 → 부모 댓글 작성자에게 알림")
+    void process_newComment_withParentId_sendsToParentAuthor() {
+        OutboxEvent event = buildEvent("NEW_COMMENT", 20L, "{\"commentId\":5,\"parentId\":3}");
+        when(outboxEventPort.findPending(50)).thenReturn(List.of(event));
+        when(fanIdResolverPort.findFanIdByCommentId(3L)).thenReturn(Optional.of(99L));
+
+        scheduler.process();
+
+        assertEquals(OutboxStatus.PUBLISHED, event.getStatus());
+        List<Notification> saved = capturedSaveAll();
+        assertEquals(1, saved.size());
+        assertEquals(99L, saved.get(0).getFanId());
+        assertEquals(NotificationType.NEW_COMMENT, saved.get(0).getType());
+    }
+
+    @Test
+    @DisplayName("NEW_COMMENT — parentId null(최상위 댓글) → 알림 없이 PUBLISHED")
+    void process_newComment_noParentId_publishedWithoutNotification() {
+        OutboxEvent event = buildEvent("NEW_COMMENT", 20L, "{\"commentId\":5,\"parentId\":null}");
+        when(outboxEventPort.findPending(50)).thenReturn(List.of(event));
+
+        scheduler.process();
+
+        assertEquals(OutboxStatus.PUBLISHED, event.getStatus());
+        verify(notificationPort, never()).saveAll(any());
+    }
+
+    @Test
+    @DisplayName("ARTIST_SCHEDULE — artistId 팔로워 전체에게 Batch 알림 저장")
+    void process_artistSchedule_sendsToAllFollowers() {
+        OutboxEvent event = buildEvent("ARTIST_SCHEDULE", 30L, "{\"artistId\":2,\"scheduleId\":30}");
+        when(outboxEventPort.findPending(50)).thenReturn(List.of(event));
+        when(fanIdResolverPort.findFollowerFanIdsByArtistId(2L)).thenReturn(List.of(201L, 202L));
+
+        scheduler.process();
+
+        assertEquals(OutboxStatus.PUBLISHED, event.getStatus());
+        List<Notification> saved = capturedSaveAll();
+        assertEquals(2, saved.size());
+        assertTrue(saved.stream().allMatch(n -> n.getType() == NotificationType.ARTIST_SCHEDULE));
     }
 }

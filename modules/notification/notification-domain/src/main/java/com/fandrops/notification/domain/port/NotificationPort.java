@@ -6,6 +6,7 @@ import java.util.Optional;
 
 public interface NotificationPort {
     Notification save(Notification notification);
+    List<Notification> saveAll(List<Notification> notifications);
     List<Notification> findByFanId(Long fanId, Long cursorId, int size);
     Optional<Notification> findByIdAndFanId(Long notificationId, Long fanId);
 }
