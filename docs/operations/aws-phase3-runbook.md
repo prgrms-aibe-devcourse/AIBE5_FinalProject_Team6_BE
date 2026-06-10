@@ -12,7 +12,7 @@ Phase 2(자동화·관측·트래픽 제어)에서 Phase 3(고도화·FE 연동�
 | 항목 | 내용 |
 | --- | --- |
 | 대상 환경 | AWS 단일 prod (Phase 2와 동일) |
-| Phase 3 범위 | Redis 관측 추가 · DNS 설정 · Redis AUTH 보안 강화 · S3 CORS · k6 부하 테스트 스크립트 |
+| Phase 3 범위 | Redis 관측 추가 · DNS 설정 · Redis AUTH 보안 강화 · S3 CORS · k6 부하 테스트 스크립트 · Blue/Green 무중단 배포 |
 | 현재 상태 | **Phase 3 핵심 완료** |
 | 미완료 | Grafana 커스텀 메트릭 알람 NoData — 형성빈·표지민 MeterRegistry 등록 후 활성화 예정 (#191) |
 
@@ -26,6 +26,7 @@ Phase 2(자동화·관측·트래픽 제어)에서 Phase 3(고도화·FE 연동�
 | DNS api.fandrops.site | — | 가비아 A 레코드 추가 |
 | Redis AUTH Token 활성화 | #197 | setup-redis-auth.yml workflow_dispatch |
 | S3 CORS 설정 | #198 | setup-s3-cors.yml workflow_dispatch |
+| **Blue/Green 무중단 배포** | — | systemd 이중 슬롯 + Nginx active.conf 포트 스위칭 |
 
 ---
 
@@ -311,7 +312,61 @@ k6 run --out experimental-prometheus-rw \
 
 ---
 
-## 8. 트러블슈팅 기록
+## 8. Blue/Green 무중단 배포
+
+### 8-1. 배경
+
+Phase 2 CD는 `systemctl restart fandrops`로 배포했다. Spring Boot Graceful Shutdown(30s) 설정이 있어도 재시작 구간에 새 요청을 받지 못하는 30~60초 다운타임이 발생했다.
+Phase 4 부하 테스트에서 배포 중 k6를 동시에 실행해 5xx 0건을 증명하려면 무중단 배포가 필수다.
+ALB가 없는 예산 제약 환경에서 Nginx upstream 포트 스위칭으로 동일 효과를 구현했다.
+
+**왜 ALB를 쓰지 않는가:**
+ALB 고정 요금만 ~22,600원/월 → 현재 예산(90,000원) 초과. 자세한 비용 검토와 아키텍처 의사결정은 [nginx-bluegreen-strategy.md](./nginx-bluegreen-strategy.md) 참고.
+
+### 8-2. 구조
+
+```
+EC2 1대
+├── Nginx :80
+│     └─ upstream fandrops_backend
+│           include /etc/nginx/fandrops-active.conf  ← 배포 시 이 파일만 교체
+├── Spring Boot blue  :8081  ← 평상시 active
+└── Spring Boot green :8082  ← 배포 시만 기동, 전환 후 종료
+```
+
+배포 시에만 두 프로세스가 동시에 존재하고, 전환 완료 후 구 슬롯이 종료된다. 상시 운영은 단일 프로세스다.
+
+### 8-3. 핵심 구성 파일
+
+| 파일 | 역할 |
+| --- | --- |
+| `/etc/systemd/system/fandrops-blue.service` | Spring Boot blue 슬롯 (:8081), `-Xmx768m` |
+| `/etc/systemd/system/fandrops-green.service` | Spring Boot green 슬롯 (:8082), `-Xmx768m` |
+| `/etc/fandrops/active-slot` | 현재 active 슬롯 기록 (`blue` 또는 `green`) |
+| `/etc/nginx/fandrops-active.conf` | 현재 upstream 포트 정의, 배포 스크립트가 교체 |
+
+### 8-4. t3.small 메모리 관리
+
+기존 단일 프로세스: `-Xmx1024m`. 두 프로세스 동시 기동 시 heap 2GB → OOM 위험.
+각 슬롯을 `-Xmx768m`으로 설정 → 동시 기동 peak 1.5GB heap + OS 300MB ≈ 1.8GB, t3.small 2GB 내 수용.
+
+### 8-5. 배포 흐름 요약
+
+```
+1. 비활성 슬롯 JAR 교체 + 기동
+2. /actuator/health UP 확인 (최대 60초)
+3. fandrops-active.conf → 새 포트로 교체
+4. nginx -t 검증 → systemctl reload nginx
+5. 구 슬롯 Graceful Shutdown (최대 30초)
+6. active-slot 파일 갱신
+```
+
+헬스체크 실패 또는 nginx -t 오류 시 자동 롤백(새 슬롯 종료, 구 슬롯 계속 서비스).
+상세 배포 스크립트와 롤백 시나리오는 [nginx-bluegreen-strategy.md](./nginx-bluegreen-strategy.md) §4 참고.
+
+---
+
+## 9. 트러블슈팅 기록
 
 | # | 증상 | 원인 | 해결 |
 | --- | --- | --- | --- |
@@ -324,7 +379,7 @@ k6 run --out experimental-prometheus-rw \
 
 ---
 
-## 9. 최종 DoD
+## 10. 최종 DoD
 
 ### 완료
 
@@ -336,17 +391,18 @@ k6 run --out experimental-prometheus-rw \
 - [x] Redis AUTH Token 활성화 (`setup-redis-auth.yml`, ElastiCache ROTATE 전략)
 - [x] S3 CORS 설정 (`setup-s3-cors.yml`, fandrops.site + localhost:3000 허용)
 - [x] k6 부하 테스트 스크립트 5종 (`infra/k6/scenarios/`)
+- [x] Blue/Green 무중단 배포 구조 설계 및 문서화
 
 ### 미완료
 
+- [ ] **Blue/Green 배포 EC2 적용** — Phase 4 시작 전 systemd 유닛 2개 + Nginx active.conf + cd.yml 수정
 - [ ] **Grafana 커스텀 메트릭 알람 NoData 해소** — Issue #191
   - `fandrops_orders_status` (형성빈) · `fandrops_outbox_pending` (표지민) MeterRegistry Gauge 등록 PR 머지 후
   - 지영재: Prometheus 수집 확인 + Grafana Alert Rule `NoData → Normal/Firing` 전환 검증
-- [ ] **k6 Baseline 1회 실행** — Phase 4 부하 테스트 전 튜닝 기준선 확보
 
 ---
 
-## 10. Phase 4 준비 사항
+## 11. Phase 4 준비 사항
 
 | 항목 | 담당 | 비고 |
 | --- | --- | --- |
@@ -357,12 +413,14 @@ k6 run --out experimental-prometheus-rw \
 
 ---
 
-## 11. 관련 문서
+## 12. 관련 문서
 
 | 문서 | 설명 |
 | --- | --- |
 | [aws-phase1-runbook.md](./aws-phase1-runbook.md) | VPC/EC2/RDS/Redis/Nginx 기초 구성 |
 | [aws-phase2-runbook.md](./aws-phase2-runbook.md) | CI/CD 자동화 · 모니터링 · CloudWatch · Rate Limit |
+| [aws-phase4-runbook.md](./aws-phase4-runbook.md) | k6 부하 테스트 · D 분산 실험 · SLO 튜닝 |
+| [nginx-bluegreen-strategy.md](./nginx-bluegreen-strategy.md) | Blue/Green 아키텍처 의사결정 · 배포 스크립트 · 롤백 시나리오 |
 | [incident-response.md](./incident-response.md) | P0~P2 장애 대응 절차 |
 | [observability-metrics.md](./observability-metrics.md) | SLO·메트릭·알람 기준 |
 | [personas/jiyoungjae.md](../ai/personas/jiyoungjae.md) | SRE 담당 체크리스트 |
