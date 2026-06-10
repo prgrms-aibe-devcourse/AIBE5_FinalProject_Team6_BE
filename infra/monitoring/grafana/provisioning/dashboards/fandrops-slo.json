@@ -4,7 +4,7 @@
   "description": "FANDROPS API Server SLO 모니터링 — Write P95 < 300ms, Read P95 < 120ms, 5xx < 0.1%",
   "tags": ["fandrops", "slo"],
   "schemaVersion": 38,
-  "version": 1,
+  "version": 2,
   "refresh": "15s",
   "time": { "from": "now-30m", "to": "now" },
   "timepicker": {},
@@ -258,6 +258,86 @@
           "expr": "tomcat_threads_busy_threads{job=\"fandrops-api\"}",
           "legendFormat": "Tomcat 활성 스레드",
           "refId": "C"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Redis 명령 P95 레이턴시",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "lineWidth": 2
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.01 },
+              { "color": "red", "value": 0.05 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "histogram_quantile(0.95, sum(rate(lettuce_command_completion_delay_seconds_bucket{job=\"fandrops-api\"}[1m])) by (le))",
+          "legendFormat": "P95 전체",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "histogram_quantile(0.50, sum(rate(lettuce_command_completion_delay_seconds_bucket{job=\"fandrops-api\"}[1m])) by (le))",
+          "legendFormat": "P50 전체",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Redis 명령 처리율 (ops/s)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(lettuce_command_completion_delay_seconds_count{job=\"fandrops-api\"}[1m])) by (command)",
+          "legendFormat": "{{command}}",
+          "refId": "A"
         }
       ]
     }
