@@ -114,6 +114,23 @@ class OutboxEventSchedulerTest {
     }
 
     @Test
+    @DisplayName("RESTOCK — payload JSON에서 fanId 파싱, notification 저장")
+    void process_restock_extractsFanIdFromPayload() {
+        OutboxEvent event = buildEvent("RESTOCK", 500L, "{\"fanId\":88,\"productId\":500}");
+        when(outboxEventPort.findPending(50)).thenReturn(List.of(event));
+
+        scheduler.process();
+
+        assertEquals(OutboxStatus.PUBLISHED, event.getStatus());
+        ArgumentCaptor<Notification> captor = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationPort).save(captor.capture());
+        assertEquals(88L, captor.getValue().getFanId());
+        assertEquals(NotificationType.RESTOCK, captor.getValue().getType());
+        assertEquals("관심 상품이 재입고되었습니다.", captor.getValue().getMessage());
+        verify(fanIdResolverPort, never()).findFanIdByOrderId(any());
+    }
+
+    @Test
     @DisplayName("PENDING 없음 — notification·update 호출 없음")
     void process_noPendingEvents_doesNothing() {
         when(outboxEventPort.findPending(50)).thenReturn(List.of());
@@ -122,6 +139,20 @@ class OutboxEventSchedulerTest {
 
         verify(notificationPort, never()).save(any());
         verify(outboxEventPort, never()).update(any());
+    }
+
+    @Test
+    @DisplayName("RESTOCK — payload에 fanId 필드 없음 → notification 저장 안 함, retry 증가")
+    void process_restock_fanIdMissingInPayload_incrementsRetry() {
+        OutboxEvent event = buildEvent("RESTOCK", 500L, "{\"productId\":500}");
+        when(outboxEventPort.findPending(50)).thenReturn(List.of(event));
+
+        scheduler.process();
+
+        assertEquals(1, event.getRetryCount());
+        assertEquals(OutboxStatus.PENDING, event.getStatus());
+        verify(notificationPort, never()).save(any());
+        verify(outboxEventPort).update(event);
     }
 
     @Test
