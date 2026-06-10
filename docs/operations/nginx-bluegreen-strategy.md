@@ -378,37 +378,47 @@ ALB 없이 EC2 2대를 운영하면 EC2-1(Nginx)이 SPOF가 되어 실제 고가
 | Redis 대기열 | `k6 05_sse_queue.js` | 두 서버 모두 동일 Redis 큐 참조 |
 | 로컬 상태 없음 | static Map, synchronized 블록 없음 확인 | 어느 서버에 가도 동일 결과 |
 
-### 6-3. 분산 설계 사전 검증 코드 체크리스트
+### 6-3. 분산 설계 사전 검증 코드 체크리스트 (검증 완료)
 
-D 실험 전 아래 항목을 코드에서 직접 확인한다.
+| 항목 | 상태 | 근거 |
+| --- | --- | --- |
+| in-memory Queue | ✅ 안전 | `LocalWaitQueueRepository` → `@Profile("local")`, prod는 `RedisWaitQueueRepository` 사용 |
+| synchronized 블록 | ✅ 안전 | `LocalWaitQueueRepository`만 해당, local 프로파일에서만 활성화 |
+| JWT Stateless | ✅ 안전 | `ApiSecurityConfig`: `SessionCreationPolicy.STATELESS` 확인 |
+| 재고 오버셀 방지 | ✅ 안전 | `reserveAtomic` — DB 단일 UPDATE + `WHERE availableQty >= qty` 조건 → DB 레벨 원자적 처리 |
+| `@Version` 낙관락 | ✅ 있음 | `InventoryJpaEntity`에 `@Version` 필드 |
+| payment_key unique | ✅ 있음 | `PaymentJpaEntity`: `@Column(unique = true)` |
+| idempotency_key unique | ✅ 있음 | `OrderEntity`: `@Column(unique = true)` |
+| Payment 비관락 | ✅ 있음 | `PaymentJpaRepository`: `@Lock(PESSIMISTIC_WRITE)` |
+| **SseEmitterRegistry** | ⚠️ **한계** | in-memory `ConcurrentHashMap<String, SseEmitter>` — 분산 환경에서 SSE 메시지 유실 가능 (아래 §6-4 참고) |
+
+### 6-4. SseEmitterRegistry 분산 한계 및 대응 방향
+
+**문제:**
 
 ```
-[ ] static Map / ConcurrentHashMap 재고 관리 없음
-    grep -r "static.*Map" modules/inventory/
+Fan A가 EC2-1에 SSE 연결
+  └─ EC2-1의 emitters Map에만 Fan A 등록
 
-[ ] synchronized 블록 없음 (in-memory lock)
-    grep -r "synchronized" modules/order/ modules/inventory/
-
-[ ] In-memory Queue 없음
-    grep -r "LinkedBlockingQueue\|ArrayBlockingQueue" modules/
-
-[ ] JWT stateless (세션 서버 고정 없음)
-    SecurityConfig: SessionCreationPolicy.STATELESS 확인
-
-[ ] 재고 비관락 사용
-    @Lock(PESSIMISTIC_WRITE) 또는 SELECT FOR UPDATE 확인
-
-[ ] 주문 unique index
-    (fan_id, product_id, drop_event_id) unique 여부 확인
-
-[ ] 결제 idempotency key
-    payment_key unique index 여부 확인
-
-[ ] Outbox 트랜잭션 원자성
-    주문/결제와 동일 TX에서 outbox insert 확인
+스케줄러가 EC2-2에서 실행 → sendToFan(Fan A) 호출
+  └─ EC2-2의 emitters Map에 Fan A 없음 → 대기열 상태 업데이트 미전달
 ```
 
-**핵심 메시지:** RDS 비관락 + DB unique index + Redis 대기열 조합이면 EC2가 몇 대가 되어도 오버셀·중복 결제가 발생하지 않는다. 이것이 "분산 고려 설계"의 핵심 증거다.
+SSE 연결은 팬이 접속한 서버에만 emitter가 존재한다. 스케줄러가 다른 서버에서 실행되면 해당 팬에게 대기열 상태 메시지가 전달되지 않는다.
+
+**영향 범위:**
+- 오버셀·중복결제 발생 여부: **없음** (재고·결제 정합성은 DB 레벨에서 보장)
+- 팬 UX: 대기열 순번 업데이트가 간헐적으로 누락될 수 있음
+
+**D 실험 대응:** 이 한계를 **알고 진행**하며 실험 결과에서 SSE 메시지 유실 현상을 확인한다. 발표에서 "분산 환경에서 직접 발견한 한계"로 명시하고 개선 방향을 제시한다.
+
+**개선 방향 (미구현):** Redis Pub/Sub으로 SSE push를 브로드캐스트하면 해소 가능.
+
+```
+스케줄러 → Redis Channel publish
+  └─ EC2-1 구독 → emitters에 Fan A 있으면 전송
+  └─ EC2-2 구독 → emitters에 Fan A 없으면 무시
+```
 
 ### 6-4. EC2-2 세팅 절차
 
@@ -568,8 +578,11 @@ RDS MySQL (공유)    ElastiCache Redis (공유)
 | Blue/Green 전환 중 2~3초 불안정 | Nginx reload 방식 | ALB Target Group 교체 방식 |
 | EC2-2 없을 때 단일 포인트 | 예산 제약 | 예산 확보 시 상시 2대 + ALB |
 | 배포 중 메모리 압박 | t3.small 2GB | 인스턴스 업그레이드 또는 B-series 사용 |
+| **SSE 메시지 유실 (분산 환경)** | `SseEmitterRegistry` in-memory | Redis Pub/Sub 브로드캐스트로 해소 가능 |
 
-이 한계들은 발표에서 "현재 구조의 트레이드오프"로 명시하고 "ALB 도입 시 해소 가능"으로 설명한다.
+이 한계들은 발표에서 "현재 구조의 트레이드오프"로 명시하고 개선 방향을 함께 설명한다.
+
+**SseEmitterRegistry 한계는 D 실험에서 직접 확인한다.** 오버셀·중복결제는 DB 레벨에서 보장되므로 정합성 문제는 없으며, SSE UX 한계만 발생한다는 점을 실험으로 증명한다.
 
 ---
 
@@ -579,9 +592,11 @@ RDS MySQL (공유)    ElastiCache Redis (공유)
 
 > 배포 중 t3.small(2GB) 메모리에서 두 Spring Boot 프로세스가 동시 기동되는 구간의 OOM 위험을 `-Xmx768m` heap 제한과 Graceful Shutdown 30초 유예로 해소했으며, `proxy_next_upstream`으로 Nginx reload 순간 클라이언트 오류를 최소화했습니다.
 
-> Phase 4에서 EC2-2를 단기 기동해 k6 부하 테스트를 분산 환경에서 실행하고, RDS 비관락 · DB unique index · Redis 대기열 조합으로 어느 서버에서 요청을 처리해도 오버셀·중복결제가 발생하지 않는 stateless 설계를 수치로 검증했습니다.
+> Phase 4에서 EC2-2를 단기 기동해 k6 부하 테스트를 분산 환경에서 실행했습니다. 재고는 DB 단일 UPDATE(`WHERE availableQty >= qty`) + 낙관락, 결제는 `PESSIMISTIC_WRITE` + unique index 조합으로 어느 서버에서 요청을 처리해도 오버셀·중복결제가 발생하지 않음을 수치로 검증했습니다.
 
-> ALB 없는 구조의 SPOF 한계를 인지하고 "예산 내 최대 안정성 + 분산 고려 설계 증명"이라는 포트폴리오 목표를 달성했습니다.
+> 코드 분석 과정에서 `SseEmitterRegistry`가 in-memory `ConcurrentHashMap`으로 SSE 연결을 관리해 분산 환경에서 대기열 상태 메시지가 유실될 수 있음을 직접 발견했습니다. 정합성(오버셀·중복결제)은 DB 레벨에서 보장되므로 비즈니스 무결성에는 영향이 없으나, Redis Pub/Sub 브로드캐스트로 해소할 수 있는 UX 한계로 명시했습니다.
+
+> ALB 없는 구조의 SPOF 한계와 SSE 분산 문제를 직접 발견하고 개선 방향까지 제시한 것이 단순 구현을 넘어 운영 관점의 설계 사고를 보여주는 포인트입니다.
 
 ---
 
