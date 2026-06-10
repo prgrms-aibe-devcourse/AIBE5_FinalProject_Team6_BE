@@ -8,4 +8,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface NotificationOutboxEventJpaRepository extends JpaRepository<NotificationOutboxEventJpaEntity, Long> {
 
     List<NotificationOutboxEventJpaEntity> findByStatusOrderByCreatedAtAsc(OutboxStatus status, Pageable pageable);
+
+    long countByStatus(OutboxStatus status);
 }
