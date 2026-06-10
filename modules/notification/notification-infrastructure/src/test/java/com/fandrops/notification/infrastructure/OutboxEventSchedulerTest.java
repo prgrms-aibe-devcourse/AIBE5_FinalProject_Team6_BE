@@ -248,4 +248,57 @@ class OutboxEventSchedulerTest {
         assertEquals(2, saved.size());
         assertTrue(saved.stream().allMatch(n -> n.getType() == NotificationType.ARTIST_SCHEDULE));
     }
+
+    @Test
+    @DisplayName("ARTIST_SCHEDULE — 팔로워 없으면 알림 저장 없이 PUBLISHED")
+    void process_artistSchedule_noFollowers_publishedWithoutNotification() {
+        OutboxEvent event = buildEvent("ARTIST_SCHEDULE", 30L, "{\"artistId\":2,\"scheduleId\":30}");
+        when(outboxEventPort.findPending(50)).thenReturn(List.of(event));
+        when(fanIdResolverPort.findFollowerFanIdsByArtistId(2L)).thenReturn(List.of());
+
+        scheduler.process();
+
+        assertEquals(OutboxStatus.PUBLISHED, event.getStatus());
+        verify(notificationPort, never()).saveAll(any());
+    }
+
+    @Test
+    @DisplayName("NEW_COMMENT — parentId 있지만 아티스트멤버 댓글(fan_id 없음) → 알림 없이 PUBLISHED")
+    void process_newComment_parentIdExists_parentIsArtistMember_noNotification() {
+        // 아티스트멤버가 쓴 댓글(fan_id=null)에 대댓글이 달린 경우 — findFanIdByCommentId가 empty 반환
+        OutboxEvent event = buildEvent("NEW_COMMENT", 20L, "{\"commentId\":7,\"parentId\":4}");
+        when(outboxEventPort.findPending(50)).thenReturn(List.of(event));
+        when(fanIdResolverPort.findFanIdByCommentId(4L)).thenReturn(Optional.empty());
+
+        scheduler.process();
+
+        assertEquals(OutboxStatus.PUBLISHED, event.getStatus());
+        verify(notificationPort, never()).saveAll(any());
+    }
+
+    @Test
+    @DisplayName("NEW_FEED — payload에 artistId 누락 → retry 증가")
+    void process_newFeed_missingArtistIdInPayload_incrementsRetry() {
+        OutboxEvent event = buildEvent("NEW_FEED", 10L, "{\"feedId\":10}");
+        when(outboxEventPort.findPending(50)).thenReturn(List.of(event));
+
+        scheduler.process();
+
+        assertEquals(1, event.getRetryCount());
+        assertEquals(OutboxStatus.PENDING, event.getStatus());
+        verify(notificationPort, never()).saveAll(any());
+    }
+
+    @Test
+    @DisplayName("ARTIST_SCHEDULE — payload에 artistId 누락 → retry 증가")
+    void process_artistSchedule_missingArtistIdInPayload_incrementsRetry() {
+        OutboxEvent event = buildEvent("ARTIST_SCHEDULE", 30L, "{\"scheduleId\":30}");
+        when(outboxEventPort.findPending(50)).thenReturn(List.of(event));
+
+        scheduler.process();
+
+        assertEquals(1, event.getRetryCount());
+        assertEquals(OutboxStatus.PENDING, event.getStatus());
+        verify(notificationPort, never()).saveAll(any());
+    }
 }
