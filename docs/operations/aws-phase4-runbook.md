@@ -28,7 +28,7 @@ Phase 3(고도화·FE 연동·배포 안정화)에서 Phase 4(부하 테스트·
 **Phase 4 작업 순서:**
 
 ```
-① Blue/Green 배포 EC2 적용 (Phase 3 미완료 이월)
+① Blue/Green 배포 EC2 적용 → Phase 3 §8 참고 (Phase 3 완료 항목)
 ② k6 Baseline 실행 — 단일 EC2, 튜닝 전 기준선 수치 확보
 ③ D 단기 실험 — EC2-2 기동, 분산 설계 검증, terminate
 ④ SLO 미달 항목 튜닝
@@ -38,7 +38,7 @@ Phase 3(고도화·FE 연동·배포 안정화)에서 Phase 4(부하 테스트·
 
 ---
 
-## 2. Blue/Green 배포 EC2 적용 (Phase 3 이월)
+## 2. Blue/Green 배포 EC2 적용
 
 ### 2-1. 배경
 
@@ -47,103 +47,9 @@ Phase 4 시작 전 Blue/Green 배포를 EC2에 적용해 배포 중에도 5xx 0�
 
 ### 2-2. 적용 절차
 
-EC2에 SSM Session Manager로 접속해 아래를 순서대로 적용한다.
+**Blue/Green EC2 적용 절차는 [aws-phase3-runbook.md §8](./aws-phase3-runbook.md#8-bluegreen-배포-ec2-적용) 에 통합되어 있다.**
 
-**Step 1 — JAR 디렉터리 준비**
-
-```bash
-sudo mkdir -p /opt/fandrops
-sudo cp /opt/fandrops/app.jar /opt/fandrops/blue.jar
-sudo chown fandrops:fandrops /opt/fandrops/blue.jar
-echo "blue" | sudo tee /etc/fandrops/active-slot
-```
-
-**Step 2 — systemd 유닛 2개 생성**
-
-```bash
-# fandrops-blue.service
-sudo tee /etc/systemd/system/fandrops-blue.service <<'EOF'
-[Unit]
-Description=FANDROPS API Server (Blue)
-After=network.target
-
-[Service]
-Type=simple
-User=fandrops
-EnvironmentFile=/etc/fandrops/fandrops-prod.conf
-ExecStart=/usr/bin/java -Xms256m -Xmx768m \
-  -jar /opt/fandrops/blue.jar \
-  --server.port=8081 \
-  --spring.profiles.active=prod
-Restart=on-failure
-RestartSec=5
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=fandrops-blue
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-# fandrops-green.service (포트·JAR명만 다름)
-sudo tee /etc/systemd/system/fandrops-green.service <<'EOF'
-[Unit]
-Description=FANDROPS API Server (Green)
-After=network.target
-
-[Service]
-Type=simple
-User=fandrops
-EnvironmentFile=/etc/fandrops/fandrops-prod.conf
-ExecStart=/usr/bin/java -Xms256m -Xmx768m \
-  -jar /opt/fandrops/green.jar \
-  --server.port=8082 \
-  --spring.profiles.active=prod
-Restart=on-failure
-RestartSec=5
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=fandrops-green
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-sudo systemctl daemon-reload
-sudo systemctl enable fandrops-blue
-sudo systemctl start fandrops-blue
-```
-
-**Step 3 — Nginx active.conf 구조 적용**
-
-```bash
-# 현재 active 슬롯 upstream 파일 생성
-sudo tee /etc/nginx/fandrops-active.conf <<'EOF'
-upstream fandrops_backend {
-    server 127.0.0.1:8081;
-    keepalive 32;
-}
-EOF
-
-# fandrops-location.conf 상단에 include 추가 (기존 proxy_pass 교체)
-# 기존: proxy_pass http://127.0.0.1:8080;
-# 변경: include /etc/nginx/fandrops-active.conf; + proxy_pass http://fandrops_backend;
-sudo nginx -t && sudo systemctl reload nginx
-```
-
-**Step 4 — 기존 fandrops.service 중지**
-
-```bash
-sudo systemctl stop fandrops
-sudo systemctl disable fandrops
-```
-
-**Step 5 — 헬스체크**
-
-```bash
-curl -s http://localhost:8081/actuator/health | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])"
-curl -s http://localhost:80/actuator/health   # Nginx 경유 확인
-```
+Phase 3 §8 Step 1~5를 순서대로 따른다 (systemd 유닛 생성 → Nginx active.conf 전환 → 기존 fandrops.service 비활성화 → 헬스체크).
 
 ### 2-3. cd.yml 수정
 
@@ -473,8 +379,7 @@ PR 머지 + 배포 완료 후:
 
 ## 9. 최종 DoD
 
-- [ ] Blue/Green 배포 EC2 적용 완료 (fandrops-blue/green.service, Nginx active.conf)
-- [ ] cd.yml Blue/Green 방식으로 수정 완료
+- [ ] Blue/Green EC2 적용 완료 확인 (Phase 3 §8 DoD 참고)
 - [ ] k6 Baseline 수치 기록 (시나리오 01·02·04·05)
 - [ ] D 단기 실험 완료 — 오버셀 0건 확인 + SSE 한계 기록
 - [ ] SLO 목표 달성 확인 (Write P95 < 300ms, Read P95 < 120ms, 5xx < 0.1%)

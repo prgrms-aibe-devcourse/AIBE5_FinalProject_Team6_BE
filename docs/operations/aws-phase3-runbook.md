@@ -312,16 +312,16 @@ k6 run --out experimental-prometheus-rw \
 
 ---
 
-## 8. Blue/Green 무중단 배포
+## 8. Blue/Green 무중단 배포 (Phase 4 시작 전 적용)
 
 ### 8-1. 배경
 
 Phase 2 CD는 `systemctl restart fandrops`로 배포했다. Spring Boot Graceful Shutdown(30s) 설정이 있어도 재시작 구간에 새 요청을 받지 못하는 30~60초 다운타임이 발생했다.
 Phase 4 부하 테스트에서 배포 중 k6를 동시에 실행해 5xx 0건을 증명하려면 무중단 배포가 필수다.
-ALB가 없는 예산 제약 환경에서 Nginx upstream 포트 스위칭으로 동일 효과를 구현했다.
+ALB가 없는 예산 제약 환경에서 Nginx upstream 포트 스위칭으로 동일 효과를 구현한다.
 
 **왜 ALB를 쓰지 않는가:**
-ALB 고정 요금만 ~22,600원/월 → 현재 예산(90,000원) 초과. 자세한 비용 검토와 아키텍처 의사결정은 [nginx-bluegreen-strategy.md](./nginx-bluegreen-strategy.md) 참고.
+ALB 고정 요금만 ~22,600원/월 → 현재 예산(90,000원) 초과. 아키텍처 의사결정 전체는 [nginx-bluegreen-strategy.md](./nginx-bluegreen-strategy.md) 참고.
 
 ### 8-2. 구조
 
@@ -350,10 +350,117 @@ EC2 1대
 기존 단일 프로세스: `-Xmx1024m`. 두 프로세스 동시 기동 시 heap 2GB → OOM 위험.
 각 슬롯을 `-Xmx768m`으로 설정 → 동시 기동 peak 1.5GB heap + OS 300MB ≈ 1.8GB, t3.small 2GB 내 수용.
 
-### 8-5. 배포 흐름 요약
+### 8-5. EC2 적용 절차
+
+EC2에 SSM Session Manager로 접속해 아래를 순서대로 적용한다.
+
+**Step 1 — JAR·슬롯 파일 준비**
+
+```bash
+sudo cp /opt/fandrops/app.jar /opt/fandrops/blue.jar
+sudo chown fandrops:fandrops /opt/fandrops/blue.jar
+echo "blue" | sudo tee /etc/fandrops/active-slot
+```
+
+**Step 2 — systemd 유닛 2개 생성**
+
+```bash
+sudo tee /etc/systemd/system/fandrops-blue.service <<'EOF'
+[Unit]
+Description=FANDROPS API Server (Blue)
+After=network.target
+
+[Service]
+Type=simple
+User=fandrops
+EnvironmentFile=/etc/fandrops/fandrops-prod.conf
+ExecStart=/usr/bin/java -Xms256m -Xmx768m \
+  -jar /opt/fandrops/blue.jar \
+  --server.port=8081 \
+  --spring.profiles.active=prod
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=fandrops-blue
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo tee /etc/systemd/system/fandrops-green.service <<'EOF'
+[Unit]
+Description=FANDROPS API Server (Green)
+After=network.target
+
+[Service]
+Type=simple
+User=fandrops
+EnvironmentFile=/etc/fandrops/fandrops-prod.conf
+ExecStart=/usr/bin/java -Xms256m -Xmx768m \
+  -jar /opt/fandrops/green.jar \
+  --server.port=8082 \
+  --spring.profiles.active=prod
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=fandrops-green
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable fandrops-blue
+sudo systemctl start fandrops-blue
+```
+
+**Step 3 — Nginx active.conf 생성 및 location.conf 수정**
+
+```bash
+# upstream 파일 생성
+sudo tee /etc/nginx/fandrops-active.conf <<'EOF'
+upstream fandrops_backend {
+    server 127.0.0.1:8081;
+    keepalive 32;
+}
+EOF
+
+# fandrops-location.conf: proxy_pass http://127.0.0.1:8080 → upstream 방식으로 교체
+# include /etc/nginx/fandrops-active.conf; 추가
+# proxy_pass http://fandrops_backend; 로 변경
+# proxy_next_upstream error timeout http_502 http_503; 추가
+
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+**Step 4 — 기존 단일 서비스 중지**
+
+```bash
+sudo systemctl stop fandrops
+sudo systemctl disable fandrops
+```
+
+**Step 5 — 헬스체크**
+
+```bash
+# blue 슬롯 직접
+curl -s http://localhost:8081/actuator/health
+
+# Nginx 경유
+curl -s http://localhost:80/actuator/health
+```
+
+### 8-6. cd.yml 수정
+
+기존 SSM RunCommand 배포 스크립트를 Blue/Green 방식으로 교체한다.
+배포 스크립트 전문은 [nginx-bluegreen-strategy.md](./nginx-bluegreen-strategy.md) §4-4 참고.
+
+### 8-7. 배포 흐름 요약
 
 ```
-1. 비활성 슬롯 JAR 교체 + 기동
+1. 비활성 슬롯 S3에서 JAR 다운로드 + 기동
 2. /actuator/health UP 확인 (최대 60초)
 3. fandrops-active.conf → 새 포트로 교체
 4. nginx -t 검증 → systemctl reload nginx
@@ -362,7 +469,7 @@ EC2 1대
 ```
 
 헬스체크 실패 또는 nginx -t 오류 시 자동 롤백(새 슬롯 종료, 구 슬롯 계속 서비스).
-상세 배포 스크립트와 롤백 시나리오는 [nginx-bluegreen-strategy.md](./nginx-bluegreen-strategy.md) §4 참고.
+롤백 시나리오 전체는 [nginx-bluegreen-strategy.md](./nginx-bluegreen-strategy.md) §5 참고.
 
 ---
 
