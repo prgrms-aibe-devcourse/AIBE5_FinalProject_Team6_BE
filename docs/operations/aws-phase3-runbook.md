@@ -295,9 +295,12 @@ export const PAYMENT_THRESHOLDS = { http_req_duration: ['p(95)<3000'], http_req_
 
 ```bash
 k6 run --out experimental-prometheus-rw \
-  -e BASE_URL=http://localhost:8080 \
+  -e BASE_URL=http://localhost:8081 \
+  -e FAN_POOL_SIZE=1000 \
   scenarios/01_order_concurrency.js
 ```
+
+`FAN_POOL_SIZE`: VU별로 고유 fan_id를 뽑을 풀 크기. `infra/k6/seed/fans.csv`에 해당 수만큼 fan 레코드가 사전 삽입돼 있어야 한다.
 
 `--out experimental-prometheus-rw`로 k6 메트릭을 Prometheus에 실시간 전송 → Grafana에서 부하 테스트 결과를 SLO 패널과 함께 조회할 수 있다.
 
@@ -305,8 +308,9 @@ k6 run --out experimental-prometheus-rw \
 
 | 항목 | 내용 |
 | --- | --- |
-| DB seed | 각 시나리오 주석의 seed 조건 확인 필요 |
-| 03번 결제 시나리오 | Wiremock 서비스 기동 + `TOSS_API_BASE_URL=http://wiremock:8080` 앱 재기동 |
+| DB seed | `infra/k6/seed/seed.sql` 실행 후 각 시나리오 사전 준비 확인 |
+| 01·02·04 시나리오 | `FAN_POOL_SIZE=1000` 환경변수 지정, `infra/k6/seed/fans.csv` 기준 fan 레코드 사전 삽입 |
+| 03번 결제 시나리오 | Wiremock 서비스 기동 + `TOSS_API_BASE_URL=http://localhost:8090` 앱 재기동, `infra/k6/wiremock/` 참고 |
 | 05번 SSE 시나리오 | Nginx `worker_connections ≥ 2048`, JVM `ulimit -n ≥ 8192` 확인 |
 | Baseline 실행 | 튜닝 전 1회 실행해 기준선 수치 확보 |
 

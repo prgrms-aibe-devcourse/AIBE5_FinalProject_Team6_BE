@@ -73,8 +73,8 @@ Baseline 없이 튜닝하면 "얼마나 개선됐는가"를 증명할 수 없다
 | --- | --- |
 | k6 설치 | EC2에 k6 설치 여부 확인 (`k6 version`) |
 | DB seed | 각 시나리오 주석의 seed 조건 확인 |
-| 01·04 시나리오 | `product id=1 (inventory.total_qty=100)`, `fan id=1` |
-| 02 시나리오 | `artist_profile id=1`, `artist_feed` 20개, `user_follow fan_id=1 artist_id=1` |
+| 01·04 시나리오 | `product id=1 (inventory.total_qty=100)`, fan id 1~N (`FAN_POOL_SIZE` 환경변수, `infra/k6/seed/fans.csv` 참고) |
+| 02 시나리오 | `artist_profile id=1`, `artist_feed` 20개, `user_follow` fan_id 1~N & artist_id=1 (`FAN_POOL_SIZE` 참고) |
 | 03 시나리오 | Wiremock 기동 + `TOSS_API_BASE_URL=http://wiremock:8080` 앱 재기동 |
 | 05 시나리오 | Nginx `worker_connections ≥ 2048`, JVM `ulimit -n ≥ 8192` |
 | Prometheus Remote Write | EC2 Prometheus 주소: `http://localhost:9090/api/v1/write` |
@@ -94,22 +94,25 @@ cd /opt/fandrops/k6   # infra/k6/ 를 EC2로 복사 또는 git clone
 
 # 01. 주문 동시성 (오버셀 0건 핵심)
 k6 run --out experimental-prometheus-rw \
-  -e BASE_URL=http://localhost:8080 \
+  -e BASE_URL=http://localhost:8081 \
+  -e FAN_POOL_SIZE=1000 \
   scenarios/01_order_concurrency.js
 
 # 02. 피드 Read P95
 k6 run --out experimental-prometheus-rw \
-  -e BASE_URL=http://localhost:8080 \
+  -e BASE_URL=http://localhost:8081 \
+  -e FAN_POOL_SIZE=1000 \
   scenarios/02_feed_read.js
 
 # 04. 드롭스 스파이크 (1,000 VU 급상승)
 k6 run --out experimental-prometheus-rw \
-  -e BASE_URL=http://localhost:8080 \
+  -e BASE_URL=http://localhost:8081 \
+  -e FAN_POOL_SIZE=1000 \
   scenarios/04_drop_spike.js
 
 # 05. SSE 대기열 연결 안정성
 k6 run --out experimental-prometheus-rw \
-  -e BASE_URL=http://localhost:8080 \
+  -e BASE_URL=http://localhost:8081 \
   scenarios/05_sse_queue.js
 ```
 

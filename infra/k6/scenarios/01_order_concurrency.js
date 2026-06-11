@@ -18,7 +18,8 @@ import { waitForAccessToken } from '../lib/sse.js';
 import { WRITE_THRESHOLDS } from '../lib/thresholds.js';
 
 const PRODUCT_ID = parseInt(__ENV.PRODUCT_ID || '1');
-const FAN_ID = parseInt(__ENV.FAN_ID || '1');
+const FAN_POOL_SIZE = parseInt(__ENV.FAN_POOL_SIZE || '1000');
+const QUEUE_FAN_ID = 1; // setup() 대기열 진입용 고정값 (accessToken 획득 1회)
 
 const reservedCount = new Counter('orders_reserved');
 const cancelledCount = new Counter('orders_cancelled');
@@ -39,18 +40,18 @@ export const options = {
 };
 
 export function setup() {
-  // 1. 대기열 등록
+  // 1. 대기열 등록 (QUEUE_FAN_ID=1 고정 — setup은 1회 실행, accessToken 공유)
   const joinRes = http.post(
     `${BASE_URL}/api/v1/queue/join/${PRODUCT_ID}`,
     null,
-    { headers: { 'X-Fan-Id': String(FAN_ID) } },
+    { headers: { 'X-Fan-Id': String(QUEUE_FAN_ID) } },
   );
   if (joinRes.status !== 200 && joinRes.status !== 201) {
     throw new Error(`queue join failed: ${joinRes.status} ${joinRes.body}`);
   }
 
   // 2. SSE 연결 → PROCESSING 전이 시 accessToken 수신 (스케줄러 최대 ~3tick 소요)
-  const accessToken = waitForAccessToken(PRODUCT_ID, FAN_ID, 20000);
+  const accessToken = waitForAccessToken(PRODUCT_ID, QUEUE_FAN_ID, 20000);
   if (!accessToken) {
     throw new Error(
       'accessToken 획득 실패. 서버 설정 확인:\n' +
@@ -60,15 +61,16 @@ export function setup() {
     );
   }
 
-  console.log(`[setup] accessToken 획득 완료 (fanId=${FAN_ID}, productId=${PRODUCT_ID})`);
+  console.log(`[setup] accessToken 획득 완료 (productId=${PRODUCT_ID}, fanPoolSize=${FAN_POOL_SIZE})`);
   return { accessToken };
 }
 
 export default function ({ accessToken }) {
+  const fanId = ((__VU - 1) % FAN_POOL_SIZE) + 1;
   const res = http.post(
     `${BASE_URL}/api/v1/orders`,
     JSON.stringify({ accessTicket: accessToken, items: [{ productId: PRODUCT_ID, quantity: 1 }] }),
-    { headers: localHeaders(FAN_ID) },
+    { headers: localHeaders(fanId) },
   );
 
   if (res.status === 201) {

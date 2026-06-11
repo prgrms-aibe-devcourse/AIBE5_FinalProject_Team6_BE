@@ -13,7 +13,7 @@ import { BASE_URL, localHeaders } from '../lib/auth.js';
 import { READ_THRESHOLDS } from '../lib/thresholds.js';
 
 const ARTIST_ID = parseInt(__ENV.ARTIST_ID || '1');
-const FAN_ID = parseInt(__ENV.FAN_ID || '1');
+const FAN_POOL_SIZE = parseInt(__ENV.FAN_POOL_SIZE || '1000');
 
 export const options = {
   scenarios: {
@@ -27,9 +27,10 @@ export const options = {
 };
 
 export default function () {
+  const fanId = ((__VU - 1) % FAN_POOL_SIZE) + 1;
   const res = http.get(
     `${BASE_URL}/api/v1/artists/${ARTIST_ID}/feeds`,
-    { headers: localHeaders(FAN_ID) },
+    { headers: localHeaders(fanId) },
   );
 
   check(res, {
