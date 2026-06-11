@@ -4,6 +4,7 @@ import com.fandrops.order.domain.Product;
 import com.fandrops.order.domain.port.ProductRepository;
 import com.fandrops.order.infrastructure.persistence.ProductJpaEntity;
 import com.fandrops.order.infrastructure.persistence.ProductJpaRepository;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +31,13 @@ public class ProductRepositoryAdapter implements ProductRepository {
     @Override
     public List<Product> findRegularProducts(Long cursor, int size) {
         return jpaRepository.findRegular(cursor, PageRequest.of(0, size)).stream()
+                .map(ProductJpaEntity::toDomain)
+                .toList();
+    }
+
+    @Override
+    public List<Product> findDropsProducts(Long cursor, int size) {
+        return jpaRepository.findDrops(LocalDateTime.now(), cursor, PageRequest.of(0, size)).stream()
                 .map(ProductJpaEntity::toDomain)
                 .toList();
     }
