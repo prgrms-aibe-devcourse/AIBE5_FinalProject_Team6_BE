@@ -4,6 +4,7 @@
 | --- | --- |
 | **상태** | Accepted |
 | **결정일** | 2026-06-10 |
+| **구현 완료일** | 2026-06-11 (PR #221, #222) |
 | **선행 ADR** | [ADR-001 멀티모듈 모놀리스](./ADR-001-multi-module-monolith.md) |
 | **관련** | [nginx-bluegreen-strategy.md](../operations/nginx-bluegreen-strategy.md) · [aws-phase3-runbook.md §8](../operations/aws-phase3-runbook.md) · [aws-phase4-runbook.md](../operations/aws-phase4-runbook.md) |
 | **담당** | 지영재 (SRE/Platform) |
@@ -23,8 +24,8 @@
 | 항목 | 값 |
 | --- | --- |
 | EC2 | t3.small (2 vCPU, 2GB RAM), Amazon Linux 2023 |
-| 기존 배포 방식 | GitHub Actions → S3 → SSM RunCommand → `systemctl restart` |
-| 배포 다운타임 | `systemctl restart` 시 30~60초 서비스 중단 |
+| 배포 방식 | GitHub Actions → S3 → SSM RunCommand → Blue/Green 포트 스위칭 (2026-06-11, PR #221·#222) |
+| 배포 다운타임 | 0~2초 (nginx reload + `proxy_next_upstream` 재시도) |
 | SLO | Write P95 < 300ms, 5xx rate < 0.1%, 오버셀 0건 |
 | ALB | **없음** |
 | 월 예산 | **90,000원** |
