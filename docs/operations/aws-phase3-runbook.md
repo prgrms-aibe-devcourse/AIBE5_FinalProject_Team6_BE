@@ -263,12 +263,19 @@ infra/k6/
 │   ├── auth.js          # BASE_URL, 인증 헤더
 │   ├── sse.js           # SSE 대기열 접근 토큰 획득 헬퍼
 │   └── thresholds.js    # SLO 기준 임계값 (Write/Read/Payment)
-└── scenarios/
-    ├── 01_order_concurrency.js   # 주문 동시성 기준선
-    ├── 02_feed_read.js           # 피드 조회 Read P95
-    ├── 03_payment_confirm.js     # 결제 확인 흐름
-    ├── 04_drop_spike.js          # 드롭스 스파이크
-    └── 05_sse_queue.js           # SSE 대기열 연결 안정성
+├── scenarios/
+│   ├── 01_order_concurrency.js   # 주문 동시성 기준선
+│   ├── 02_feed_read.js           # 피드 조회 Read P95
+│   ├── 03_payment_confirm.js     # 결제 확인 흐름 (Wiremock)
+│   ├── 04_drop_spike.js          # 드롭스 스파이크
+│   ├── 05_sse_queue.js           # SSE 대기열 연결 안정성
+│   └── 06_workload_model.js      # 통합 워크로드 모델 (혼합 부하)
+├── wiremock/
+│   └── mappings/                 # Toss PG 모킹 stub 4종 (성공·타임아웃·실패·지연)
+└── seed/
+    ├── fans.csv                  # VU 파라미터화용 fan_id 목록
+    ├── orders.json               # 03 결제 시나리오 RESERVED 주문 픽스처
+    └── seed.sql                  # product·inventory·artist·fan 기초 INSERT
 ```
 
 ### 7-2. 시나리오별 목표
@@ -280,6 +287,7 @@ infra/k6/
 | `03_payment_confirm.js` | POST /payments/toss/confirm — Wiremock PG 모킹 | 50 VU | Payment P95 < 3s |
 | `04_drop_spike.js` | 0 → 1,000 VU 30초 급상승, 오버셀 0건 | ramping 0→1000→0 | Write P95 < 300ms |
 | `05_sse_queue.js` | Nginx worker_connections · JVM FD 한계 검증 | 1,000→1,800→2,100 VU | 429 계약 확인 |
+| `06_workload_model.js` | 피드 60% · 대기열 20% · 주문 15% · 결제 5% 혼합 부하 — 실사용 패턴 재현 | ramping 0→300 VU | Write P95 < 300ms, Read P95 < 120ms |
 
 ### 7-3. SLO 임계값 (`lib/thresholds.js`)
 
@@ -295,9 +303,12 @@ export const PAYMENT_THRESHOLDS = { http_req_duration: ['p(95)<3000'], http_req_
 
 ```bash
 k6 run --out experimental-prometheus-rw \
-  -e BASE_URL=http://localhost:8080 \
+  -e BASE_URL=http://localhost:8081 \
+  -e FAN_POOL_SIZE=1000 \
   scenarios/01_order_concurrency.js
 ```
+
+`FAN_POOL_SIZE`: VU별로 고유 fan_id를 뽑을 풀 크기. `infra/k6/seed/fans.csv`에 해당 수만큼 fan 레코드가 사전 삽입돼 있어야 한다.
 
 `--out experimental-prometheus-rw`로 k6 메트릭을 Prometheus에 실시간 전송 → Grafana에서 부하 테스트 결과를 SLO 패널과 함께 조회할 수 있다.
 
@@ -305,8 +316,9 @@ k6 run --out experimental-prometheus-rw \
 
 | 항목 | 내용 |
 | --- | --- |
-| DB seed | 각 시나리오 주석의 seed 조건 확인 필요 |
-| 03번 결제 시나리오 | Wiremock 서비스 기동 + `TOSS_API_BASE_URL=http://wiremock:8080` 앱 재기동 |
+| DB seed | `infra/k6/seed/seed.sql` 실행 후 각 시나리오 사전 준비 확인 |
+| 01·02·04 시나리오 | `FAN_POOL_SIZE=1000` 환경변수 지정, `infra/k6/seed/fans.csv` 기준 fan 레코드 사전 삽입 |
+| 03번 결제 시나리오 | Wiremock 서비스 기동 + `TOSS_API_BASE_URL=http://localhost:8090` 앱 재기동, `infra/k6/wiremock/` 참고 |
 | 05번 SSE 시나리오 | Nginx `worker_connections ≥ 2048`, JVM `ulimit -n ≥ 8192` 확인 |
 | Baseline 실행 | 튜닝 전 1회 실행해 기준선 수치 확보 |
 
