@@ -87,6 +87,30 @@ sudo dnf install k6 -y
 k6 version
 ```
 
+**Wiremock Docker 기동 (03·결제 시나리오 실행 전):**
+
+```bash
+# EC2에 Docker가 없으면 설치
+sudo dnf install docker -y
+sudo systemctl start docker
+
+# Wiremock 컨테이너 기동 (infra/k6/wiremock/ 기준)
+docker run -d --name wiremock \
+  -p 8090:8080 \
+  -v /opt/fandrops/k6/wiremock:/home/wiremock \
+  wiremock/wiremock:3.3.1 \
+  --root-dir /home/wiremock
+
+# 앱 서버 TOSS_API_BASE_URL 변경 후 재기동 (active 슬롯 확인)
+ACTIVE=$(cat /etc/fandrops/active-slot)
+sudo sed -i 's|TOSS_API_BASE_URL=.*|TOSS_API_BASE_URL=http://localhost:8090|' /etc/fandrops/fandrops-prod.conf
+sudo systemctl restart "fandrops-$ACTIVE"
+
+# 결제 시나리오 종료 후 원복
+# sudo sed -i 's|TOSS_API_BASE_URL=.*|TOSS_API_BASE_URL=https://api.tosspayments.com|' /etc/fandrops/fandrops-prod.conf
+# sudo systemctl restart "fandrops-$ACTIVE"
+```
+
 ### 3-3. 시나리오별 실행
 
 ```bash
@@ -110,10 +134,22 @@ k6 run --out experimental-prometheus-rw \
   -e FAN_POOL_SIZE=1000 \
   scenarios/04_drop_spike.js
 
+# 03. 결제 확인 (Wiremock 기동 후 실행)
+k6 run --out experimental-prometheus-rw \
+  -e BASE_URL=http://localhost:8081 \
+  -e ORDERS_JSON="$(cat seed/orders.json)" \
+  scenarios/03_payment_confirm.js
+
 # 05. SSE 대기열 연결 안정성
 k6 run --out experimental-prometheus-rw \
   -e BASE_URL=http://localhost:8081 \
   scenarios/05_sse_queue.js
+
+# 06. 통합 워크로드 모델 (혼합 부하 — 마지막 실행)
+k6 run --out experimental-prometheus-rw \
+  -e BASE_URL=http://localhost:8081 \
+  -e FAN_POOL_SIZE=1000 \
+  scenarios/06_workload_model.js
 ```
 
 ### 3-4. Baseline 수치 기록표
@@ -124,8 +160,10 @@ k6 run --out experimental-prometheus-rw \
 | --- | --- | --- | --- | --- |
 | 01 주문 동시성 | ms | % | 건 | ✅/❌ |
 | 02 피드 Read | ms | % | — | ✅/❌ |
+| 03 결제 확인 (Wiremock) | ms | % | — | ✅/❌ |
 | 04 드롭스 스파이크 | ms | % | 건 | ✅/❌ |
 | 05 SSE 대기열 | — | % | — | ✅/❌ |
+| 06 통합 워크로드 | ms | % | 건 | ✅/❌ |
 
 > Grafana 대시보드(`api.fandrops.site:3000`) 패널 1(RPS), 2(P95), 3(5xx 에러율)에서 확인.
 
@@ -364,11 +402,13 @@ PR 머지 + 배포 완료 후:
 | 날짜 | 작업 |
 | --- | --- |
 | 6/11 ✅ | Blue/Green EC2 적용 + cd.yml 수정 + 배포 테스트 완료 (PR #221, #222) |
-| 6/12~13 | k6 Baseline 실행 (시나리오 01·02·04·05) + 수치 기록 |
-| 6/13~14 | D 단기 실험 — EC2-2 기동 → 분산 검증 → terminate |
-| 6/14~18 | Baseline 미달 항목 튜닝 (도메인 오너 협의 포함) |
-| 6/18~20 | #191 활성화 (형성빈·표지민 PR 머지 후) |
-| 6/20~22 | 최종 SLO 수치 측정 + 결과 기록 |
+| 6/12~13 | EC2 k6 설치 + Wiremock Docker 기동 환경 구성 (#230) |
+| 6/12~13 | k6 Baseline 실행 (시나리오 01·02·03·04·05·06) + 수치 기록 (#231·#232) |
+| 6/13~14 | D 단기 실험 — EC2-2 기동 → 분산 검증 → terminate (#234) |
+| 6/14~18 | Baseline 미달 항목 튜닝 + 도메인 오너 피드백 전달 (#233) |
+| 6/18~20 | #191 Grafana 커스텀 알람 활성화 + P0 Alert firing 실전 테스트 (#235·#236) |
+| 6/20~22 | 최종 SLO 수치 측정 + Grafana 스크린샷 보관 (#237) |
+| 6/22~ | Phase 5 이행 — STAR 리포트 · 발표 자료 준비 (aws-phase5-runbook.md) |
 
 ---
 
@@ -398,7 +438,8 @@ PR 머지 + 배포 완료 후:
 | 문서 | 설명 |
 | --- | --- |
 | [aws-phase3-runbook.md](./aws-phase3-runbook.md) | Redis 관측 · AUTH · S3 CORS · k6 스크립트 · Blue/Green 설계 |
+| [aws-phase5-runbook.md](./aws-phase5-runbook.md) | STAR 리포트 · 발표 자료 · 최종 SLO 수치 기록 |
 | [nginx-bluegreen-strategy.md](./nginx-bluegreen-strategy.md) | Blue/Green 아키텍처 의사결정 · 배포 스크립트 · 롤백 시나리오 · 분산 설계 검증 |
-| [incident-response.md](./incident-response.md) | P0~P2 장애 대응 절차 |
+| [incident-response.md](./incident-response.md) | P0~P2 장애 대응 절차 · 실전 테스트 절차 |
 | [observability-metrics.md](./observability-metrics.md) | SLO · 메트릭 · 알람 기준 |
 | [personas/jiyoungjae.md](../ai/personas/jiyoungjae.md) | SRE 담당 체크리스트 |

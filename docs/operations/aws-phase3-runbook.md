@@ -263,12 +263,19 @@ infra/k6/
 │   ├── auth.js          # BASE_URL, 인증 헤더
 │   ├── sse.js           # SSE 대기열 접근 토큰 획득 헬퍼
 │   └── thresholds.js    # SLO 기준 임계값 (Write/Read/Payment)
-└── scenarios/
-    ├── 01_order_concurrency.js   # 주문 동시성 기준선
-    ├── 02_feed_read.js           # 피드 조회 Read P95
-    ├── 03_payment_confirm.js     # 결제 확인 흐름
-    ├── 04_drop_spike.js          # 드롭스 스파이크
-    └── 05_sse_queue.js           # SSE 대기열 연결 안정성
+├── scenarios/
+│   ├── 01_order_concurrency.js   # 주문 동시성 기준선
+│   ├── 02_feed_read.js           # 피드 조회 Read P95
+│   ├── 03_payment_confirm.js     # 결제 확인 흐름 (Wiremock)
+│   ├── 04_drop_spike.js          # 드롭스 스파이크
+│   ├── 05_sse_queue.js           # SSE 대기열 연결 안정성
+│   └── 06_workload_model.js      # 통합 워크로드 모델 (혼합 부하)
+├── wiremock/
+│   └── mappings/                 # Toss PG 모킹 stub 4종 (성공·타임아웃·실패·지연)
+└── seed/
+    ├── fans.csv                  # VU 파라미터화용 fan_id 목록
+    ├── orders.json               # 03 결제 시나리오 RESERVED 주문 픽스처
+    └── seed.sql                  # product·inventory·artist·fan 기초 INSERT
 ```
 
 ### 7-2. 시나리오별 목표
@@ -280,6 +287,7 @@ infra/k6/
 | `03_payment_confirm.js` | POST /payments/toss/confirm — Wiremock PG 모킹 | 50 VU | Payment P95 < 3s |
 | `04_drop_spike.js` | 0 → 1,000 VU 30초 급상승, 오버셀 0건 | ramping 0→1000→0 | Write P95 < 300ms |
 | `05_sse_queue.js` | Nginx worker_connections · JVM FD 한계 검증 | 1,000→1,800→2,100 VU | 429 계약 확인 |
+| `06_workload_model.js` | 피드 60% · 대기열 20% · 주문 15% · 결제 5% 혼합 부하 — 실사용 패턴 재현 | ramping 0→300 VU | Write P95 < 300ms, Read P95 < 120ms |
 
 ### 7-3. SLO 임계값 (`lib/thresholds.js`)
 
