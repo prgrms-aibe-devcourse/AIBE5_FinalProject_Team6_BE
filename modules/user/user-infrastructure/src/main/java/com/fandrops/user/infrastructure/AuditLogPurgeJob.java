@@ -5,7 +5,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -14,13 +13,15 @@ import java.time.temporal.ChronoUnit;
 public class AuditLogPurgeJob {
 
     private static final Logger log = LoggerFactory.getLogger(AuditLogPurgeJob.class);
-    private static final int BATCH_SIZE = 500;
     private static final int RETENTION_DAYS = 365;
 
     private final AuditLogJpaRepository auditLogJpaRepository;
+    private final AuditLogChunkDeleter chunkDeleter;
 
-    public AuditLogPurgeJob(AuditLogJpaRepository auditLogJpaRepository) {
+    public AuditLogPurgeJob(AuditLogJpaRepository auditLogJpaRepository,
+                            AuditLogChunkDeleter chunkDeleter) {
         this.auditLogJpaRepository = auditLogJpaRepository;
+        this.chunkDeleter = chunkDeleter;
     }
 
     // 매월 1일 새벽 3시 실행 — data-retention-and-audit-policy.md §5
@@ -38,15 +39,10 @@ public class AuditLogPurgeJob {
         int totalDeleted = 0;
         int deleted;
         do {
-            deleted = deleteChunk(cutoff);
+            deleted = chunkDeleter.deleteChunk(cutoff);
             totalDeleted += deleted;
         } while (deleted > 0);
 
         log.info("[AuditLogPurgeJob] 삭제 완료: {}건", totalDeleted);
-    }
-
-    @Transactional
-    public int deleteChunk(Instant cutoff) {
-        return auditLogJpaRepository.deleteOldLogs(cutoff, BATCH_SIZE);
     }
 }

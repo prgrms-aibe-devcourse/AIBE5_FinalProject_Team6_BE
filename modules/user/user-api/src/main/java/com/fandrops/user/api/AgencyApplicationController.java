@@ -73,7 +73,7 @@ public class AgencyApplicationController extends UserControllerSupport {
             Authentication authentication,
             HttpServletRequest httpRequest) {
         Long adminId = resolveAdminId(authentication);
-        String clientIp = httpRequest.getRemoteAddr();
+        String clientIp = resolveClientIp(httpRequest);
         String traceId = traceId();
         switch (request.status().toUpperCase()) {
             case "APPROVED" -> agencyApplicationService.approveApplication(id, adminId, clientIp, traceId);

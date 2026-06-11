@@ -3,6 +3,7 @@ package com.fandrops.user.api;
 import com.fandrops.user.api.dto.AuthTokenResponse;
 import com.fandrops.user.application.dto.AuthTokenResult;
 import com.fandrops.user.application.exception.InvalidCredentialsException;
+import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.MDC;
 import org.springframework.core.env.Environment;
 import org.springframework.security.core.Authentication;
@@ -40,6 +41,14 @@ public abstract class UserControllerSupport {
             return fanId;
         }
         throw new InvalidCredentialsException("인증이 필요합니다.");
+    }
+
+    protected static String resolveClientIp(HttpServletRequest request) {
+        String forwarded = request.getHeader("X-Forwarded-For");
+        if (forwarded != null && !forwarded.isBlank()) {
+            return forwarded.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
     }
 
     protected Long resolveAdminId(Authentication authentication) {
