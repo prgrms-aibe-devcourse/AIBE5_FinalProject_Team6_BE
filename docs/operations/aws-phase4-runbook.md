@@ -47,6 +47,8 @@ Phase 4 시작 전 Blue/Green 배포를 EC2에 적용해 배포 중에도 5xx 0�
 
 ### 2-2. 적용 절차
 
+> **✅ 완료** — 2026-06-11 사전 완료 (PR #221, #222). Phase 4 시작 전 적용 완료됨.
+
 **Blue/Green EC2 적용 절차는 [aws-phase3-runbook.md §8](./aws-phase3-runbook.md#8-bluegreen-배포-ec2-적용) 에 통합되어 있다.**
 
 Phase 3 §8 Step 1~5를 순서대로 따른다 (systemd 유닛 생성 → Nginx active.conf 전환 → 기존 fandrops.service 비활성화 → 헬스체크).
@@ -358,7 +360,7 @@ PR 머지 + 배포 완료 후:
 
 | 날짜 | 작업 |
 | --- | --- |
-| 6/12 | Blue/Green EC2 적용 + cd.yml 수정 + 배포 테스트 |
+| 6/11 ✅ | Blue/Green EC2 적용 + cd.yml 수정 + 배포 테스트 완료 (PR #221, #222) |
 | 6/12~13 | k6 Baseline 실행 (시나리오 01·02·04·05) + 수치 기록 |
 | 6/13~14 | D 단기 실험 — EC2-2 기동 → 분산 검증 → terminate |
 | 6/14~18 | Baseline 미달 항목 튜닝 (도메인 오너 협의 포함) |
@@ -379,7 +381,7 @@ PR 머지 + 배포 완료 후:
 
 ## 9. 최종 DoD
 
-- [ ] Blue/Green EC2 적용 완료 확인 (Phase 3 §8 DoD 참고)
+- [x] Blue/Green EC2 적용 완료 확인 (Phase 3 §8 DoD 참고) — 2026-06-11 완료, PR #221·#222
 - [ ] k6 Baseline 수치 기록 (시나리오 01·02·04·05)
 - [ ] D 단기 실험 완료 — 오버셀 0건 확인 + SSE 한계 기록
 - [ ] SLO 목표 달성 확인 (Write P95 < 300ms, Read P95 < 120ms, 5xx < 0.1%)
