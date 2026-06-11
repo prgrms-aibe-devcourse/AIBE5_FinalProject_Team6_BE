@@ -48,7 +48,7 @@ jobs:
       - name: 배포 스크립트 → S3 업로드
         run: |
           aws s3 cp .github/scripts/bluegreen-deploy.sh \
-            s3://${{ secrets.S3_BUCKET }}/scripts/bluegreen-deploy.sh
+            s3://${{ secrets.S3_BUCKET }}/deploy/bluegreen-deploy.sh
 
       - name: Blue/Green 배포 (SSM RunCommand)
         run: |
@@ -58,7 +58,7 @@ jobs:
           # SSM 명령 파라미터 파일 생성 (jq로 JSON 작성 — heredoc EOF 공백 문제 회피)
           jq -n --arg bucket "$BUCKET" '{
             commands: [
-              "aws s3 cp s3://\($bucket)/scripts/bluegreen-deploy.sh /tmp/bluegreen-deploy.sh",
+              "aws s3 cp s3://\($bucket)/deploy/bluegreen-deploy.sh /tmp/bluegreen-deploy.sh",
               "chmod +x /tmp/bluegreen-deploy.sh",
               "S3_BUCKET=\($bucket) /tmp/bluegreen-deploy.sh"
             ]
