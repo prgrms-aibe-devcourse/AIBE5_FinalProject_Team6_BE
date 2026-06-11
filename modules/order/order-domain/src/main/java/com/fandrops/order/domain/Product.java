@@ -12,6 +12,8 @@ public class Product {
     private String name;
     private BigDecimal price;
     private ProductStatus status;
+    private LocalDateTime dropsStartAt;
+    private LocalDateTime dropsEndAt;
     private LocalDateTime updatedAt;
 
     private Product() {}
@@ -25,16 +27,35 @@ public class Product {
         return p;
     }
 
+    public static Product createDrops(Long artistId, String name, BigDecimal price,
+                                      LocalDateTime dropsStartAt, LocalDateTime dropsEndAt) {
+        Product p = new Product();
+        p.artistId = artistId;
+        p.name = name;
+        p.price = price;
+        p.status = ProductStatus.ON_SALE;
+        p.dropsStartAt = dropsStartAt;
+        p.dropsEndAt = dropsEndAt;
+        return p;
+    }
+
     public static Product of(Long id, Long artistId, String name, BigDecimal price,
-                             ProductStatus status, LocalDateTime updatedAt) {
+                             ProductStatus status, LocalDateTime dropsStartAt,
+                             LocalDateTime dropsEndAt, LocalDateTime updatedAt) {
         Product p = new Product();
         p.id = id;
         p.artistId = artistId;
         p.name = name;
         p.price = price;
         p.status = status;
+        p.dropsStartAt = dropsStartAt;
+        p.dropsEndAt = dropsEndAt;
         p.updatedAt = updatedAt;
         return p;
+    }
+
+    public boolean isDrops() {
+        return dropsStartAt != null && dropsEndAt != null;
     }
 
     public void update(String name, BigDecimal price, ProductStatus status) {

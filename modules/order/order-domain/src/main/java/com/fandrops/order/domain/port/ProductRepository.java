@@ -8,4 +8,7 @@ public interface ProductRepository {
     Product save(Product product);
     Optional<Product> findById(Long id);
     List<Product> findRegularProducts(Long cursor, int size);
+
+    /** dropsStartAt ≤ now ≤ dropsEndAt 조건 드롭스 상품 목록 */
+    List<Product> findDropsProducts(Long cursor, int size);
 }
