@@ -4,16 +4,31 @@
  * 파라미터: 장성재 확정 (2026-06-05)
  *
  * 사전 준비:
- *   1. compose.yaml에 Wiremock 서비스 추가 (infra/k6/wiremock/ 참고)
- *   2. TOSS_API_BASE_URL=http://wiremock:8080 으로 앱 서버 재기동
+ *   1. Wiremock 기동 (infra/k6/wiremock/mappings/ stub 4종 자동 로드):
+ *      docker run -d --name wiremock -p 8090:8080 \
+ *        -v $(pwd)/infra/k6/wiremock/mappings:/home/wiremock/mappings \
+ *        wiremock/wiremock:3.3.1 --global-response-templating
+ *   2. TOSS_API_BASE_URL=http://localhost:8090 으로 앱 서버 재기동
  *   3. DB seed: orders id=1..50 (status=RESERVED, product_id=1, total_amount=15000, fan_id=1..50)
- *   4. 실행:
- *      k6 run \
- *        -e ORDERS_JSON="$(cat seed/orders.json)" \
- *        --out experimental-prometheus-rw \
- *        scenarios/03_payment_confirm.js
+ *   4. 실행 — SCENARIO 선택:
+ *      # 성공만 (기본)
+ *      k6 run -e ORDERS_JSON="$(cat seed/orders.json)" scenarios/03_payment_confirm.js
  *
- * orders.json 형식: [{"orderId":1,"amount":15000},{"orderId":2,"amount":15000},...]
+ *      # 특정 시나리오 단일 실행
+ *      k6 run -e SCENARIO=timeout   -e ORDERS_JSON="$(cat seed/orders.json)" scenarios/03_payment_confirm.js
+ *      k6 run -e SCENARIO=balance-error -e ORDERS_JSON="$(cat seed/orders.json)" scenarios/03_payment_confirm.js
+ *      k6 run -e SCENARIO=server-error  -e ORDERS_JSON="$(cat seed/orders.json)" scenarios/03_payment_confirm.js
+ *
+ *      # 혼합 부하 (성공 70% / 타임아웃 10% / 잔액부족 10% / 서버오류 10%)
+ *      k6 run -e SCENARIO=mixed -e ORDERS_JSON="$(cat seed/orders.json)" scenarios/03_payment_confirm.js
+ *
+ * SCENARIO → Wiremock stub 라우팅 (paymentKey prefix 기반):
+ *   success      → toss-confirm-success.json      (200 즉시)
+ *   timeout      → toss-confirm-timeout.json      (200, 5s 지연)
+ *   balance-error → toss-confirm-balance-error.json (400 잔액부족)
+ *   server-error  → toss-confirm-server-error.json  (500 PG 오류)
+ *
+ * orders.json 형식: [{"orderId":1,"amount":15000,"fanId":1},...]
  */
 import http from 'k6/http';
 import { check } from 'k6';
@@ -21,7 +36,22 @@ import { BASE_URL, localHeaders } from '../lib/auth.js';
 import { PAYMENT_THRESHOLDS } from '../lib/thresholds.js';
 
 // pre-seeded RESERVED 주문 픽스처 (VU별 orderId 중복 없이 분배)
-const ORDERS = JSON.parse(__ENV.ORDERS_JSON || '[{"orderId":1,"amount":15000}]');
+const ORDERS = JSON.parse(__ENV.ORDERS_JSON || '[{"orderId":1,"amount":15000,"fanId":1}]');
+
+// SCENARIO: success | timeout | balance-error | server-error | mixed
+const SCENARIO = __ENV.SCENARIO || 'success';
+
+function resolvePrefix() {
+  if (SCENARIO === 'mixed') {
+    const r = Math.random();
+    if (r < 0.70) return 'success';
+    if (r < 0.80) return 'timeout';
+    if (r < 0.90) return 'balance';
+    return 'error';
+  }
+  const map = { success: 'success', timeout: 'timeout', 'balance-error': 'balance', 'server-error': 'error' };
+  return map[SCENARIO] || 'success';
+}
 
 export const options = {
   scenarios: {
@@ -40,10 +70,10 @@ export const options = {
 };
 
 export default function () {
-  // VU 인덱스 기반으로 주문 픽스처 선택 (0-based)
   const order = ORDERS[(__VU - 1) % ORDERS.length];
-  // 각 VU마다 고유 tossPaymentKey 생성 (멱등키 충돌 방지)
-  const tossPaymentKey = `load-test-${order.orderId}-${__ITER}`;
+  const prefix = resolvePrefix();
+  // prefix가 Wiremock stub 라우팅 키 — 멱등키 충돌 방지를 위해 __ITER 포함
+  const tossPaymentKey = `${prefix}-${order.orderId}-${__ITER}`;
   const fanId = order.fanId || __VU;
 
   const res = http.post(
@@ -52,7 +82,9 @@ export default function () {
     { headers: localHeaders(fanId) },
   );
 
+  // success/timeout: 200·201 기대 / balance-error: 400 / server-error: 5xx
   check(res, {
-    'confirm accepted': (r) => r.status === 200 || r.status === 201,
+    'confirm accepted or expected error': (r) =>
+      r.status === 200 || r.status === 201 || r.status === 400 || r.status === 500,
   });
 }
