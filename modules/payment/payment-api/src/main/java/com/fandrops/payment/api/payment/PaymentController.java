@@ -28,7 +28,8 @@ public class PaymentController {
     @PostMapping("/toss/confirm")
     public ResponseEntity<PaymentConfirmResponse> confirm(@Valid @RequestBody PaymentConfirmRequest request) {
         PaymentConfirmResult result = paymentConfirmService.confirm(
-                new PaymentConfirmCommand(request.getOrderId(), request.getTossPaymentKey(), request.getAmount()));
+                new PaymentConfirmCommand(request.getOrderId(), request.getTossPaymentKey(),
+                        request.getOrderPaymentKey(), request.getAmount()));
         return ResponseEntity.ok(PaymentConfirmResponse.from(result));
     }
 }
