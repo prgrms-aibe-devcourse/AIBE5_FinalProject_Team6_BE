@@ -1,5 +1,7 @@
 dependencies {
     implementation(project(":modules:community:community-domain"))
+    // community → user 단방향 의존 (역방향 금지 — 순환 의존성 방지)
+    // AgencyApprovedEvent 소비 목적으로만 사용
     implementation(project(":modules:user:user-application"))
     // @Service — spring-context 포함 (ADR-002 §03: JPA 구현체 제외)
     implementation("org.springframework:spring-context")

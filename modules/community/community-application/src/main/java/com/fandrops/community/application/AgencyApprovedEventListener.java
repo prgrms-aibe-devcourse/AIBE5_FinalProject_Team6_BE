@@ -27,6 +27,10 @@ public class AgencyApprovedEventListener {
     public void handleAgencyApproved(AgencyApprovedEvent event) {
         log.info("입점 승인 이벤트 수신 — artistId={}, agencyId={}, artistName={}",
                 event.getArtistId(), event.getAgencyId(), event.getArtistName());
-        artistProfilePort.activate(event.getArtistId());
+        try {
+            artistProfilePort.activate(event.getArtistId());
+        } catch (Exception e) {
+            log.error("아티스트 공간 활성화 실패 — artistId={}", event.getArtistId(), e);
+        }
     }
 }

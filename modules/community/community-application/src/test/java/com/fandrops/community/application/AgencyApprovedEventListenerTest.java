@@ -9,6 +9,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
@@ -32,5 +34,14 @@ class AgencyApprovedEventListenerTest {
         listener.handleAgencyApproved(event);
 
         verify(artistProfilePort).activate(10L);
+    }
+
+    @Test
+    @DisplayName("activate() 예외 발생 시 외부로 전파되지 않음")
+    void handleAgencyApproved_activateThrows_doesNotPropagate() {
+        doThrow(new RuntimeException("DB 오류")).when(artistProfilePort).activate(10L);
+        AgencyApprovedEvent event = new AgencyApprovedEvent(10L, 1L, "테스트아티스트");
+
+        assertDoesNotThrow(() -> listener.handleAgencyApproved(event));
     }
 }
