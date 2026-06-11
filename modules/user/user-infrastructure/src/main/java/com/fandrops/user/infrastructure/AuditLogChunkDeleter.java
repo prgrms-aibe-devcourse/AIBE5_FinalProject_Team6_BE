@@ -15,7 +15,7 @@ public class AuditLogChunkDeleter {
         this.auditLogJpaRepository = auditLogJpaRepository;
     }
 
-    static final int BATCH_SIZE = 500;
+    private static final int BATCH_SIZE = 500;
 
     @Transactional
     public int deleteChunk(Instant cutoff) {

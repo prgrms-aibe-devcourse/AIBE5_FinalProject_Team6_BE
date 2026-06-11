@@ -16,6 +16,7 @@ import com.fandrops.user.domain.AgencyApplication;
 import com.fandrops.user.domain.AgencyApplicationAlreadyReviewedException;
 import com.fandrops.user.domain.AgencyApplicationStatus;
 import com.fandrops.user.domain.ArtistProfile;
+import com.fandrops.user.domain.AuditLog;
 import com.fandrops.user.domain.UserRole;
 import com.fandrops.user.application.event.AgencyApprovedEvent;
 import org.junit.jupiter.api.BeforeEach;
@@ -175,6 +176,7 @@ class AgencyApplicationServiceTest {
         verify(artistProfileRepository).save(any());
         verify(emailNotificationPort).sendApplicationApprovedEmail(
                 eq("contact@hybe.com"), eq("contact@hybe.com"), anyString());
+        verify(auditLogPort).save(any(AuditLog.class));
     }
 
     @Test
@@ -336,6 +338,7 @@ class AgencyApplicationServiceTest {
 
         verify(agencyApplicationRepository).save(any());
         verify(emailNotificationPort).sendApplicationRejectedEmail("contact@hybe.com", "서류 미비");
+        verify(auditLogPort).save(any(AuditLog.class));
     }
 
     @Test

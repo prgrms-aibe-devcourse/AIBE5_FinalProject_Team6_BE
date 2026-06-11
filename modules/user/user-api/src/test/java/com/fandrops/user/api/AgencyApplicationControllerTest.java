@@ -177,4 +177,31 @@ class AgencyApplicationControllerTest {
                 () -> controller.review(99L, new ReviewAgencyApplicationRequest("APPROVED", null),
                         authentication, httpRequest));
     }
+
+    @Test
+    @DisplayName("입점 승인 — X-Forwarded-For 헤더 존재 시 첫 번째 IP를 사용한다")
+    void review_approve_xForwardedForPresent_usesFirstIp() {
+        when(authentication.isAuthenticated()).thenReturn(true);
+        when(authentication.getPrincipal()).thenReturn(1L);
+        when(httpRequest.getHeader("X-Forwarded-For")).thenReturn("203.0.113.10, 10.0.0.1");
+        ReviewAgencyApplicationRequest request = new ReviewAgencyApplicationRequest("APPROVED", null);
+
+        controller.review(1L, request, authentication, httpRequest);
+
+        verify(agencyApplicationService).approveApplication(eq(1L), anyLong(), eq("203.0.113.10"), anyString());
+    }
+
+    @Test
+    @DisplayName("입점 승인 — X-Forwarded-For 없으면 getRemoteAddr() fallback")
+    void review_approve_noXForwardedFor_fallsBackToRemoteAddr() {
+        when(authentication.isAuthenticated()).thenReturn(true);
+        when(authentication.getPrincipal()).thenReturn(1L);
+        when(httpRequest.getHeader("X-Forwarded-For")).thenReturn(null);
+        when(httpRequest.getRemoteAddr()).thenReturn("10.0.0.5");
+        ReviewAgencyApplicationRequest request = new ReviewAgencyApplicationRequest("APPROVED", null);
+
+        controller.review(1L, request, authentication, httpRequest);
+
+        verify(agencyApplicationService).approveApplication(eq(1L), anyLong(), eq("10.0.0.5"), anyString());
+    }
 }

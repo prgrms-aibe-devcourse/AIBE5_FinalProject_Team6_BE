@@ -132,4 +132,33 @@ class AdminBannerControllerTest {
 
         assertThrows(BannerNotFoundException.class, () -> controller.delete(99L, authentication, httpRequest));
     }
+
+    @Test
+    @DisplayName("배너 생성 — X-Forwarded-For 헤더 존재 시 첫 번째 IP를 사용한다")
+    void create_xForwardedForPresent_usesFirstIp() {
+        when(authentication.isAuthenticated()).thenReturn(true);
+        when(authentication.getPrincipal()).thenReturn(1L);
+        when(httpRequest.getHeader("X-Forwarded-For")).thenReturn("203.0.113.10, 10.0.0.1");
+        CreateBannerRequest request = new CreateBannerRequest("배너 제목", "img.jpg", "https://fandrops.com", 1, null, null);
+        when(bannerService.createBanner(any(CreateBannerCommand.class), anyLong(), anyString(), anyString())).thenReturn(stub);
+
+        controller.create(request, authentication, httpRequest);
+
+        verify(bannerService).createBanner(any(CreateBannerCommand.class), anyLong(), eq("203.0.113.10"), anyString());
+    }
+
+    @Test
+    @DisplayName("배너 생성 — X-Forwarded-For 없으면 getRemoteAddr() fallback")
+    void create_noXForwardedFor_fallsBackToRemoteAddr() {
+        when(authentication.isAuthenticated()).thenReturn(true);
+        when(authentication.getPrincipal()).thenReturn(1L);
+        when(httpRequest.getHeader("X-Forwarded-For")).thenReturn(null);
+        when(httpRequest.getRemoteAddr()).thenReturn("10.0.0.5");
+        CreateBannerRequest request = new CreateBannerRequest("배너 제목", "img.jpg", "https://fandrops.com", 1, null, null);
+        when(bannerService.createBanner(any(CreateBannerCommand.class), anyLong(), anyString(), anyString())).thenReturn(stub);
+
+        controller.create(request, authentication, httpRequest);
+
+        verify(bannerService).createBanner(any(CreateBannerCommand.class), anyLong(), eq("10.0.0.5"), anyString());
+    }
 }
