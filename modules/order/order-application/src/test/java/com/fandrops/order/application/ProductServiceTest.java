@@ -170,6 +170,26 @@ class ProductServiceTest {
             verify(productRepository).save(captor.capture());
             assertTrue(captor.getValue().isDrops());
         }
+
+        @Test
+        @DisplayName("dropsStartAt만 입력 시 IllegalArgumentException")
+        void createProduct_onlyStartAt_throws() {
+            assertThrows(IllegalArgumentException.class,
+                    () -> sut.createProduct(new CreateProductCommand(
+                            ARTIST_ID, "드롭스", BigDecimal.valueOf(10000), 50,
+                            LocalDateTime.now().plusDays(1), null)));
+        }
+
+        @Test
+        @DisplayName("dropsStartAt >= dropsEndAt 이면 IllegalArgumentException")
+        void createProduct_startAfterEnd_throws() {
+            LocalDateTime start = LocalDateTime.now().plusDays(2);
+            LocalDateTime end = LocalDateTime.now().plusDays(1);
+
+            assertThrows(IllegalArgumentException.class,
+                    () -> sut.createProduct(new CreateProductCommand(
+                            ARTIST_ID, "드롭스", BigDecimal.valueOf(10000), 50, start, end)));
+        }
     }
 
     @Nested
@@ -199,6 +219,19 @@ class ProductServiceTest {
             assertThrows(ProductNotFoundException.class,
                     () -> sut.updateProduct(new UpdateProductCommand(
                             PRODUCT_ID, null, null, ProductStatus.SOLD_OUT)));
+            verify(productRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("드롭스 기간 역순 수정 시 IllegalArgumentException")
+        void updateProduct_invalidDropsPeriod_throws() {
+            LocalDateTime start = LocalDateTime.now().plusDays(2);
+            LocalDateTime end = LocalDateTime.now().plusDays(1);
+            given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product()));
+
+            assertThrows(IllegalArgumentException.class,
+                    () -> sut.updateProduct(new UpdateProductCommand(
+                            PRODUCT_ID, null, null, null, start, end)));
             verify(productRepository, never()).save(any());
         }
     }

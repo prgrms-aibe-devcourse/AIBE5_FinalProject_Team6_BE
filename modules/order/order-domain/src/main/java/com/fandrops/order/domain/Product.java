@@ -29,6 +29,12 @@ public class Product {
 
     public static Product createDrops(Long artistId, String name, BigDecimal price,
                                       LocalDateTime dropsStartAt, LocalDateTime dropsEndAt) {
+        if (dropsStartAt == null || dropsEndAt == null) {
+            throw new IllegalArgumentException("드롭스 상품은 dropsStartAt, dropsEndAt 모두 필수입니다.");
+        }
+        if (!dropsStartAt.isBefore(dropsEndAt)) {
+            throw new IllegalArgumentException("dropsStartAt은 dropsEndAt보다 이전이어야 합니다.");
+        }
         Product p = new Product();
         p.artistId = artistId;
         p.name = name;
@@ -65,6 +71,11 @@ public class Product {
         if (status != null) this.status = status;
         if (dropsStartAt != null) this.dropsStartAt = dropsStartAt;
         if (dropsEndAt != null) this.dropsEndAt = dropsEndAt;
+        // 변경 후 dropsStartAt/EndAt 양쪽 모두 설정된 경우 유효성 검증
+        if (this.dropsStartAt != null && this.dropsEndAt != null
+                && !this.dropsStartAt.isBefore(this.dropsEndAt)) {
+            throw new IllegalArgumentException("dropsStartAt은 dropsEndAt보다 이전이어야 합니다.");
+        }
     }
 
     public void markSoldOut() { this.status = ProductStatus.SOLD_OUT; }

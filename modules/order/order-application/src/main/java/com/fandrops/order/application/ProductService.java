@@ -57,6 +57,11 @@ public class ProductService {
 
     @Transactional
     public Long createProduct(CreateProductCommand command) {
+        boolean hasStart = command.getDropsStartAt() != null;
+        boolean hasEnd = command.getDropsEndAt() != null;
+        if (hasStart != hasEnd) {
+            throw new IllegalArgumentException("dropsStartAt, dropsEndAt은 함께 입력해야 합니다.");
+        }
         Product product = command.isDrops()
                 ? Product.createDrops(command.getArtistId(), command.getName(), command.getPrice(),
                         command.getDropsStartAt(), command.getDropsEndAt())
