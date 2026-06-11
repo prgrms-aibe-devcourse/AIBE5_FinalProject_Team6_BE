@@ -32,7 +32,7 @@ services:
     ports:
       - "8089:8080"
     volumes:
-      - ./infra/k6/wiremock/stubs:/home/wiremock/mappings
+      - ./infra/k6/wiremock/mappings:/home/wiremock/mappings
     command: ["--verbose", "--global-response-templating"]
 
 volumes:
