@@ -56,7 +56,7 @@ public class PaymentConfirmService {
 
         // confirm 진행 중 동시 중복: @Version 낙관적 락으로 방어 (Toss PG 멱등 보장)
         TossConfirmResult pgResult = tossPaymentPort.confirm(
-                command.getTossPaymentKey(), command.getAmount(), command.getOrderId());
+                command.getTossPaymentKey(), command.getAmount(), command.getOrderPaymentKey());
 
         if (pgResult.isSuccess()) {
             payment.confirm(command.getTossPaymentKey(), pgResult.getPaymentMethod(), pgResult.getApprovedAt());
