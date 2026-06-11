@@ -45,21 +45,30 @@ jobs:
           echo "업로드 대상: $JAR"
           aws s3 cp "$JAR" s3://${{ secrets.S3_BUCKET }}/deploy/api-server.jar
 
-      - name: EC2 배포 (SSM RunCommand)
+      - name: 배포 스크립트 → S3 업로드
+        run: |
+          aws s3 cp .github/scripts/bluegreen-deploy.sh \
+            s3://${{ secrets.S3_BUCKET }}/scripts/bluegreen-deploy.sh
+
+      - name: Blue/Green 배포 (SSM RunCommand)
         run: |
           BUCKET="${{ secrets.S3_BUCKET }}"
           INSTANCE="${{ secrets.EC2_INSTANCE_ID }}"
 
+          # SSM 명령 파라미터 파일 생성 (jq로 JSON 작성 — heredoc EOF 공백 문제 회피)
+          jq -n --arg bucket "$BUCKET" '{
+            commands: [
+              "aws s3 cp s3://\($bucket)/scripts/bluegreen-deploy.sh /tmp/bluegreen-deploy.sh",
+              "chmod +x /tmp/bluegreen-deploy.sh",
+              "S3_BUCKET=\($bucket) /tmp/bluegreen-deploy.sh"
+            ]
+          }' > /tmp/ssm-params.json
+
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "$INSTANCE" \
             --document-name "AWS-RunShellScript" \
-            --parameters commands="[
-              \"aws s3 cp s3://$BUCKET/deploy/api-server.jar /tmp/app.jar\",
-              \"sudo mv /tmp/app.jar /opt/fandrops/app.jar\",
-              \"sudo chown fandrops:fandrops /opt/fandrops/app.jar\",
-              \"sudo chmod 755 /opt/fandrops/app.jar\",
-              \"sudo systemctl restart fandrops\"
-            ]" \
+            --parameters file:///tmp/ssm-params.json \
+            --timeout-seconds 300 \
             --query "Command.CommandId" \
             --output text)
 
@@ -79,29 +88,6 @@ jobs:
           done
 
           [ "$STATUS" = "Success" ] || { echo "타임아웃"; exit 1; }
-
-      - name: 헬스체크 (서비스 기동 대기 후 확인)
-        run: |
-          INSTANCE="${{ secrets.EC2_INSTANCE_ID }}"
-          echo "서비스 기동 대기 (30초)..."
-          sleep 30
-
-          COMMAND_ID=$(aws ssm send-command \
-            --instance-ids "$INSTANCE" \
-            --document-name "AWS-RunShellScript" \
-            --parameters commands='["curl -sf http://localhost:8080/actuator/health | grep -q UP && echo OK || exit 1"]' \
-            --query "Command.CommandId" \
-            --output text)
-
-          sleep 15
-
-          STATUS=$(aws ssm get-command-invocation \
-            --command-id "$COMMAND_ID" \
-            --instance-id "$INSTANCE" \
-            --query "Status" --output text)
-
-          echo "헬스체크 결과: $STATUS"
-          [ "$STATUS" = "Success" ] || { echo "헬스체크 실패 — 서비스를 확인하세요"; exit 1; }
 
       - name: 배포 완료 알림
         if: success()
