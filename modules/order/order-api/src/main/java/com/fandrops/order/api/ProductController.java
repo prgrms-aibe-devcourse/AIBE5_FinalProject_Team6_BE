@@ -78,7 +78,8 @@ public class ProductController {
             @PathVariable("id") Long id,
             @Valid @RequestBody UpdateProductRequest request) {
         ProductStatus status = productService.updateProduct(new UpdateProductCommand(
-                id, request.getName(), request.getPrice(), request.getStatus()));
+                id, request.getName(), request.getPrice(), request.getStatus(),
+                request.getDropsStartAt(), request.getDropsEndAt()));
         return ResponseEntity.ok(ApiResponse.ok(
                 Map.of("productId", id, "status", status.name()), traceId()));
     }

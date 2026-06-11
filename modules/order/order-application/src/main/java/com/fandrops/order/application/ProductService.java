@@ -70,7 +70,8 @@ public class ProductService {
     public ProductStatus updateProduct(UpdateProductCommand command) {
         Product product = productRepository.findById(command.getProductId())
                 .orElseThrow(() -> new ProductNotFoundException(command.getProductId()));
-        product.update(command.getName(), command.getPrice(), command.getStatus());
+        product.update(command.getName(), command.getPrice(), command.getStatus(),
+                command.getDropsStartAt(), command.getDropsEndAt());
         return productRepository.save(product).getStatus();
     }
 }

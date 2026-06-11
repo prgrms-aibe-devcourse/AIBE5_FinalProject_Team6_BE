@@ -58,10 +58,13 @@ public class Product {
         return dropsStartAt != null && dropsEndAt != null;
     }
 
-    public void update(String name, BigDecimal price, ProductStatus status) {
+    public void update(String name, BigDecimal price, ProductStatus status,
+                       LocalDateTime dropsStartAt, LocalDateTime dropsEndAt) {
         if (name != null) this.name = name;
         if (price != null) this.price = price;
         if (status != null) this.status = status;
+        if (dropsStartAt != null) this.dropsStartAt = dropsStartAt;
+        if (dropsEndAt != null) this.dropsEndAt = dropsEndAt;
     }
 
     public void markSoldOut() { this.status = ProductStatus.SOLD_OUT; }
