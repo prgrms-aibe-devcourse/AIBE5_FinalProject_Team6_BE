@@ -9,7 +9,6 @@ import com.fandrops.user.application.port.BannerRepository;
 import com.fandrops.user.domain.AuditLog;
 import com.fandrops.user.domain.Banner;
 import com.fandrops.user.domain.BannerType;
-import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -46,7 +45,7 @@ public class BannerService {
 
     /** POST /admin/main-banners — 배너 생성 (Admin) */
     @Transactional
-    public BannerResult createBanner(CreateBannerCommand command, Long adminId, String clientIp) {
+    public BannerResult createBanner(CreateBannerCommand command, Long adminId, String clientIp, String traceId) {
         if (command.startAt() != null && command.endAt() != null
                 && command.startAt().isAfter(command.endAt())) {
             throw new IllegalArgumentException("배너 종료 시각이 시작 시각보다 이를 수 없습니다.");
@@ -70,7 +69,7 @@ public class BannerService {
                 .action("ADMIN_BANNER_CREATE")
                 .resourceType("BANNER")
                 .resourceId(result.id())
-                .traceId(MDC.get("traceId"))
+                .traceId(traceId)
                 .afterJson(bannerJson(result))
                 .clientIp(clientIp)
                 .build());
@@ -79,7 +78,7 @@ public class BannerService {
 
     /** PATCH /admin/main-banners/{id} — 배너 수정 (Admin) */
     @Transactional
-    public BannerResult updateBanner(Long id, UpdateBannerCommand command, Long adminId, String clientIp) {
+    public BannerResult updateBanner(Long id, UpdateBannerCommand command, Long adminId, String clientIp, String traceId) {
         Banner banner = bannerRepository.findById(id)
                 .orElseThrow(() -> new BannerNotFoundException("존재하지 않는 배너입니다. id=" + id));
         LocalDateTime effectiveStart = command.startAt() != null ? command.startAt().orElse(null) : banner.getStartAt();
@@ -102,7 +101,7 @@ public class BannerService {
                 .action("ADMIN_BANNER_UPDATE")
                 .resourceType("BANNER")
                 .resourceId(id)
-                .traceId(MDC.get("traceId"))
+                .traceId(traceId)
                 .beforeJson(beforeJson)
                 .afterJson(bannerJson(result))
                 .clientIp(clientIp)
@@ -112,7 +111,7 @@ public class BannerService {
 
     /** DELETE /admin/main-banners/{id} — soft delete (Admin) */
     @Transactional
-    public void deleteBanner(Long id, Long adminId, String clientIp) {
+    public void deleteBanner(Long id, Long adminId, String clientIp, String traceId) {
         Banner banner = bannerRepository.findById(id)
                 .orElseThrow(() -> new BannerNotFoundException("존재하지 않는 배너입니다. id=" + id));
         banner.deactivate();
@@ -125,7 +124,7 @@ public class BannerService {
                 .action("ADMIN_BANNER_DELETE")
                 .resourceType("BANNER")
                 .resourceId(id)
-                .traceId(MDC.get("traceId"))
+                .traceId(traceId)
                 .beforeJson("{\"isActive\":true}")
                 .afterJson("{\"isActive\":false}")
                 .clientIp(clientIp)
@@ -146,6 +145,12 @@ public class BannerService {
 
     private static String escapeJson(String value) {
         if (value == null) return "null";
-        return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
+        return "\"" + value
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t")
+                + "\"";
     }
 }

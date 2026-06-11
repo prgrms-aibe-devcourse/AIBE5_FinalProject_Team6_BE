@@ -74,13 +74,14 @@ public class AgencyApplicationController extends UserControllerSupport {
             HttpServletRequest httpRequest) {
         Long adminId = resolveAdminId(authentication);
         String clientIp = httpRequest.getRemoteAddr();
+        String traceId = traceId();
         switch (request.status().toUpperCase()) {
-            case "APPROVED" -> agencyApplicationService.approveApplication(id, adminId, clientIp);
+            case "APPROVED" -> agencyApplicationService.approveApplication(id, adminId, clientIp, traceId);
             case "REJECTED" -> {
                 if (request.rejectReason() == null || request.rejectReason().isBlank()) {
                     throw new IllegalArgumentException("반려 시 rejectReason은 필수입니다.");
                 }
-                agencyApplicationService.rejectApplication(id, request.rejectReason(), adminId, clientIp);
+                agencyApplicationService.rejectApplication(id, request.rejectReason(), adminId, clientIp, traceId);
             }
             default -> throw new IllegalArgumentException(
                     "유효하지 않은 status 값입니다: " + request.status());

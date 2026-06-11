@@ -18,7 +18,6 @@ import com.fandrops.user.domain.AgencyApplicationStatus;
 import com.fandrops.user.domain.ArtistProfile;
 import com.fandrops.user.domain.AuditLog;
 import com.fandrops.user.domain.UserRole;
-import org.slf4j.MDC;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -96,7 +95,7 @@ public class AgencyApplicationService {
     // 이메일 발송 실패 시 @Transactional 롤백 의도적 설계:
     // agency가 임시 비밀번호 이메일을 못 받으면 로그인 방법이 없으므로 승인 자체를 취소해야 함
     @Transactional
-    public void approveApplication(Long id, Long adminId, String clientIp) {
+    public void approveApplication(Long id, Long adminId, String clientIp, String traceId) {
         AgencyApplication application = agencyApplicationRepository.findById(id)
                 .orElseThrow(() -> new AgencyApplicationNotFoundException(
                         "신청서를 찾을 수 없습니다. id=" + id));
@@ -144,7 +143,7 @@ public class AgencyApplicationService {
                 .action("AGENCY_APPLICATION_APPROVE")
                 .resourceType("AGENCY_APPLICATION")
                 .resourceId(id)
-                .traceId(MDC.get("traceId"))
+                .traceId(traceId)
                 .beforeJson(beforeJson)
                 .afterJson("{\"status\":\"APPROVED\"}")
                 .clientIp(clientIp)
@@ -153,7 +152,7 @@ public class AgencyApplicationService {
 
     // F02-02: 반려 — 이메일 발송
     @Transactional
-    public void rejectApplication(Long id, String rejectReason, Long adminId, String clientIp) {
+    public void rejectApplication(Long id, String rejectReason, Long adminId, String clientIp, String traceId) {
         AgencyApplication application = agencyApplicationRepository.findById(id)
                 .orElseThrow(() -> new AgencyApplicationNotFoundException(
                         "신청서를 찾을 수 없습니다. id=" + id));
@@ -173,7 +172,7 @@ public class AgencyApplicationService {
                 .action("AGENCY_APPLICATION_REJECT")
                 .resourceType("AGENCY_APPLICATION")
                 .resourceId(id)
-                .traceId(MDC.get("traceId"))
+                .traceId(traceId)
                 .beforeJson(beforeJson)
                 .afterJson("{\"status\":\"REJECTED\",\"rejectReason\":" + escapeJson(rejectReason) + "}")
                 .reason(rejectReason)
@@ -187,6 +186,12 @@ public class AgencyApplicationService {
 
     private static String escapeJson(String value) {
         if (value == null) return "null";
-        return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
+        return "\"" + value
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t")
+                + "\"";
     }
 }

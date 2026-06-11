@@ -121,7 +121,7 @@ class AgencyApplicationControllerTest {
         ResponseEntity<?> response = controller.review(1L, request, authentication, httpRequest);
 
         assertEquals(HttpStatus.NO_CONTENT, response.getStatusCode());
-        verify(agencyApplicationService).approveApplication(eq(1L), anyLong(), anyString());
+        verify(agencyApplicationService).approveApplication(eq(1L), anyLong(), anyString(), anyString());
     }
 
     @Test
@@ -133,7 +133,7 @@ class AgencyApplicationControllerTest {
         ResponseEntity<?> response = controller.review(1L, request, authentication, httpRequest);
 
         assertEquals(HttpStatus.NO_CONTENT, response.getStatusCode());
-        verify(agencyApplicationService).rejectApplication(eq(1L), eq("서류 미비"), anyLong(), anyString());
+        verify(agencyApplicationService).rejectApplication(eq(1L), eq("서류 미비"), anyLong(), anyString(), anyString());
     }
 
     @Test
@@ -171,7 +171,7 @@ class AgencyApplicationControllerTest {
     void review_approveNotFound_propagatesException() {
         givenAuthenticated();
         doThrow(new AgencyApplicationNotFoundException("신청서를 찾을 수 없습니다."))
-                .when(agencyApplicationService).approveApplication(eq(99L), anyLong(), anyString());
+                .when(agencyApplicationService).approveApplication(eq(99L), anyLong(), anyString(), anyString());
 
         assertThrows(AgencyApplicationNotFoundException.class,
                 () -> controller.review(99L, new ReviewAgencyApplicationRequest("APPROVED", null),

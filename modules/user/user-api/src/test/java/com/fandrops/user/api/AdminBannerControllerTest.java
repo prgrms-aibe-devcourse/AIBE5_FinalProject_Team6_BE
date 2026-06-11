@@ -71,12 +71,12 @@ class AdminBannerControllerTest {
     void create_success_returns201() {
         givenAuthenticated();
         CreateBannerRequest request = new CreateBannerRequest("배너 제목", "img.jpg", "https://fandrops.com", 1, null, null);
-        when(bannerService.createBanner(any(CreateBannerCommand.class), anyLong(), anyString())).thenReturn(stub);
+        when(bannerService.createBanner(any(CreateBannerCommand.class), anyLong(), anyString(), anyString())).thenReturn(stub);
 
         ResponseEntity<?> response = controller.create(request, authentication, httpRequest);
 
         assertEquals(HttpStatus.CREATED, response.getStatusCode());
-        verify(bannerService).createBanner(any(CreateBannerCommand.class), anyLong(), anyString());
+        verify(bannerService).createBanner(any(CreateBannerCommand.class), anyLong(), anyString(), anyString());
     }
 
     @Test
@@ -84,12 +84,12 @@ class AdminBannerControllerTest {
     void update_success_returns200() {
         givenAuthenticated();
         UpdateBannerRequest request = new UpdateBannerRequest("새 제목", null, null, null, null, null, null);
-        when(bannerService.updateBanner(eq(1L), any(UpdateBannerCommand.class), anyLong(), anyString())).thenReturn(stub);
+        when(bannerService.updateBanner(eq(1L), any(UpdateBannerCommand.class), anyLong(), anyString(), anyString())).thenReturn(stub);
 
         ResponseEntity<?> response = controller.update(1L, request, authentication, httpRequest);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
-        verify(bannerService).updateBanner(eq(1L), any(UpdateBannerCommand.class), anyLong(), anyString());
+        verify(bannerService).updateBanner(eq(1L), any(UpdateBannerCommand.class), anyLong(), anyString(), anyString());
     }
 
     @Test
@@ -99,7 +99,7 @@ class AdminBannerControllerTest {
         ResponseEntity<?> response = controller.delete(1L, authentication, httpRequest);
 
         assertEquals(HttpStatus.NO_CONTENT, response.getStatusCode());
-        verify(bannerService).deleteBanner(eq(1L), anyLong(), anyString());
+        verify(bannerService).deleteBanner(eq(1L), anyLong(), anyString(), anyString());
     }
 
     @Test
@@ -117,7 +117,7 @@ class AdminBannerControllerTest {
     void update_bannerNotFound_propagatesException() {
         givenAuthenticated();
         UpdateBannerRequest request = new UpdateBannerRequest("새 제목", null, null, null, null, null, null);
-        when(bannerService.updateBanner(eq(99L), any(UpdateBannerCommand.class), anyLong(), anyString()))
+        when(bannerService.updateBanner(eq(99L), any(UpdateBannerCommand.class), anyLong(), anyString(), anyString()))
                 .thenThrow(new BannerNotFoundException("배너를 찾을 수 없습니다."));
 
         assertThrows(BannerNotFoundException.class, () -> controller.update(99L, request, authentication, httpRequest));
@@ -128,7 +128,7 @@ class AdminBannerControllerTest {
     void delete_bannerNotFound_propagatesException() {
         givenAuthenticated();
         doThrow(new BannerNotFoundException("배너를 찾을 수 없습니다."))
-                .when(bannerService).deleteBanner(eq(99L), anyLong(), anyString());
+                .when(bannerService).deleteBanner(eq(99L), anyLong(), anyString(), anyString());
 
         assertThrows(BannerNotFoundException.class, () -> controller.delete(99L, authentication, httpRequest));
     }

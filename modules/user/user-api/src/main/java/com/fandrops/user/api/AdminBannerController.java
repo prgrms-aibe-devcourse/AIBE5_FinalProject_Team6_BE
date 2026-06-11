@@ -46,7 +46,8 @@ public class AdminBannerController extends UserControllerSupport {
                         request.exposureOrder(), request.startAt(), request.endAt()
                 ),
                 resolveAdminId(authentication),
-                httpRequest.getRemoteAddr()
+                httpRequest.getRemoteAddr(),
+                traceId()
         ));
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.ok(response, traceId()));
@@ -65,7 +66,8 @@ public class AdminBannerController extends UserControllerSupport {
                         request.startAt(), request.endAt()
                 ),
                 resolveAdminId(authentication),
-                httpRequest.getRemoteAddr()
+                httpRequest.getRemoteAddr(),
+                traceId()
         ));
         return ResponseEntity.ok(ApiResponse.ok(response, traceId()));
     }
@@ -75,7 +77,7 @@ public class AdminBannerController extends UserControllerSupport {
             @PathVariable Long id,
             Authentication authentication,
             HttpServletRequest httpRequest) {
-        bannerService.deleteBanner(id, resolveAdminId(authentication), httpRequest.getRemoteAddr());
+        bannerService.deleteBanner(id, resolveAdminId(authentication), httpRequest.getRemoteAddr(), traceId());
         return ResponseEntity.noContent().build();
     }
 }
