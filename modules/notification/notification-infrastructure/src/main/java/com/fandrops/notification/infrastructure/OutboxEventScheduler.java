@@ -52,28 +52,51 @@ public class OutboxEventScheduler {
 
     private void processEvent(OutboxEvent event) {
         NotificationType type = NotificationType.valueOf(event.getEventType());
-        Long fanId = resolveFanId(type, event);
-        if (fanId == null) {
-            log.warn("fanId 조회 실패: eventId={}, eventType={}", event.getId(), event.getEventType());
-            throw new IllegalStateException("fanId를 찾을 수 없습니다: resourceId=" + event.getResourceId());
+        List<Long> fanIds = resolveAllFanIds(type, event);
+        if (fanIds.isEmpty()) {
+            log.debug("알림 수신자 없음 (정상 skip): eventId={}, eventType={}", event.getId(), event.getEventType());
+            return;
         }
 
-        Notification notification = Notification.builder()
-                .fanId(fanId)
-                .type(type)
-                .targetId(event.getResourceId())
-                .message(resolveMessage(type))
-                .sentAt(Instant.now())
-                .build();
+        Instant now = Instant.now();
+        String message = resolveMessage(type);
+        List<Notification> notifications = fanIds.stream()
+                .map(fanId -> Notification.builder()
+                        .fanId(fanId)
+                        .type(type)
+                        .targetId(event.getResourceId())
+                        .message(message)
+                        .sentAt(now)
+                        .build())
+                .toList();
 
-        notificationPort.save(notification);
+        notificationPort.saveAll(notifications);
     }
 
-    private Long resolveFanId(NotificationType type, OutboxEvent event) {
+    private List<Long> resolveAllFanIds(NotificationType type, OutboxEvent event) {
         return switch (type) {
-            case PAYMENT_SUCCESS, PAYMENT_FAILED -> fanIdResolverPort.findFanIdByOrderId(event.getResourceId()).orElse(null);
-            case ARTIST_APPLICATION_APPROVED, RESTOCK -> extractLong(event.getPayload(), "fanId");
-            default -> null;
+            case PAYMENT_SUCCESS, PAYMENT_FAILED ->
+                    fanIdResolverPort.findFanIdByOrderId(event.getResourceId())
+                            .map(List::of)
+                            .orElseThrow(() -> new IllegalStateException(
+                                    "fanId 조회 실패: resourceId=" + event.getResourceId()));
+            case ARTIST_APPLICATION_APPROVED, RESTOCK -> {
+                Long fanId = extractLong(event.getPayload(), "fanId");
+                if (fanId == null) throw new IllegalStateException("fanId 누락: payload=" + event.getPayload());
+                yield List.of(fanId);
+            }
+            case NEW_FEED, ARTIST_SCHEDULE -> {
+                Long artistId = extractLong(event.getPayload(), "artistId");
+                if (artistId == null) throw new IllegalStateException("artistId 누락: payload=" + event.getPayload());
+                yield fanIdResolverPort.findFollowerFanIdsByArtistId(artistId);
+            }
+            case NEW_COMMENT -> {
+                Long parentId = extractLong(event.getPayload(), "parentId");
+                if (parentId == null) yield List.of();
+                yield fanIdResolverPort.findFanIdByCommentId(parentId)
+                        .map(List::of).orElse(List.of());
+            }
+            default -> List.of();
         };
     }
 

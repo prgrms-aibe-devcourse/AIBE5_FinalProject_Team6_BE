@@ -1,5 +1,8 @@
 package com.fandrops.notification.application;
 
+import com.fandrops.community.application.event.ArtistScheduleEvent;
+import com.fandrops.community.application.event.NewCommentEvent;
+import com.fandrops.community.application.event.NewFeedEvent;
 import com.fandrops.notification.application.dto.PublishNotificationCommand;
 import com.fandrops.order.application.event.RestockAlertEvent;
 import com.fandrops.payment.application.payment.PaymentApprovedEvent;
@@ -53,30 +56,30 @@ public class NotificationEventListener {
         publishNotificationUseCase.publish(command);
     }
 
-    // TODO [표지민]: community-application dependency 추가 후 활성화
-    // NewFeedEvent(Long feedId, Long artistId) — artistId로 팔로워 전체 조회 후 발송
-    // @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    // public void handleNewFeed(NewFeedEvent event) {
-    //     PublishNotificationCommand command = new PublishNotificationCommand(
-    //             "NEW_FEED", event.getFeedId(), "{\"artistId\":" + event.getArtistId() + ",\"feedId\":" + event.getFeedId() + "}");
-    //     publishNotificationUseCase.publish(command);
-    // }
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void handleNewFeed(NewFeedEvent event) {
+        log.info("새 피드 알림 이벤트 수신: feedId={}, artistId={}", event.getFeedId(), event.getArtistId());
+        PublishNotificationCommand command = new PublishNotificationCommand(
+                "NEW_FEED", event.getFeedId(),
+                "{\"artistId\":" + event.getArtistId() + ",\"feedId\":" + event.getFeedId() + "}");
+        publishNotificationUseCase.publish(command);
+    }
 
-    // TODO [표지민]: community-application dependency 추가 후 활성화
-    // NewCommentEvent(Long commentId, Long feedId, Long parentId, Long artistId) — artistId로 팔로워 전체 조회 후 발송
-    // @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    // public void handleNewComment(NewCommentEvent event) {
-    //     PublishNotificationCommand command = new PublishNotificationCommand(
-    //             "NEW_COMMENT", event.getFeedId(), "{\"artistId\":" + event.getArtistId() + ",\"commentId\":" + event.getCommentId() + "}");
-    //     publishNotificationUseCase.publish(command);
-    // }
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void handleNewComment(NewCommentEvent event) {
+        log.info("댓글 알림 이벤트 수신: commentId={}, parentId={}", event.getCommentId(), event.getParentId());
+        PublishNotificationCommand command = new PublishNotificationCommand(
+                "NEW_COMMENT", event.getFeedId(),
+                "{\"commentId\":" + event.getCommentId() + ",\"parentId\":" + event.getParentId() + "}");
+        publishNotificationUseCase.publish(command);
+    }
 
-    // TODO [표지민]: community-application dependency 추가 후 활성화
-    // ArtistScheduleEvent(Long scheduleId, Long artistId) — artistId로 팔로워 전체 조회 후 발송
-    // @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    // public void handleArtistSchedule(ArtistScheduleEvent event) {
-    //     PublishNotificationCommand command = new PublishNotificationCommand(
-    //             "ARTIST_SCHEDULE", event.getScheduleId(), "{\"artistId\":" + event.getArtistId() + ",\"scheduleId\":" + event.getScheduleId() + "}");
-    //     publishNotificationUseCase.publish(command);
-    // }
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void handleArtistSchedule(ArtistScheduleEvent event) {
+        log.info("아티스트 일정 알림 이벤트 수신: scheduleId={}, artistId={}", event.getScheduleId(), event.getArtistId());
+        PublishNotificationCommand command = new PublishNotificationCommand(
+                "ARTIST_SCHEDULE", event.getScheduleId(),
+                "{\"artistId\":" + event.getArtistId() + ",\"scheduleId\":" + event.getScheduleId() + "}");
+        publishNotificationUseCase.publish(command);
+    }
 }

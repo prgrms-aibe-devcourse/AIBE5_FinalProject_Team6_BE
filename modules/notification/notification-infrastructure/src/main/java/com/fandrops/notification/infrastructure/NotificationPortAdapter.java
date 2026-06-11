@@ -24,6 +24,16 @@ public class NotificationPortAdapter implements NotificationPort {
     }
 
     @Override
+    public List<Notification> saveAll(List<Notification> notifications) {
+        List<NotificationJpaEntity> entities = notifications.stream()
+                .map(NotificationJpaEntity::from)
+                .toList();
+        return notificationJpaRepository.saveAll(entities).stream()
+                .map(NotificationJpaEntity::toDomain)
+                .toList();
+    }
+
+    @Override
     public List<Notification> findByFanId(Long fanId, Long cursorId, int size) {
         PageRequest pageRequest = PageRequest.of(0, size);
         List<NotificationJpaEntity> entities = (cursorId == null)
