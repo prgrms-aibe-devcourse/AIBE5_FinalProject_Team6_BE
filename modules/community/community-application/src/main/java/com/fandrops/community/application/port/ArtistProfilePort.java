@@ -11,4 +11,7 @@ public interface ArtistProfilePort {
     void incrementFanCount(Long artistId);
 
     void decrementFanCount(Long artistId);
+
+    /** 입점 승인 시 아티스트 공간을 활성화한다. */
+    void activate(Long artistId);
 }
