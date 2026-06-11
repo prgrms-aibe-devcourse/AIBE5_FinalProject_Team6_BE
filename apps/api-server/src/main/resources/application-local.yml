@@ -23,6 +23,10 @@ spring:
   flyway:
     enabled: false  # 로컬 H2: JPA ddl-auto 로 스키마 생성
 
+  sql:
+    init:
+      data-locations: classpath:seed/test-data.sql  # 로컬 테스트 시드 데이터
+
   jpa:
     hibernate:
       ddl-auto: create-drop

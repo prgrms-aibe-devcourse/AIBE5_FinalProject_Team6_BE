@@ -35,6 +35,7 @@ class PaymentConfirmServiceTest {
 
     private static final Long ORDER_ID = 1L;
     private static final String TOSS_KEY = "toss_pay_abc";
+    private static final String ORDER_PAYMENT_KEY = "order-uuid-abc-123";
     private static final long AMOUNT = 50_000L;
 
     private Payment pendingPayment;
@@ -52,10 +53,10 @@ class PaymentConfirmServiceTest {
 
         when(paymentRepository.findByTossPaymentKey(TOSS_KEY)).thenReturn(Optional.of(existing));
 
-        PaymentConfirmResult result = service.confirm(new PaymentConfirmCommand(ORDER_ID, TOSS_KEY, AMOUNT));
+        PaymentConfirmResult result = service.confirm(new PaymentConfirmCommand(ORDER_ID, TOSS_KEY, ORDER_PAYMENT_KEY, AMOUNT));
 
         assertThat(result.getStatus()).isEqualTo(PaymentStatus.SUCCESS);
-        verify(tossPaymentPort, never()).confirm(anyString(), anyLong(), anyLong());
+        verify(tossPaymentPort, never()).confirm(anyString(), anyLong(), anyString());
     }
 
     @Test
@@ -63,11 +64,11 @@ class PaymentConfirmServiceTest {
     void p2_confirmSuccess_savesSuccessAndPublishesEvent() {
         when(paymentRepository.findByTossPaymentKey(TOSS_KEY)).thenReturn(Optional.empty());
         when(paymentRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.of(pendingPayment));
-        when(tossPaymentPort.confirm(TOSS_KEY, AMOUNT, ORDER_ID))
+        when(tossPaymentPort.confirm(TOSS_KEY, AMOUNT, ORDER_PAYMENT_KEY))
                 .thenReturn(TossConfirmResult.success("카드", Instant.now()));
         when(paymentRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        PaymentConfirmResult result = service.confirm(new PaymentConfirmCommand(ORDER_ID, TOSS_KEY, AMOUNT));
+        PaymentConfirmResult result = service.confirm(new PaymentConfirmCommand(ORDER_ID, TOSS_KEY, ORDER_PAYMENT_KEY, AMOUNT));
 
         assertThat(result.getStatus()).isEqualTo(PaymentStatus.SUCCESS);
         assertThat(result.getPaidAt()).isNotNull();
@@ -79,11 +80,11 @@ class PaymentConfirmServiceTest {
     void p3_confirmFailure_savesFailedAndPublishesEvent() {
         when(paymentRepository.findByTossPaymentKey(TOSS_KEY)).thenReturn(Optional.empty());
         when(paymentRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.of(pendingPayment));
-        when(tossPaymentPort.confirm(TOSS_KEY, AMOUNT, ORDER_ID))
+        when(tossPaymentPort.confirm(TOSS_KEY, AMOUNT, ORDER_PAYMENT_KEY))
                 .thenReturn(TossConfirmResult.failure("REJECT_CARD_COMPANY", "카드사 거절"));
         when(paymentRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        assertThatThrownBy(() -> service.confirm(new PaymentConfirmCommand(ORDER_ID, TOSS_KEY, AMOUNT)))
+        assertThatThrownBy(() -> service.confirm(new PaymentConfirmCommand(ORDER_ID, TOSS_KEY, ORDER_PAYMENT_KEY, AMOUNT)))
                 .isInstanceOf(PaymentConfirmFailedException.class)
                 .hasMessageContaining("카드사 거절");
 
@@ -99,10 +100,10 @@ class PaymentConfirmServiceTest {
         when(paymentRepository.findByTossPaymentKey(TOSS_KEY)).thenReturn(Optional.empty());
         when(paymentRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.of(successPayment));
 
-        PaymentConfirmResult result = service.confirm(new PaymentConfirmCommand(ORDER_ID, TOSS_KEY, AMOUNT));
+        PaymentConfirmResult result = service.confirm(new PaymentConfirmCommand(ORDER_ID, TOSS_KEY, ORDER_PAYMENT_KEY, AMOUNT));
 
         assertThat(result.getStatus()).isEqualTo(PaymentStatus.SUCCESS);
-        verify(tossPaymentPort, never()).confirm(anyString(), anyLong(), anyLong());
+        verify(tossPaymentPort, never()).confirm(anyString(), anyLong(), anyString());
     }
 
     @Test
@@ -114,10 +115,10 @@ class PaymentConfirmServiceTest {
         when(paymentRepository.findByTossPaymentKey(TOSS_KEY)).thenReturn(Optional.empty());
         when(paymentRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.of(failedPayment));
 
-        assertThatThrownBy(() -> service.confirm(new PaymentConfirmCommand(ORDER_ID, TOSS_KEY, AMOUNT)))
+        assertThatThrownBy(() -> service.confirm(new PaymentConfirmCommand(ORDER_ID, TOSS_KEY, ORDER_PAYMENT_KEY, AMOUNT)))
                 .isInstanceOf(PaymentAlreadyFailedException.class);
 
-        verify(tossPaymentPort, never()).confirm(anyString(), anyLong(), anyLong());
+        verify(tossPaymentPort, never()).confirm(anyString(), anyLong(), anyString());
     }
 
     @Test
@@ -128,11 +129,11 @@ class PaymentConfirmServiceTest {
         when(paymentRepository.findByTossPaymentKey(TOSS_KEY)).thenReturn(Optional.empty());
         when(paymentRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.of(pendingPayment));
 
-        assertThatThrownBy(() -> service.confirm(new PaymentConfirmCommand(ORDER_ID, TOSS_KEY, wrongAmount)))
+        assertThatThrownBy(() -> service.confirm(new PaymentConfirmCommand(ORDER_ID, TOSS_KEY, ORDER_PAYMENT_KEY, wrongAmount)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("결제 금액 불일치");
 
-        verify(tossPaymentPort, never()).confirm(anyString(), anyLong(), anyLong());
+        verify(tossPaymentPort, never()).confirm(anyString(), anyLong(), anyString());
     }
 
     @Test
@@ -141,10 +142,10 @@ class PaymentConfirmServiceTest {
         when(paymentRepository.findByTossPaymentKey(TOSS_KEY)).thenReturn(Optional.empty());
         when(paymentRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.empty());
         when(paymentRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        when(tossPaymentPort.confirm(TOSS_KEY, AMOUNT, ORDER_ID))
+        when(tossPaymentPort.confirm(TOSS_KEY, AMOUNT, ORDER_PAYMENT_KEY))
                 .thenReturn(TossConfirmResult.success("카드", Instant.now()));
 
-        PaymentConfirmResult result = service.confirm(new PaymentConfirmCommand(ORDER_ID, TOSS_KEY, AMOUNT));
+        PaymentConfirmResult result = service.confirm(new PaymentConfirmCommand(ORDER_ID, TOSS_KEY, ORDER_PAYMENT_KEY, AMOUNT));
 
         assertThat(result.getStatus()).isEqualTo(PaymentStatus.SUCCESS);
         verify(eventPublisher).publishEvent(any(PaymentApprovedEvent.class));
@@ -156,9 +157,9 @@ class PaymentConfirmServiceTest {
         when(paymentRepository.findByTossPaymentKey(TOSS_KEY)).thenReturn(Optional.empty());
         when(paymentRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.of(pendingPayment));
         doThrow(new TossPaymentUnavailableException("Toss PG 일시 오류: 500"))
-                .when(tossPaymentPort).confirm(TOSS_KEY, AMOUNT, ORDER_ID);
+                .when(tossPaymentPort).confirm(TOSS_KEY, AMOUNT, ORDER_PAYMENT_KEY);
 
-        assertThatThrownBy(() -> service.confirm(new PaymentConfirmCommand(ORDER_ID, TOSS_KEY, AMOUNT)))
+        assertThatThrownBy(() -> service.confirm(new PaymentConfirmCommand(ORDER_ID, TOSS_KEY, ORDER_PAYMENT_KEY, AMOUNT)))
                 .isInstanceOf(TossPaymentUnavailableException.class);
     }
 }
