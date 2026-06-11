@@ -1,11 +1,15 @@
 package com.fandrops.community.application.mypage;
 
+import com.fandrops.community.application.port.ArtistProfilePort;
+import com.fandrops.community.application.port.ArtistSummary;
 import com.fandrops.community.domain.feed.Comment;
 import com.fandrops.community.domain.feed.FeedLike;
 import com.fandrops.community.domain.feed.repository.CommentRepository;
 import com.fandrops.community.domain.feed.repository.FeedLikeRepository;
 import com.fandrops.community.domain.follow.UserFollow;
 import com.fandrops.community.domain.follow.repository.UserFollowRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,21 +19,29 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional(readOnly = true)
 public class FanActivityService {
 
+    private static final Logger log = LoggerFactory.getLogger(FanActivityService.class);
+
     private final CommentRepository commentRepository;
     private final FeedLikeRepository feedLikeRepository;
     private final UserFollowRepository userFollowRepository;
+    private final ArtistProfilePort artistProfilePort;
 
     public FanActivityService(CommentRepository commentRepository,
                                FeedLikeRepository feedLikeRepository,
-                               UserFollowRepository userFollowRepository) {
+                               UserFollowRepository userFollowRepository,
+                               ArtistProfilePort artistProfilePort) {
         this.commentRepository = commentRepository;
         this.feedLikeRepository = feedLikeRepository;
         this.userFollowRepository = userFollowRepository;
+        this.artistProfilePort = artistProfilePort;
     }
 
     public ActivityListResult getActivities(Long fanId, String cursor, int size) {
@@ -80,9 +92,23 @@ public class FanActivityService {
         boolean hasMore = follows.size() > size;
         List<UserFollow> page = hasMore ? follows.subList(0, size) : follows;
 
+        Set<Long> artistIds = page.stream()
+                .map(UserFollow::getArtistId)
+                .collect(Collectors.toSet());
+        Map<Long, ArtistSummary> profiles = artistProfilePort.findAllByIds(artistIds);
+
         List<JoinedArtistResult> items = page.stream()
-                .map(f -> new JoinedArtistResult(f.getArtistId(),
-                        f.getFollowedAt().atOffset(ZoneOffset.UTC)))
+                .map(f -> {
+                    ArtistSummary summary = profiles.get(f.getArtistId());
+                    if (summary == null) {
+                        log.warn("팔로우 데이터에 아티스트 프로필 누락 — fanId={}, artistId={}", fanId, f.getArtistId());
+                    }
+                    return new JoinedArtistResult(
+                            f.getArtistId(),
+                            summary != null ? summary.name() : null,
+                            summary != null ? summary.profileImageUrl() : null,
+                            f.getFollowedAt().atOffset(ZoneOffset.UTC));
+                })
                 .toList();
         String nextCursor = hasMore ? String.valueOf(page.get(page.size() - 1).getId()) : null;
         return new JoinedArtistListResult(items, nextCursor, hasMore);

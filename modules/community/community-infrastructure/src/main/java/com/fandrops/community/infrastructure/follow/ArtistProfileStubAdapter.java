@@ -1,7 +1,12 @@
 package com.fandrops.community.infrastructure.follow;
 
 import com.fandrops.community.application.port.ArtistProfilePort;
+import com.fandrops.community.application.port.ArtistSummary;
 import org.springframework.stereotype.Component;
+
+import java.util.Collection;
+import java.util.Map;
+import java.util.Optional;
 
 // TODO: artist_profile.active 컬럼 추가 완료 시
 // 이 파일과 ArtistProfileStubConfig.java 함께 삭제
@@ -29,5 +34,15 @@ public class ArtistProfileStubAdapter implements ArtistProfilePort {
 
     @Override
     public void activate(Long artistId) {
+    }
+
+    @Override
+    public Optional<ArtistSummary> findById(Long artistId) {
+        return Optional.empty();
+    }
+
+    @Override
+    public Map<Long, ArtistSummary> findAllByIds(Collection<Long> artistIds) {
+        return Map.of();
     }
 }

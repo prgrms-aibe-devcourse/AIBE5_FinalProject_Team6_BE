@@ -14,6 +14,7 @@ import org.springframework.transaction.event.TransactionalEventListener;
 public class AgencyApprovedEventListener {
 
     private static final Logger log = LoggerFactory.getLogger(AgencyApprovedEventListener.class);
+    static final int MAX_ACTIVATE_ATTEMPTS = 3;
 
     private final ArtistProfilePort artistProfilePort;
 
@@ -27,10 +28,21 @@ public class AgencyApprovedEventListener {
     public void handleAgencyApproved(AgencyApprovedEvent event) {
         log.info("입점 승인 이벤트 수신 — artistId={}, agencyId={}, artistName={}",
                 event.getArtistId(), event.getAgencyId(), event.getArtistName());
-        try {
-            artistProfilePort.activate(event.getArtistId());
-        } catch (Exception e) {
-            log.error("아티스트 공간 활성화 실패 — artistId={}", event.getArtistId(), e);
+
+        for (int attempt = 1; attempt <= MAX_ACTIVATE_ATTEMPTS; attempt++) {
+            try {
+                artistProfilePort.activate(event.getArtistId());
+                return;
+            } catch (Exception e) {
+                if (attempt < MAX_ACTIVATE_ATTEMPTS) {
+                    log.warn("아티스트 공간 활성화 실패 (attempt {}/{}) — artistId={}, 재시도",
+                            attempt, MAX_ACTIVATE_ATTEMPTS, event.getArtistId(), e);
+                } else {
+                    // AFTER_COMMIT 단계라 외부 트랜잭션 롤백 불가 — 수동 처리 필요
+                    log.error("[MANUAL_ACTION_REQUIRED] 아티스트 공간 활성화 최종 실패 — artistId={}, agencyId={}, artistName={}",
+                            event.getArtistId(), event.getAgencyId(), event.getArtistName(), e);
+                }
+            }
         }
     }
 }

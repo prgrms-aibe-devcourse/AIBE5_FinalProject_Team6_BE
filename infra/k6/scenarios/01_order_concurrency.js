@@ -4,11 +4,16 @@
  * 파라미터: 형성빈 확정 (2026-06-05)
  *
  * 사전 준비:
- *   - DB seed: product id=1 (inventory.total_qty=100), fan id=1
- *   - 서버 설정: fandrops.queue.max-concurrent-processing=300
+ *   - DB seed: product id=1 (inventory.total_qty=100), fan id 1~FAN_POOL_SIZE
+ *   - 서버 설정: fandrops.queue.max-concurrent-processing=300  (≥ vus=200 이어야 전 VU 단일 배치)
  *                fandrops.queue.advance-batch-size=300
  *                fandrops.queue.scheduler.interval-ms=1000
- *   - 실행: k6 run --out experimental-prometheus-rw scenarios/01_order_concurrency.js
+ *   - 실행: k6 run -e FAN_POOL_SIZE=200 --out experimental-prometheus-rw scenarios/01_order_concurrency.js
+ *
+ * VU 흐름 (per-vu-iterations, iterations=2):
+ *   iteration 1 — 대기열 진입(fanId별) + accessToken 획득
+ *                 max-concurrent-processing ≥ vus 이면 전 VU가 단일 스케줄러 배치로 토큰 획득
+ *   iteration 2 — POST /orders (200 VU 동시 발화 → 재고 100개 → oversell 검증)
  */
 import http from 'k6/http';
 import { check } from 'k6';
@@ -17,20 +22,22 @@ import { BASE_URL, localHeaders } from '../lib/auth.js';
 import { waitForAccessToken } from '../lib/sse.js';
 import { WRITE_THRESHOLDS } from '../lib/thresholds.js';
 
-const PRODUCT_ID = parseInt(__ENV.PRODUCT_ID || '1');
-const FAN_POOL_SIZE = parseInt(__ENV.FAN_POOL_SIZE || '1000');
-const QUEUE_FAN_ID = 1; // setup() 대기열 진입용 고정값 (accessToken 획득 1회)
+const PRODUCT_ID   = parseInt(__ENV.PRODUCT_ID   || '1');
+const FAN_POOL_SIZE = parseInt(__ENV.FAN_POOL_SIZE || '200');
 
-const reservedCount = new Counter('orders_reserved');
+const reservedCount  = new Counter('orders_reserved');
 const cancelledCount = new Counter('orders_cancelled');
+
+// VU별 accessToken — module-level 변수는 VU마다 독립된 메모리에 저장됨
+let vuToken = null;
 
 export const options = {
   scenarios: {
     concurrency: {
-      executor: 'shared-iterations',
+      executor: 'per-vu-iterations',
       vus: 200,
-      iterations: 200,
-      maxDuration: '3m',
+      iterations: 2,       // iteration 1: 토큰 획득, iteration 2: 주문
+      maxDuration: '5m',
     },
   },
   thresholds: {
@@ -39,37 +46,37 @@ export const options = {
   },
 };
 
-export function setup() {
-  // 1. 대기열 등록 (QUEUE_FAN_ID=1 고정 — setup은 1회 실행, accessToken 공유)
-  const joinRes = http.post(
-    `${BASE_URL}/api/v1/queue/join/${PRODUCT_ID}`,
-    null,
-    { headers: { 'X-Fan-Id': String(QUEUE_FAN_ID) } },
-  );
-  if (joinRes.status !== 200 && joinRes.status !== 201) {
-    throw new Error(`queue join failed: ${joinRes.status} ${joinRes.body}`);
-  }
-
-  // 2. SSE 연결 → PROCESSING 전이 시 accessToken 수신 (스케줄러 최대 ~3tick 소요)
-  const accessToken = waitForAccessToken(PRODUCT_ID, QUEUE_FAN_ID, 20000);
-  if (!accessToken) {
-    throw new Error(
-      'accessToken 획득 실패. 서버 설정 확인:\n' +
-      '  fandrops.queue.max-concurrent-processing=300\n' +
-      '  fandrops.queue.advance-batch-size=300\n' +
-      '  fandrops.queue.scheduler.interval-ms=1000',
-    );
-  }
-
-  console.log(`[setup] accessToken 획득 완료 (productId=${PRODUCT_ID}, fanPoolSize=${FAN_POOL_SIZE})`);
-  return { accessToken };
-}
-
-export default function ({ accessToken }) {
+export default function () {
   const fanId = ((__VU - 1) % FAN_POOL_SIZE) + 1;
+
+  // iteration 1: 대기열 진입 + 토큰 획득
+  if (!vuToken) {
+    const joinRes = http.post(
+      `${BASE_URL}/api/v1/queue/join/${PRODUCT_ID}`,
+      null,
+      { headers: { 'X-Fan-Id': String(fanId) } },
+    );
+    if (joinRes.status !== 200 && joinRes.status !== 201) {
+      console.error(`[VU ${__VU} fan ${fanId}] queue join 실패: ${joinRes.status} ${joinRes.body}`);
+      return;
+    }
+
+    vuToken = waitForAccessToken(PRODUCT_ID, fanId, 30000);
+    if (!vuToken) {
+      console.error(
+        `[VU ${__VU} fan ${fanId}] accessToken 획득 실패. 서버 설정 확인:\n` +
+        '  fandrops.queue.max-concurrent-processing=300\n' +
+        '  fandrops.queue.advance-batch-size=300\n' +
+        '  fandrops.queue.scheduler.interval-ms=1000',
+      );
+    }
+    return; // iteration 1 종료 — iteration 2에서 주문 진행
+  }
+
+  // iteration 2: 주문 생성
   const res = http.post(
     `${BASE_URL}/api/v1/orders`,
-    JSON.stringify({ accessTicket: accessToken, items: [{ productId: PRODUCT_ID, quantity: 1 }] }),
+    JSON.stringify({ accessTicket: vuToken, items: [{ productId: PRODUCT_ID, quantity: 1 }] }),
     { headers: localHeaders(fanId) },
   );
 

@@ -5,7 +5,11 @@
  *
  * 사전 준비: 01_order_concurrency.js와 동일한 서버 설정 필요
  *   - DB seed: product id=1 (inventory.total_qty=100 또는 스파이크 전 재설정)
- *   - 실행: k6 run --out experimental-prometheus-rw scenarios/04_drop_spike.js
+ *              fan id 1~FAN_POOL_SIZE
+ *   - 실행: k6 run -e FAN_POOL_SIZE=1000 --out experimental-prometheus-rw scenarios/04_drop_spike.js
+ *
+ * VU 흐름: 각 VU 첫 번째 iteration — 대기열 진입(fanId별) + accessToken 획득
+ *           이후 iteration — POST /orders (재고 소진까지 반복)
  */
 import http from 'k6/http';
 import { check } from 'k6';
@@ -14,11 +18,13 @@ import { BASE_URL, localHeaders } from '../lib/auth.js';
 import { waitForAccessToken } from '../lib/sse.js';
 import { WRITE_THRESHOLDS } from '../lib/thresholds.js';
 
-const PRODUCT_ID = parseInt(__ENV.PRODUCT_ID || '1');
+const PRODUCT_ID    = parseInt(__ENV.PRODUCT_ID    || '1');
 const FAN_POOL_SIZE = parseInt(__ENV.FAN_POOL_SIZE || '1000');
-const QUEUE_FAN_ID = 1; // setup() 대기열 진입용 고정값
 
 const reservedCount = new Counter('spike_orders_reserved');
+
+// VU별 accessToken — module-level 변수는 VU마다 독립된 메모리에 저장됨
+let vuToken = null;
 
 export const options = {
   scenarios: {
@@ -28,7 +34,7 @@ export const options = {
       stages: [
         { target: 1000, duration: '30s' },  // 급상승
         { target: 1000, duration: '30s' },  // 유지
-        { target: 0, duration: '15s' },     // 종료
+        { target: 0,    duration: '15s' },  // 종료
       ],
       gracefulRampDown: '10s',
     },
@@ -39,28 +45,31 @@ export const options = {
   },
 };
 
-export function setup() {
-  const joinRes = http.post(
-    `${BASE_URL}/api/v1/queue/join/${PRODUCT_ID}`,
-    null,
-    { headers: { 'X-Fan-Id': String(QUEUE_FAN_ID) } },
-  );
-  if (joinRes.status !== 200 && joinRes.status !== 201) {
-    throw new Error(`queue join failed: ${joinRes.status} ${joinRes.body}`);
-  }
-
-  const accessToken = waitForAccessToken(PRODUCT_ID, QUEUE_FAN_ID, 20000);
-  if (!accessToken) {
-    throw new Error('accessToken 획득 실패 — 서버 queue 설정 확인');
-  }
-  return { accessToken };
-}
-
-export default function ({ accessToken }) {
+export default function () {
   const fanId = ((__VU - 1) % FAN_POOL_SIZE) + 1;
+
+  // 첫 번째 iteration: 대기열 진입 + 토큰 획득
+  if (!vuToken) {
+    const joinRes = http.post(
+      `${BASE_URL}/api/v1/queue/join/${PRODUCT_ID}`,
+      null,
+      { headers: { 'X-Fan-Id': String(fanId) } },
+    );
+    if (joinRes.status !== 200 && joinRes.status !== 201) {
+      console.error(`[VU ${__VU} fan ${fanId}] queue join 실패: ${joinRes.status} ${joinRes.body}`);
+      return;
+    }
+    vuToken = waitForAccessToken(PRODUCT_ID, fanId, 30000);
+    if (!vuToken) {
+      console.error(`[VU ${__VU} fan ${fanId}] accessToken 획득 실패 — 서버 queue 설정 확인`);
+    }
+    return; // 첫 번째 iteration 종료
+  }
+
+  // 이후 iteration: 주문 생성
   const res = http.post(
     `${BASE_URL}/api/v1/orders`,
-    JSON.stringify({ accessTicket: accessToken, items: [{ productId: PRODUCT_ID, quantity: 1 }] }),
+    JSON.stringify({ accessTicket: vuToken, items: [{ productId: PRODUCT_ID, quantity: 1 }] }),
     { headers: localHeaders(fanId) },
   );
 
