@@ -26,7 +26,7 @@ Phase 2(자동화·관측·트래픽 제어)에서 Phase 3(고도화·FE 연동�
 | DNS api.fandrops.site | — | 가비아 A 레코드 추가 |
 | Redis AUTH Token 활성화 | #197 | setup-redis-auth.yml workflow_dispatch |
 | S3 CORS 설정 | #198 | setup-s3-cors.yml workflow_dispatch |
-| **Blue/Green 무중단 배포** | — | systemd 이중 슬롯 + Nginx active.conf 포트 스위칭 |
+| **Blue/Green 무중단 배포** | #221, #222 | systemd 이중 슬롯 + Nginx active.conf 포트 스위칭 |
 
 ---
 
@@ -483,6 +483,7 @@ curl -s http://localhost:80/actuator/health
 | Q | Redis AUTH 워크플로우 — `InvalidParameterValue` (토큰 형식 오류) | base64 생성 패스워드에 `/` 문자 포함 — ElastiCache AUTH 불허 문자 | PowerShell에서 `/`, `=`, `+` 제거 후 재생성 |
 | R | Redis AUTH 워크플로우 — `InvalidParameterValue` (SET 전략 오류) | `--auth-token-update-strategy SET` 사용 — AUTH 없는 상태에서 SET 불가 | `ROTATE`로 변경 (최초 설정은 반드시 ROTATE) |
 | S | S3 CORS 워크플로우 — `AccessDenied` 발생 시 | `fandrops-github-actions-role`에 `s3:PutBucketCORS` 권한 없을 수 있음 | IAM 인라인 정책 `fandrops-s3-cors-policy` 추가 |
+| T | CD 배포 실패 — `s3:PutObject AccessDenied` (`scripts/` prefix) | `fandrops-github-actions-role` IAM 정책이 `deploy/` prefix만 허용, `scripts/` prefix 없음 | cd.yml 스크립트 S3 경로를 `scripts/bluegreen-deploy.sh` → `deploy/bluegreen-deploy.sh`로 수정 (PR #222) |
 
 ---
 
@@ -499,10 +500,10 @@ curl -s http://localhost:80/actuator/health
 - [x] S3 CORS 설정 (`setup-s3-cors.yml`, fandrops.site + localhost:3000 허용)
 - [x] k6 부하 테스트 스크립트 5종 (`infra/k6/scenarios/`)
 - [x] Blue/Green 무중단 배포 구조 설계 및 문서화
+- [x] **Blue/Green 배포 EC2 적용** — systemd 유닛 2개 + Nginx active.conf + cd.yml 수정 (PR #221, #222, 2026-06-11)
 
 ### 미완료
 
-- [ ] **Blue/Green 배포 EC2 적용** — Phase 4 시작 전 systemd 유닛 2개 + Nginx active.conf + cd.yml 수정
 - [ ] **Grafana 커스텀 메트릭 알람 NoData 해소** — Issue #191
   - `fandrops_orders_status` (형성빈) · `fandrops_outbox_pending` (표지민) MeterRegistry Gauge 등록 PR 머지 후
   - 지영재: Prometheus 수집 확인 + Grafana Alert Rule `NoData → Normal/Firing` 전환 검증
