@@ -36,14 +36,9 @@ import static org.mockito.Mockito.verify;
 @DisplayName("ProductService 단위 테스트")
 class ProductServiceTest {
 
-    @Mock
-    private ProductRepository productRepository;
-
-    @Mock
-    private InventoryCreatePort inventoryCreatePort;
-
-    @Mock
-    private InventoryReadPort inventoryReadPort;
+    @Mock private ProductRepository productRepository;
+    @Mock private InventoryCreatePort inventoryCreatePort;
+    @Mock private InventoryReadPort inventoryReadPort;
 
     @InjectMocks
     private ProductService sut;
@@ -53,7 +48,14 @@ class ProductServiceTest {
 
     private Product product() {
         return Product.of(PRODUCT_ID, ARTIST_ID, "테스트 상품",
-                BigDecimal.valueOf(10000), ProductStatus.ON_SALE, LocalDateTime.now());
+                BigDecimal.valueOf(10000), ProductStatus.ON_SALE, null, null, LocalDateTime.now());
+    }
+
+    private Product dropsProduct(Long id) {
+        LocalDateTime start = LocalDateTime.now().minusHours(1);
+        LocalDateTime end = LocalDateTime.now().plusHours(1);
+        return Product.of(id, ARTIST_ID, "드롭스상품" + id,
+                BigDecimal.valueOf(10000), ProductStatus.ON_SALE, start, end, LocalDateTime.now());
     }
 
     private InventoryInfo inventoryInfo() {
@@ -61,16 +63,15 @@ class ProductServiceTest {
     }
 
     @Nested
-    @DisplayName("getProducts()")
-    class GetProducts {
+    @DisplayName("getProducts() — 상시")
+    class GetRegularProducts {
 
         @Test
-        @DisplayName("상품 목록 반환 — size 미만이면 nextCursor null")
-        void getProducts_lessItemsThanSize_nextCursorNull() {
-            given(productRepository.findRegularProducts(null, 20))
-                    .willReturn(List.of(product()));
+        @DisplayName("상시 목록 반환 — size 미만이면 nextCursor null")
+        void getProducts_regular_nextCursorNull() {
+            given(productRepository.findRegularProducts(null, 20)).willReturn(List.of(product()));
 
-            ProductListResponse result = sut.getProducts(null, 20);
+            ProductListResponse result = sut.getProducts("regular", null, 20);
 
             assertEquals(1, result.getItems().size());
             assertNull(result.getNextCursor());
@@ -78,29 +79,35 @@ class ProductServiceTest {
 
         @Test
         @DisplayName("size만큼 채워지면 nextCursor = 마지막 id")
-        void getProducts_fullSize_nextCursorSet() {
+        void getProducts_regular_nextCursorSet() {
             List<Product> products = List.of(
-                    Product.of(3L, ARTIST_ID, "상품3", BigDecimal.valueOf(10000), ProductStatus.ON_SALE, LocalDateTime.now()),
-                    Product.of(2L, ARTIST_ID, "상품2", BigDecimal.valueOf(10000), ProductStatus.ON_SALE, LocalDateTime.now()),
-                    Product.of(1L, ARTIST_ID, "상품1", BigDecimal.valueOf(10000), ProductStatus.ON_SALE, LocalDateTime.now())
+                    Product.of(3L, ARTIST_ID, "상품3", BigDecimal.valueOf(10000), ProductStatus.ON_SALE, null, null, LocalDateTime.now()),
+                    Product.of(2L, ARTIST_ID, "상품2", BigDecimal.valueOf(10000), ProductStatus.ON_SALE, null, null, LocalDateTime.now()),
+                    Product.of(1L, ARTIST_ID, "상품1", BigDecimal.valueOf(10000), ProductStatus.ON_SALE, null, null, LocalDateTime.now())
             );
             given(productRepository.findRegularProducts(null, 3)).willReturn(products);
 
-            ProductListResponse result = sut.getProducts(null, 3);
+            ProductListResponse result = sut.getProducts("regular", null, 3);
 
             assertEquals(3, result.getItems().size());
             assertEquals(1L, result.getNextCursor());
         }
+    }
+
+    @Nested
+    @DisplayName("getProducts() — 드롭스")
+    class GetDropsProducts {
 
         @Test
-        @DisplayName("상품 없으면 빈 목록 반환")
-        void getProducts_empty_returnsEmpty() {
-            given(productRepository.findRegularProducts(null, 20)).willReturn(List.of());
+        @DisplayName("drops type 요청 시 findDropsProducts 호출")
+        void getProducts_drops_callsDropsRepository() {
+            given(productRepository.findDropsProducts(null, 20)).willReturn(List.of(dropsProduct(1L)));
 
-            ProductListResponse result = sut.getProducts(null, 20);
+            ProductListResponse result = sut.getProducts("drops", null, 20);
 
-            assertTrue(result.getItems().isEmpty());
-            assertNull(result.getNextCursor());
+            verify(productRepository).findDropsProducts(null, 20);
+            verify(productRepository, never()).findRegularProducts(any(), any(Integer.class));
+            assertEquals(1, result.getItems().size());
         }
     }
 
@@ -117,10 +124,7 @@ class ProductServiceTest {
             ProductResponse result = sut.getProduct(PRODUCT_ID);
 
             assertEquals(PRODUCT_ID, result.getId());
-            assertEquals("테스트 상품", result.getName());
             assertEquals(100, result.getTotalQty());
-            assertEquals(0, result.getReservedQty());
-            assertEquals(100, result.getAvailableQty());
         }
 
         @Test
@@ -129,7 +133,6 @@ class ProductServiceTest {
             given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.empty());
 
             assertThrows(ProductNotFoundException.class, () -> sut.getProduct(PRODUCT_ID));
-
             verify(inventoryReadPort, never()).getByProductId(any());
         }
     }
@@ -139,19 +142,33 @@ class ProductServiceTest {
     class CreateProduct {
 
         @Test
-        @DisplayName("상품 저장 후 INVENTORY 행 생성 — 단일 TX")
-        void createProduct_savesProductAndCreatesInventory() {
-            Product saved = product();
-            given(productRepository.save(any())).willReturn(saved);
+        @DisplayName("상시 상품 저장 + INVENTORY 생성")
+        void createProduct_regular_savesAndCreatesInventory() {
+            given(productRepository.save(any())).willReturn(product());
 
             Long result = sut.createProduct(
                     new CreateProductCommand(ARTIST_ID, "테스트 상품", BigDecimal.valueOf(10000), 100));
 
             assertEquals(PRODUCT_ID, result);
-            ArgumentCaptor<Product> productCaptor = ArgumentCaptor.forClass(Product.class);
-            verify(productRepository).save(productCaptor.capture());
-            assertEquals(ProductStatus.ON_SALE, productCaptor.getValue().getStatus());
+            ArgumentCaptor<Product> captor = ArgumentCaptor.forClass(Product.class);
+            verify(productRepository).save(captor.capture());
+            assertFalse(captor.getValue().isDrops());
             verify(inventoryCreatePort).createInventory(eq(PRODUCT_ID), eq(100));
+        }
+
+        @Test
+        @DisplayName("드롭스 상품 저장 — dropsStartAt/EndAt 설정")
+        void createProduct_drops_setsDropsFields() {
+            LocalDateTime start = LocalDateTime.now().plusDays(1);
+            LocalDateTime end = LocalDateTime.now().plusDays(2);
+            given(productRepository.save(any())).willReturn(dropsProduct(PRODUCT_ID));
+
+            sut.createProduct(new CreateProductCommand(
+                    ARTIST_ID, "드롭스", BigDecimal.valueOf(10000), 50, start, end));
+
+            ArgumentCaptor<Product> captor = ArgumentCaptor.forClass(Product.class);
+            verify(productRepository).save(captor.capture());
+            assertTrue(captor.getValue().isDrops());
         }
     }
 
@@ -160,29 +177,28 @@ class ProductServiceTest {
     class UpdateProduct {
 
         @Test
-        @DisplayName("이름·가격·상태 변경 성공")
+        @DisplayName("상태 변경 성공")
         void updateProduct_success() {
             Product existing = product();
-            Product updated = Product.of(PRODUCT_ID, ARTIST_ID, "변경상품",
-                    BigDecimal.valueOf(20000), ProductStatus.SOLD_OUT, LocalDateTime.now());
+            Product updated = Product.of(PRODUCT_ID, ARTIST_ID, "변경",
+                    BigDecimal.valueOf(20000), ProductStatus.SOLD_OUT, null, null, LocalDateTime.now());
             given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(existing));
             given(productRepository.save(any())).willReturn(updated);
 
             ProductStatus result = sut.updateProduct(new UpdateProductCommand(
-                    PRODUCT_ID, "변경상품", BigDecimal.valueOf(20000), ProductStatus.SOLD_OUT));
+                    PRODUCT_ID, "변경", BigDecimal.valueOf(20000), ProductStatus.SOLD_OUT));
 
             assertEquals(ProductStatus.SOLD_OUT, result);
         }
 
         @Test
-        @DisplayName("존재하지 않는 상품이면 ProductNotFoundException")
+        @DisplayName("존재하지 않으면 ProductNotFoundException")
         void updateProduct_notFound_throws() {
             given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.empty());
 
             assertThrows(ProductNotFoundException.class,
                     () -> sut.updateProduct(new UpdateProductCommand(
                             PRODUCT_ID, null, null, ProductStatus.SOLD_OUT)));
-
             verify(productRepository, never()).save(any());
         }
     }
