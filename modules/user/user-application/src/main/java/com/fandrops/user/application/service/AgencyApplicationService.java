@@ -9,18 +9,22 @@ import com.fandrops.user.application.exception.DuplicateApplicationException;
 import com.fandrops.user.application.port.AgencyAccountRepository;
 import com.fandrops.user.application.port.AgencyApplicationRepository;
 import com.fandrops.user.application.port.ArtistProfileRepository;
+import com.fandrops.user.application.port.AuditLogPort;
 import com.fandrops.user.application.port.EmailNotificationPort;
 import com.fandrops.user.domain.AgencyAccount;
 import com.fandrops.user.domain.AgencyAccountStatus;
 import com.fandrops.user.domain.AgencyApplication;
 import com.fandrops.user.domain.AgencyApplicationStatus;
 import com.fandrops.user.domain.ArtistProfile;
+import com.fandrops.user.domain.AuditLog;
 import com.fandrops.user.domain.UserRole;
+import org.slf4j.MDC;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -35,6 +39,7 @@ public class AgencyApplicationService {
     private final EmailNotificationPort emailNotificationPort;
     private final PasswordEncoder passwordEncoder;
     private final ApplicationEventPublisher eventPublisher;
+    private final AuditLogPort auditLogPort;
 
     public AgencyApplicationService(
             AgencyApplicationRepository agencyApplicationRepository,
@@ -42,13 +47,15 @@ public class AgencyApplicationService {
             ArtistProfileRepository artistProfileRepository,
             EmailNotificationPort emailNotificationPort,
             PasswordEncoder passwordEncoder,
-            ApplicationEventPublisher eventPublisher) {
+            ApplicationEventPublisher eventPublisher,
+            AuditLogPort auditLogPort) {
         this.agencyApplicationRepository = agencyApplicationRepository;
         this.agencyAccountRepository = agencyAccountRepository;
         this.artistProfileRepository = artistProfileRepository;
         this.emailNotificationPort = emailNotificationPort;
         this.passwordEncoder = passwordEncoder;
         this.eventPublisher = eventPublisher;
+        this.auditLogPort = auditLogPort;
     }
 
     // F02-01: 입점 신청서 제출
@@ -89,10 +96,12 @@ public class AgencyApplicationService {
     // 이메일 발송 실패 시 @Transactional 롤백 의도적 설계:
     // agency가 임시 비밀번호 이메일을 못 받으면 로그인 방법이 없으므로 승인 자체를 취소해야 함
     @Transactional
-    public void approveApplication(Long id) {
+    public void approveApplication(Long id, Long adminId, String clientIp) {
         AgencyApplication application = agencyApplicationRepository.findById(id)
                 .orElseThrow(() -> new AgencyApplicationNotFoundException(
                         "신청서를 찾을 수 없습니다. id=" + id));
+
+        String beforeJson = "{\"status\":\"" + application.getStatus() + "\"}";
 
         String loginId = application.getContactEmail();
         if (agencyAccountRepository.existsByLoginId(loginId)) {
@@ -127,23 +136,57 @@ public class AgencyApplicationService {
 
         emailNotificationPort.sendApplicationApprovedEmail(
                 application.getContactEmail(), loginId, tempPassword);
+
+        auditLogPort.save(AuditLog.builder()
+                .occurredAt(Instant.now())
+                .actorType("ADMIN")
+                .actorId(adminId)
+                .action("AGENCY_APPLICATION_APPROVE")
+                .resourceType("AGENCY_APPLICATION")
+                .resourceId(id)
+                .traceId(MDC.get("traceId"))
+                .beforeJson(beforeJson)
+                .afterJson("{\"status\":\"APPROVED\"}")
+                .clientIp(clientIp)
+                .build());
     }
 
     // F02-02: 반려 — 이메일 발송
     @Transactional
-    public void rejectApplication(Long id, String rejectReason) {
+    public void rejectApplication(Long id, String rejectReason, Long adminId, String clientIp) {
         AgencyApplication application = agencyApplicationRepository.findById(id)
                 .orElseThrow(() -> new AgencyApplicationNotFoundException(
                         "신청서를 찾을 수 없습니다. id=" + id));
+
+        String beforeJson = "{\"status\":\"" + application.getStatus() + "\"}";
 
         application.reject(rejectReason, LocalDateTime.now(ZoneOffset.UTC));
         agencyApplicationRepository.save(application);
 
         emailNotificationPort.sendApplicationRejectedEmail(
                 application.getContactEmail(), rejectReason);
+
+        auditLogPort.save(AuditLog.builder()
+                .occurredAt(Instant.now())
+                .actorType("ADMIN")
+                .actorId(adminId)
+                .action("AGENCY_APPLICATION_REJECT")
+                .resourceType("AGENCY_APPLICATION")
+                .resourceId(id)
+                .traceId(MDC.get("traceId"))
+                .beforeJson(beforeJson)
+                .afterJson("{\"status\":\"REJECTED\",\"rejectReason\":" + escapeJson(rejectReason) + "}")
+                .reason(rejectReason)
+                .clientIp(clientIp)
+                .build());
     }
 
     private String generateTempPassword() {
         return UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+    }
+
+    private static String escapeJson(String value) {
+        if (value == null) return "null";
+        return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
     }
 }

@@ -4,7 +4,9 @@ import com.fandrops.user.application.dto.BannerResult;
 import com.fandrops.user.application.dto.CreateBannerCommand;
 import com.fandrops.user.application.dto.UpdateBannerCommand;
 import com.fandrops.user.application.exception.BannerNotFoundException;
+import com.fandrops.user.application.port.AuditLogPort;
 import com.fandrops.user.application.port.BannerRepository;
+import com.fandrops.user.domain.AuditLog;
 import com.fandrops.user.domain.Banner;
 import com.fandrops.user.domain.BannerType;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,12 +30,16 @@ import static org.mockito.Mockito.when;
 class BannerServiceTest {
 
     @Mock BannerRepository bannerRepository;
+    @Mock AuditLogPort auditLogPort;
 
     BannerService bannerService;
 
+    private static final Long ADMIN_ID = 1L;
+    private static final String CLIENT_IP = "127.0.0.1";
+
     @BeforeEach
     void setUp() {
-        bannerService = new BannerService(bannerRepository);
+        bannerService = new BannerService(bannerRepository, auditLogPort);
     }
 
     private Banner sampleBanner(Long id) {
@@ -69,7 +75,8 @@ class BannerServiceTest {
         CreateBannerCommand command = new CreateBannerCommand(
                 "배너", "https://img.jpg", "https://landing.com", 1, start, end);
 
-        assertThrows(IllegalArgumentException.class, () -> bannerService.createBanner(command));
+        assertThrows(IllegalArgumentException.class,
+                () -> bannerService.createBanner(command, ADMIN_ID, CLIENT_IP));
         verify(bannerRepository, never()).save(any());
     }
 
@@ -87,7 +94,8 @@ class BannerServiceTest {
                 null, null, null, null, null, null,
                 Optional.of(LocalDateTime.of(2025, 1, 1, 0, 0))); // start보다 이전
 
-        assertThrows(IllegalArgumentException.class, () -> bannerService.updateBanner(1L, command));
+        assertThrows(IllegalArgumentException.class,
+                () -> bannerService.updateBanner(1L, command, ADMIN_ID, CLIENT_IP));
         verify(bannerRepository, never()).save(any());
     }
 
@@ -99,22 +107,23 @@ class BannerServiceTest {
                 "배너", "https://img.jpg", "https://landing.com", 1, same, same);
         when(bannerRepository.save(any(Banner.class))).thenReturn(sampleBanner(3L));
 
-        assertDoesNotThrow(() -> bannerService.createBanner(command));
+        assertDoesNotThrow(() -> bannerService.createBanner(command, ADMIN_ID, CLIENT_IP));
         verify(bannerRepository).save(any());
     }
 
     @Test
-    @DisplayName("배너 생성 — MAIN 타입으로 저장")
+    @DisplayName("배너 생성 — MAIN 타입으로 저장 + audit 기록")
     void createBanner_savesWithMainType() {
         CreateBannerCommand command = new CreateBannerCommand(
                 "신규 배너", "https://img.jpg", "https://landing.com", 0, null, null);
         Banner saved = sampleBanner(2L);
         when(bannerRepository.save(any(Banner.class))).thenReturn(saved);
 
-        BannerResult result = bannerService.createBanner(command);
+        BannerResult result = bannerService.createBanner(command, ADMIN_ID, CLIENT_IP);
 
         assertNotNull(result);
         verify(bannerRepository).save(any(Banner.class));
+        verify(auditLogPort).save(any(AuditLog.class));
     }
 
     @Test
@@ -123,7 +132,8 @@ class BannerServiceTest {
         when(bannerRepository.findById(999L)).thenReturn(Optional.empty());
         UpdateBannerCommand command = new UpdateBannerCommand("변경", null, null, null, null, null, null);
 
-        assertThrows(BannerNotFoundException.class, () -> bannerService.updateBanner(999L, command));
+        assertThrows(BannerNotFoundException.class,
+                () -> bannerService.updateBanner(999L, command, ADMIN_ID, CLIENT_IP));
     }
 
     @Test
@@ -134,7 +144,7 @@ class BannerServiceTest {
         when(bannerRepository.save(any(Banner.class))).thenReturn(banner);
 
         UpdateBannerCommand command = new UpdateBannerCommand("변경된 제목", null, null, null, null, null, null);
-        bannerService.updateBanner(1L, command);
+        bannerService.updateBanner(1L, command, ADMIN_ID, CLIENT_IP);
 
         assertEquals("변경된 제목", banner.getTitle());
         assertEquals("https://cdn.fandrops.com/banner.jpg", banner.getImageUrl()); // 유지
@@ -147,7 +157,8 @@ class BannerServiceTest {
         when(bannerRepository.findById(1L)).thenReturn(Optional.of(banner));
         when(bannerRepository.save(any(Banner.class))).thenReturn(banner);
 
-        bannerService.updateBanner(1L, new UpdateBannerCommand(null, null, null, null, null, null, null));
+        bannerService.updateBanner(1L, new UpdateBannerCommand(null, null, null, null, null, null, null),
+                ADMIN_ID, CLIENT_IP);
 
         verify(bannerRepository).save(banner);
         assertEquals("테스트 배너", banner.getTitle());
@@ -167,7 +178,8 @@ class BannerServiceTest {
 
         LocalDateTime newStart = LocalDateTime.of(2025, 7, 1, 0, 0);
         bannerService.updateBanner(1L, new UpdateBannerCommand(
-                null, null, null, null, null, Optional.of(newStart), null));
+                null, null, null, null, null, Optional.of(newStart), null),
+                ADMIN_ID, CLIENT_IP);
 
         assertEquals(newStart, banner.getStartAt());
         assertEquals(LocalDateTime.of(2025, 12, 31, 0, 0), banner.getEndAt()); // endAt 유지
@@ -188,7 +200,8 @@ class BannerServiceTest {
                 Optional.of(LocalDateTime.of(2025, 12, 31, 0, 0)), // 기존 endAt(6월)보다 이후
                 null);
 
-        assertThrows(IllegalArgumentException.class, () -> bannerService.updateBanner(1L, command));
+        assertThrows(IllegalArgumentException.class,
+                () -> bannerService.updateBanner(1L, command, ADMIN_ID, CLIENT_IP));
         verify(bannerRepository, never()).save(any());
     }
 
@@ -203,7 +216,8 @@ class BannerServiceTest {
                 Optional.of(LocalDateTime.of(2025, 12, 31, 0, 0)),
                 Optional.of(LocalDateTime.of(2025, 6, 1, 0, 0))); // end < start
 
-        assertThrows(IllegalArgumentException.class, () -> bannerService.updateBanner(1L, command));
+        assertThrows(IllegalArgumentException.class,
+                () -> bannerService.updateBanner(1L, command, ADMIN_ID, CLIENT_IP));
         verify(bannerRepository, never()).save(any());
     }
 
@@ -219,7 +233,8 @@ class BannerServiceTest {
         when(bannerRepository.save(any(Banner.class))).thenReturn(banner);
 
         bannerService.updateBanner(1L, new UpdateBannerCommand(
-                null, null, null, null, null, Optional.empty(), null));
+                null, null, null, null, null, Optional.empty(), null),
+                ADMIN_ID, CLIENT_IP);
 
         assertNull(banner.getStartAt());
         assertEquals(LocalDateTime.of(2025, 12, 31, 0, 0), banner.getEndAt()); // endAt 유지
@@ -237,7 +252,8 @@ class BannerServiceTest {
         when(bannerRepository.save(any(Banner.class))).thenReturn(banner);
 
         bannerService.updateBanner(1L, new UpdateBannerCommand(
-                null, null, null, null, null, null, Optional.empty()));
+                null, null, null, null, null, null, Optional.empty()),
+                ADMIN_ID, CLIENT_IP);
 
         assertEquals(LocalDateTime.of(2025, 6, 1, 0, 0), banner.getStartAt()); // startAt 유지
         assertNull(banner.getEndAt());
@@ -255,30 +271,33 @@ class BannerServiceTest {
         when(bannerRepository.save(any(Banner.class))).thenReturn(banner);
 
         bannerService.updateBanner(1L, new UpdateBannerCommand(
-                null, null, null, null, null, Optional.empty(), Optional.empty()));
+                null, null, null, null, null, Optional.empty(), Optional.empty()),
+                ADMIN_ID, CLIENT_IP);
 
         assertNull(banner.getStartAt());
         assertNull(banner.getEndAt());
     }
 
     @Test
-    @DisplayName("배너 삭제 — soft delete (is_active=false)")
+    @DisplayName("배너 삭제 — soft delete (is_active=false) + audit 기록")
     void deleteBanner_setsIsActiveFalse() {
         Banner banner = sampleBanner(1L);
         when(bannerRepository.findById(1L)).thenReturn(Optional.of(banner));
         when(bannerRepository.save(any(Banner.class))).thenReturn(banner);
 
-        bannerService.deleteBanner(1L);
+        bannerService.deleteBanner(1L, ADMIN_ID, CLIENT_IP);
 
         assertFalse(banner.isActive());
         verify(bannerRepository).save(banner);
+        verify(auditLogPort).save(any(AuditLog.class));
     }
 
     @Test
     @DisplayName("존재하지 않는 배너 삭제 시 BannerNotFoundException")
     void deleteBanner_notFound_throwsBannerNotFoundException() {
         when(bannerRepository.findById(999L)).thenReturn(Optional.empty());
-        assertThrows(BannerNotFoundException.class, () -> bannerService.deleteBanner(999L));
+        assertThrows(BannerNotFoundException.class,
+                () -> bannerService.deleteBanner(999L, ADMIN_ID, CLIENT_IP));
     }
 
     @Test
