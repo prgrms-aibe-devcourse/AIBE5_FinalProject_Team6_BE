@@ -2,7 +2,7 @@ package com.fandrops.config;
 
 import com.fandrops.community.application.port.ArtistProfilePort;
 import com.fandrops.community.application.port.ArtistSummary;
-import com.fandrops.user.domain.ArtistProfile;
+import com.fandrops.user.infrastructure.persistence.ArtistProfileJpaEntity;
 import com.fandrops.user.infrastructure.persistence.ArtistProfileJpaRepository;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -44,21 +44,20 @@ public class ArtistProfilePortConfig {
             @Override
             public Optional<ArtistSummary> findById(Long artistId) {
                 return repository.findById(artistId)
-                        .map(e -> toSummary(e.toDomain()));
+                        .map(e -> toSummary(e));
             }
 
             @Override
             public Map<Long, ArtistSummary> findAllByIds(Collection<Long> artistIds) {
                 if (artistIds.isEmpty()) return Map.of();
                 return repository.findAllById(artistIds).stream()
-                        .map(e -> e.toDomain())
                         .collect(Collectors.toMap(
-                                ArtistProfile::getId,
-                                p -> toSummary(p)));
+                                ArtistProfileJpaEntity::getId,
+                                e -> toSummary(e)));
             }
 
-            private ArtistSummary toSummary(ArtistProfile p) {
-                return new ArtistSummary(p.getId(), p.getName(), p.getProfileImageUrl());
+            private ArtistSummary toSummary(ArtistProfileJpaEntity e) {
+                return new ArtistSummary(e.getId(), e.getName(), e.getProfileImageUrl());
             }
         };
     }

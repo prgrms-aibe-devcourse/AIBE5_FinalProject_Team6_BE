@@ -45,6 +45,10 @@ public class ArtistProfileJpaEntity {
 
     protected ArtistProfileJpaEntity() {}
 
+    public Long getId() { return id; }
+    public String getName() { return name; }
+    public String getProfileImageUrl() { return profileImageUrl; }
+
     public static ArtistProfileJpaEntity from(ArtistProfile domain) {
         ArtistProfileJpaEntity e = new ArtistProfileJpaEntity();
         e.id = domain.getId();
