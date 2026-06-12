@@ -348,6 +348,7 @@ Toss PG → 서버 비동기 결제 상태 수신. 상세: [payment-flow-reason.
 | POST | `/admin/main-banners` | `user` | 표지민 | 메인 배너 등록 |
 | PATCH | `/admin/main-banners/{id}` | `user` | 표지민 | 메인 배너 수정 |
 | DELETE | `/admin/main-banners/{id}` | `user` | 표지민 | 메인 배너 삭제 |
+| POST | `/admin/uploads` | `user` | 표지민 | 배너 이미지 S3 Presigned PUT URL 발급 — `{ contentType }` (jpeg/png/webp) → `{ presignedUrl, imageUrl }` · 클라이언트가 presignedUrl로 직접 S3 PUT 후 imageUrl을 배너 등록에 사용 (#180) |
 | GET | `/banners/main` | `user` | 표지민 | GNB 홈 메인 배너 노출 (F04-03) |
 
 F04-03은 **메인 배너만**. 스토어 아티스트 노출 순서는 F04-01 (`GET /artists?sort=fanCount`).
