@@ -26,6 +26,9 @@ const userTokens = new SharedArray('users', function () {
 
 const reservedCount = new Counter('spike_orders_reserved');
 
+// VU별 accessToken — module-level 변수는 VU마다 독립된 메모리에 저장됨
+let vuToken = null;
+
 export const options = {
   scenarios: {
     drop_spike: {

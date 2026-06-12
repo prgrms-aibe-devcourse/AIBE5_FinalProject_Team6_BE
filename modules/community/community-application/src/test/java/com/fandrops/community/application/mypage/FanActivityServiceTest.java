@@ -1,5 +1,7 @@
 package com.fandrops.community.application.mypage;
 
+import com.fandrops.community.application.port.ArtistProfilePort;
+import com.fandrops.community.application.port.ArtistSummary;
 import com.fandrops.community.domain.feed.Comment;
 import com.fandrops.community.domain.feed.FeedLike;
 import com.fandrops.community.domain.feed.repository.CommentRepository;
@@ -21,6 +23,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -32,6 +35,7 @@ class FanActivityServiceTest {
     @Mock CommentRepository commentRepository;
     @Mock FeedLikeRepository feedLikeRepository;
     @Mock UserFollowRepository userFollowRepository;
+    @Mock ArtistProfilePort artistProfilePort;
 
     FanActivityService service;
     Clock clock;
@@ -39,7 +43,7 @@ class FanActivityServiceTest {
     @BeforeEach
     void setUp() {
         clock = Clock.fixed(Instant.parse("2026-06-01T00:00:00Z"), ZoneOffset.UTC);
-        service = new FanActivityService(commentRepository, feedLikeRepository, userFollowRepository);
+        service = new FanActivityService(commentRepository, feedLikeRepository, userFollowRepository, artistProfilePort);
     }
 
     private Comment comment(Long id, Long feedId, Long artistId, LocalDateTime createdAt) {
@@ -148,9 +152,12 @@ class FanActivityServiceTest {
     class GetJoinedArtistsTest {
 
         @Test
-        @DisplayName("cursor=null 첫 요청 — 전체 가입 목록 반환")
+        @DisplayName("cursor=null 첫 요청 — 전체 가입 목록 반환 (artistName·profileImageUrl 포함)")
         void firstPage_returnsFollows() {
             LocalDateTime t = LocalDateTime.of(2026, 6, 1, 10, 0);
+            when(artistProfilePort.findAllByIds(anyCollection())).thenReturn(Map.of(
+                    100L, new ArtistSummary(100L, "아티스트A", "https://img/a.jpg"),
+                    200L, new ArtistSummary(200L, "아티스트B", "https://img/b.jpg")));
             when(userFollowRepository.findByFanId(eq(1L), isNull(), eq(21)))
                     .thenReturn(List.of(follow(2L, 1L, 100L, t), follow(1L, 1L, 200L, t.minusDays(1))));
 
@@ -158,6 +165,8 @@ class FanActivityServiceTest {
 
             assertEquals(2, result.items().size());
             assertEquals(100L, result.items().get(0).artistId());
+            assertEquals("아티스트A", result.items().get(0).artistName());
+            assertEquals("https://img/a.jpg", result.items().get(0).profileImageUrl());
             assertFalse(result.hasMore());
             assertNull(result.nextCursor());
         }
@@ -170,7 +179,9 @@ class FanActivityServiceTest {
                     follow(3L, 1L, 100L, t),
                     follow(2L, 1L, 200L, t.minusDays(1)),
                     follow(1L, 1L, 300L, t.minusDays(2)));
-
+            when(artistProfilePort.findAllByIds(anyCollection())).thenReturn(Map.of(
+                    100L, new ArtistSummary(100L, "아티스트A", "https://img/a.jpg"),
+                    200L, new ArtistSummary(200L, "아티스트B", "https://img/b.jpg")));
             when(userFollowRepository.findByFanId(eq(1L), isNull(), eq(3)))
                     .thenReturn(follows);
 

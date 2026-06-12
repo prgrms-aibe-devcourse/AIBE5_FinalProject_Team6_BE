@@ -10,7 +10,12 @@
  *   - 서버 설정: fandrops.queue.max-concurrent-processing=300
  *                fandrops.queue.advance-batch-size=300
  *                fandrops.queue.scheduler.interval-ms=1000
- *   - 실행: k6 run --out experimental-prometheus-rw scenarios/01_order_concurrency.js
+ *   - 실행: k6 run -e FAN_POOL_SIZE=200 --out experimental-prometheus-rw scenarios/01_order_concurrency.js
+ *
+ * VU 흐름 (per-vu-iterations, iterations=2):
+ *   iteration 1 — 대기열 진입(fanId별) + accessToken 획득
+ *                 max-concurrent-processing ≥ vus 이면 전 VU가 단일 스케줄러 배치로 토큰 획득
+ *   iteration 2 — POST /orders (200 VU 동시 발화 → 재고 100개 → oversell 검증)
  */
 import http from 'k6/http';
 import { check } from 'k6';
@@ -29,13 +34,16 @@ const userTokens = new SharedArray('users', function () {
 const reservedCount = new Counter('orders_reserved');
 const cancelledCount = new Counter('orders_cancelled');
 
+// VU별 accessToken — module-level 변수는 VU마다 독립된 메모리에 저장됨
+let vuToken = null;
+
 export const options = {
   scenarios: {
     concurrency: {
-      executor: 'shared-iterations',
+      executor: 'per-vu-iterations',
       vus: 200,
-      iterations: 200,
-      maxDuration: '3m',
+      iterations: 2,       // iteration 1: 토큰 획득, iteration 2: 주문
+      maxDuration: '5m',
     },
   },
   thresholds: {
