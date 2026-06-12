@@ -10,7 +10,7 @@ public class ArtistMember {
     private final String passwordHash;
     private final String memberName;
     private final UserRole role;
-    private String profileImageUrl;
+    private final String profileImageUrl;
 
     private ArtistMember(Builder builder) {
         this.id = builder.id;
@@ -23,6 +23,13 @@ public class ArtistMember {
     }
 
     public static Builder builder() { return new Builder(); }
+
+    public ArtistMember withProfileImageUrl(String url) {
+        return ArtistMember.builder()
+                .id(this.id).artistId(this.artistId).loginId(this.loginId)
+                .passwordHash(this.passwordHash).memberName(this.memberName)
+                .role(this.role).profileImageUrl(url).build();
+    }
 
     public Long getId() { return id; }
     public Long getArtistId() { return artistId; }
