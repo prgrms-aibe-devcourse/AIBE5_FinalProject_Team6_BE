@@ -13,6 +13,7 @@
     compileOnly("org.projectlombok:lombok")
     annotationProcessor("org.projectlombok:lombok")
     implementation("io.micrometer:micrometer-core")
+    implementation("software.amazon.awssdk:s3:2.26.31")
     testImplementation("org.mockito:mockito-core")
     testImplementation("org.mockito:mockito-junit-jupiter")
 }
