@@ -5,18 +5,24 @@
  *
  * 사전 준비: 01_order_concurrency.js와 동일한 서버 설정 필요
  *   - DB seed: product id=1 (inventory.total_qty=100 또는 스파이크 전 재설정)
+ *   - Redis: access:ticket:1:{fanId} = "test-ticket-token" (fan_id 1~2100 일괄 적재)
+ *     ※ 시나리오 01 실행 후 invalidate된 티켓이 있으므로 재적재 필요
+ *   - tokens.csv: infra/k6/seed/tokens.csv (fan_id 1~2100 JWT)
  *   - 실행: k6 run --out experimental-prometheus-rw scenarios/04_drop_spike.js
  */
 import http from 'k6/http';
 import { check } from 'k6';
 import { Counter } from 'k6/metrics';
-import { BASE_URL, localHeaders } from '../lib/auth.js';
-import { waitForAccessToken } from '../lib/sse.js';
+import { SharedArray } from 'k6/data';
+import papaparse from 'https://jslib.k6.io/papaparse/5.1.1/index.js';
+import { BASE_URL, authHeaders } from '../lib/auth.js';
 import { WRITE_THRESHOLDS } from '../lib/thresholds.js';
 
 const PRODUCT_ID = parseInt(__ENV.PRODUCT_ID || '1');
-const FAN_POOL_SIZE = parseInt(__ENV.FAN_POOL_SIZE || '1000');
-const QUEUE_FAN_ID = 1; // setup() 대기열 진입용 고정값
+
+const userTokens = new SharedArray('users', function () {
+  return papaparse.parse(open('../seed/tokens.csv'), { header: true }).data;
+});
 
 const reservedCount = new Counter('spike_orders_reserved');
 
@@ -28,7 +34,7 @@ export const options = {
       stages: [
         { target: 1000, duration: '30s' },  // 급상승
         { target: 1000, duration: '30s' },  // 유지
-        { target: 0, duration: '15s' },     // 종료
+        { target: 0,    duration: '15s' },  // 종료
       ],
       gracefulRampDown: '10s',
     },
@@ -39,29 +45,12 @@ export const options = {
   },
 };
 
-export function setup() {
-  const joinRes = http.post(
-    `${BASE_URL}/api/v1/queue/join/${PRODUCT_ID}`,
-    null,
-    { headers: { 'X-Fan-Id': String(QUEUE_FAN_ID) } },
-  );
-  if (joinRes.status !== 200 && joinRes.status !== 201) {
-    throw new Error(`queue join failed: ${joinRes.status} ${joinRes.body}`);
-  }
-
-  const accessToken = waitForAccessToken(PRODUCT_ID, QUEUE_FAN_ID, 20000);
-  if (!accessToken) {
-    throw new Error('accessToken 획득 실패 — 서버 queue 설정 확인');
-  }
-  return { accessToken };
-}
-
-export default function ({ accessToken }) {
-  const fanId = ((__VU - 1) % FAN_POOL_SIZE) + 1;
+export default function () {
+  const token = userTokens[(__VU - 1) % userTokens.length].token;
   const res = http.post(
     `${BASE_URL}/api/v1/orders`,
-    JSON.stringify({ accessTicket: accessToken, items: [{ productId: PRODUCT_ID, quantity: 1 }] }),
-    { headers: localHeaders(fanId) },
+    JSON.stringify({ accessTicket: 'test-ticket-token', items: [{ productId: PRODUCT_ID, quantity: 1 }] }),
+    { headers: authHeaders(token) },
   );
 
   if (res.status === 201) reservedCount.add(1);

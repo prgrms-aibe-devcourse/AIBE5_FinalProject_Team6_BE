@@ -10,7 +10,8 @@
  *        wiremock/wiremock:3.3.1 --global-response-templating
  *   2. TOSS_API_BASE_URL=http://localhost:8090 으로 앱 서버 재기동
  *   3. DB seed: orders id=1..50 (status=RESERVED, product_id=1, total_amount=15000, fan_id=1..50)
- *   4. 실행 — SCENARIO 선택:
+ *   4. tokens.csv: infra/k6/seed/tokens.csv (fan_id 1~2100 JWT)
+ *   5. 실행 — SCENARIO 선택:
  *      # 성공만 (기본)
  *      k6 run -e ORDERS_JSON="$(cat seed/orders.json)" scenarios/03_payment_confirm.js
  *
@@ -32,7 +33,9 @@
  */
 import http from 'k6/http';
 import { check } from 'k6';
-import { BASE_URL, localHeaders } from '../lib/auth.js';
+import { SharedArray } from 'k6/data';
+import papaparse from 'https://jslib.k6.io/papaparse/5.1.1/index.js';
+import { BASE_URL, authHeaders } from '../lib/auth.js';
 import { PAYMENT_THRESHOLDS } from '../lib/thresholds.js';
 
 // pre-seeded RESERVED 주문 픽스처 (VU별 orderId 중복 없이 분배)
@@ -40,6 +43,10 @@ const ORDERS = JSON.parse(__ENV.ORDERS_JSON || '[{"orderId":1,"amount":15000,"fa
 
 // SCENARIO: success | timeout | balance-error | server-error | mixed
 const SCENARIO = __ENV.SCENARIO || 'success';
+
+const userTokens = new SharedArray('users', function () {
+  return papaparse.parse(open('../seed/tokens.csv'), { header: true }).data;
+});
 
 function resolvePrefix() {
   if (SCENARIO === 'mixed') {
@@ -71,15 +78,16 @@ export const options = {
 
 export default function () {
   const order = ORDERS[(__VU - 1) % ORDERS.length];
+  const fanId = order.fanId || __VU;
+  const token = userTokens[(fanId - 1) % userTokens.length].token;
   const prefix = resolvePrefix();
   // prefix가 Wiremock stub 라우팅 키 — 멱등키 충돌 방지를 위해 __ITER 포함
   const tossPaymentKey = `${prefix}-${order.orderId}-${__ITER}`;
-  const fanId = order.fanId || __VU;
 
   const res = http.post(
     `${BASE_URL}/api/v1/payments/toss/confirm`,
     JSON.stringify({ tossPaymentKey, orderId: order.orderId, amount: order.amount }),
-    { headers: localHeaders(fanId) },
+    { headers: authHeaders(token) },
   );
 
   // success/timeout: 200·201 기대 / balance-error: 400 / server-error: 5xx
