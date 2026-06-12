@@ -29,8 +29,8 @@ class TossPaymentGatewayAdapter implements TossPaymentPort {
     }
 
     @Override
-    public TossConfirmResult confirm(String tossPaymentKey, long amount, Long orderId) {
-        TossConfirmBody body = new TossConfirmBody(tossPaymentKey, amount, String.valueOf(orderId));
+    public TossConfirmResult confirm(String tossPaymentKey, long amount, String orderPaymentKey) {
+        TossConfirmBody body = new TossConfirmBody(tossPaymentKey, amount, orderPaymentKey);
         try {
             TossSuccessBody response = tossRestClient.post()
                     .uri(CONFIRM_PATH)

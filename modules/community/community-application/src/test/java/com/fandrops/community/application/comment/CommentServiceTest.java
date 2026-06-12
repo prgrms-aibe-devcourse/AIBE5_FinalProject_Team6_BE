@@ -5,6 +5,7 @@ import com.fandrops.community.application.exception.FeedNotFoundException;
 import com.fandrops.community.application.exception.NotFanMemberException;
 import com.fandrops.community.application.port.FanMembershipPort;
 import com.fandrops.community.application.port.OutboxEventPort;
+import org.springframework.context.ApplicationEventPublisher;
 import com.fandrops.community.domain.feed.Comment;
 import com.fandrops.community.domain.feed.exception.FeedDomainException;
 import com.fandrops.community.domain.feed.repository.ArtistFeedRepository;
@@ -36,6 +37,7 @@ class CommentServiceTest {
     @Mock ArtistFeedRepository feedRepository;
     @Mock FanMembershipPort fanMembershipPort;
     @Mock OutboxEventPort outboxEventPort;
+    @Mock ApplicationEventPublisher applicationEventPublisher;
 
     CommentService commentService;
     Clock clock;
@@ -44,7 +46,7 @@ class CommentServiceTest {
     void setUp() {
         clock = Clock.fixed(Instant.parse("2026-06-01T00:00:00Z"), ZoneOffset.UTC);
         commentService = new CommentService(commentRepository, feedRepository, fanMembershipPort,
-                outboxEventPort, clock);
+                outboxEventPort, applicationEventPublisher, clock);
     }
 
     @Nested

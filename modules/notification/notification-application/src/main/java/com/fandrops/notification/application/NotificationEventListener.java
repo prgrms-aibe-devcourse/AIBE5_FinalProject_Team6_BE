@@ -1,5 +1,8 @@
 package com.fandrops.notification.application;
 
+import com.fandrops.community.application.event.ArtistScheduleEvent;
+import com.fandrops.community.application.event.NewCommentEvent;
+import com.fandrops.community.application.event.NewFeedEvent;
 import com.fandrops.notification.application.dto.PublishNotificationCommand;
 import com.fandrops.order.application.event.RestockAlertEvent;
 import com.fandrops.payment.application.payment.PaymentApprovedEvent;
@@ -53,19 +56,30 @@ public class NotificationEventListener {
         publishNotificationUseCase.publish(command);
     }
 
-    // TODO [정환철]: community-application에 NewFeedEvent(Long fanId, Long feedId, Long artistId) 추가 후 아래 활성화
-    // @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    // public void handleNewFeed(NewFeedEvent event) {
-    //     PublishNotificationCommand command = new PublishNotificationCommand(
-    //             "NEW_FEED", event.getFeedId(), "{\"fanId\":" + event.getFanId() + ",\"feedId\":" + event.getFeedId() + "}");
-    //     publishNotificationUseCase.publish(command);
-    // }
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void handleNewFeed(NewFeedEvent event) {
+        log.info("새 피드 알림 이벤트 수신: feedId={}, artistId={}", event.getFeedId(), event.getArtistId());
+        PublishNotificationCommand command = new PublishNotificationCommand(
+                "NEW_FEED", event.getFeedId(),
+                "{\"artistId\":" + event.getArtistId() + ",\"feedId\":" + event.getFeedId() + "}");
+        publishNotificationUseCase.publish(command);
+    }
 
-    // TODO [정환철]: community-application에 NewCommentEvent(Long fanId, Long feedId, Long commentId) 추가 후 아래 활성화
-    // @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    // public void handleNewComment(NewCommentEvent event) { ... }
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void handleNewComment(NewCommentEvent event) {
+        log.info("댓글 알림 이벤트 수신: commentId={}, parentId={}", event.getCommentId(), event.getParentId());
+        PublishNotificationCommand command = new PublishNotificationCommand(
+                "NEW_COMMENT", event.getFeedId(),
+                "{\"commentId\":" + event.getCommentId() + ",\"parentId\":" + event.getParentId() + "}");
+        publishNotificationUseCase.publish(command);
+    }
 
-    // TODO [정환철]: community-application에 ArtistScheduleEvent(Long fanId, Long scheduleId, Long artistId) 추가 후 아래 활성화
-    // @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    // public void handleArtistSchedule(ArtistScheduleEvent event) { ... }
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void handleArtistSchedule(ArtistScheduleEvent event) {
+        log.info("아티스트 일정 알림 이벤트 수신: scheduleId={}, artistId={}", event.getScheduleId(), event.getArtistId());
+        PublishNotificationCommand command = new PublishNotificationCommand(
+                "ARTIST_SCHEDULE", event.getScheduleId(),
+                "{\"artistId\":" + event.getArtistId() + ",\"scheduleId\":" + event.getScheduleId() + "}");
+        publishNotificationUseCase.publish(command);
+    }
 }

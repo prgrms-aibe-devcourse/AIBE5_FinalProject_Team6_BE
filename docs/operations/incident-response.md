@@ -86,7 +86,77 @@ FANDROPS **B2B2C 오픈런** 서비스에서 장애 **등급·대응·커뮤니�
 
 ---
 
-## 5. 관련 문서
+## 5. 실전 테스트 절차 (Phase 4 검증)
+
+> Phase 4에서 알람 발화·롤백 프로세스가 실제로 작동하는지 사전 검증한다.
+> 테스트 후 반드시 삽입 데이터를 정리한다.
+
+### 5-1. P0 Alert firing 테스트
+
+```sql
+-- 1. status=FAILED 주문 1건 수동 INSERT
+INSERT INTO orders (fan_id, product_id, status, total_amount, idempotency_key, created_at, updated_at)
+VALUES (9999, 1, 'FAILED', 0, 'test-alert-firing-001', NOW(), NOW());
+
+-- 2. Grafana(api.fandrops.site:3000) → Alerting → Alert Rules
+--    fandrops-failed-order-p0: Pending → Firing 전환 확인 (평가 주기 1분)
+-- 3. Gmail 수신 확인 (팀 공유 메일)
+
+-- 4. 테스트 데이터 정리
+DELETE FROM orders WHERE idempotency_key = 'test-alert-firing-001';
+```
+
+### 5-2. Blue/Green 롤백 실전 테스트
+
+**헬스체크 실패 시나리오 (자동 롤백 검증):**
+
+```bash
+# 현재 active 슬롯 확인
+cat /etc/fandrops/active-slot   # 예: blue
+
+# 비활성 슬롯에 고의로 broken JAR 배포 → 헬스체크 실패 유도
+# → bluegreen-deploy.sh 가 자동으로 새 슬롯 stop, 구 슬롯 계속 서비스
+sudo journalctl -u fandrops-green -n 50   # 실패 로그 확인
+```
+
+**수동 롤백 절차 (Grafana P0 발화 후):**
+
+```bash
+PREV_SLOT="blue"   # 이전 정상 슬롯
+PREV_PORT=8081
+
+# 1. Nginx를 이전 슬롯으로 즉시 전환
+sudo tee /etc/nginx/fandrops-active.conf <<EOF
+upstream fandrops_backend {
+    server 127.0.0.1:${PREV_PORT};
+    keepalive 32;
+}
+EOF
+sudo nginx -t && sudo systemctl reload nginx
+
+# 2. active-slot 파일 갱신
+echo "$PREV_SLOT" | sudo tee /etc/fandrops/active-slot
+
+# 3. 문제 슬롯 종료
+sudo systemctl stop fandrops-green
+
+# 4. 헬스체크 확인
+curl -s https://api.fandrops.site/actuator/health
+```
+
+### 5-3. 검증 체크리스트
+
+| 항목 | 확인 방법 | 결과 |
+| --- | --- | --- |
+| P0 Alert Gmail 수신 | 알람 발화 후 1~2분 내 Gmail 확인 | ✅/❌ |
+| 수동 INSERT 후 Alert Firing | Grafana Alert Rules 화면 | ✅/❌ |
+| 자동 롤백 (헬스체크 실패) | journalctl로 롤백 로그 확인 | ✅/❌ |
+| 수동 롤백 후 서비스 정상 | curl actuator/health → UP | ✅/❌ |
+| 테스트 데이터 정리 | orders 테이블 확인 | ✅/❌ |
+
+---
+
+## 6. 관련 문서
 
 | 문서 | 설명 |
 | --- | --- |

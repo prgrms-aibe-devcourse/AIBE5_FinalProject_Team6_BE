@@ -1,10 +1,12 @@
 package com.fandrops.community.application.schedule;
 
+import com.fandrops.community.application.event.ArtistScheduleEvent;
 import com.fandrops.community.application.exception.ScheduleNotFoundException;
 import com.fandrops.community.application.port.OutboxEvent;
 import com.fandrops.community.application.port.OutboxEventPort;
 import com.fandrops.community.application.port.OutboxEventType;
 import com.fandrops.community.domain.schedule.ArtistSchedule;
+import org.springframework.context.ApplicationEventPublisher;
 import com.fandrops.community.domain.schedule.ArtistScheduleType;
 import com.fandrops.community.domain.schedule.repository.ArtistScheduleRepository;
 import org.springframework.stereotype.Service;
@@ -22,11 +24,14 @@ public class ScheduleService {
 
     private final ArtistScheduleRepository scheduleRepository;
     private final OutboxEventPort outboxEventPort;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     public ScheduleService(ArtistScheduleRepository scheduleRepository,
-                           OutboxEventPort outboxEventPort) {
+                           OutboxEventPort outboxEventPort,
+                           ApplicationEventPublisher applicationEventPublisher) {
         this.scheduleRepository = scheduleRepository;
         this.outboxEventPort = outboxEventPort;
+        this.applicationEventPublisher = applicationEventPublisher;
     }
 
     // TODO: ArtistMembershipPort 구현 후 command.artistMemberId()와 command.artistId() 소속 검증 추가
@@ -65,6 +70,7 @@ public class ScheduleService {
                        "type", schedule.getType().name(),
                        "title", schedule.getTitle())
         ));
+        applicationEventPublisher.publishEvent(new ArtistScheduleEvent(schedule.getId(), schedule.getArtistId()));
         return toResult(schedule);
     }
 

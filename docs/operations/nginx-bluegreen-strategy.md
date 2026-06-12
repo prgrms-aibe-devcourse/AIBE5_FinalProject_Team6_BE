@@ -13,7 +13,7 @@ ALB 없는 예산 제약 환경에서 Nginx를 활용해 무중단 배포와 분
 | 항목 | 현재 구성 |
 | --- | --- |
 | EC2 | t3.small (2 vCPU, 2GB RAM), Amazon Linux 2023 |
-| Nginx | :80 → Spring Boot :8080 reverse proxy |
+| Nginx | :80 → upstream fandrops_backend (Blue/Green 포트 스위칭, 2026-06-11 적용 완료) |
 | RDS | db.t3.micro MySQL 8.0, Private Subnet |
 | ElastiCache | cache.t3.micro Redis 7.1, Private Subnet |
 | 배포 방식 | GitHub Actions + S3 + SSM RunCommand (OIDC) |
@@ -145,8 +145,8 @@ ALB + EC2 2대:
 ## 3. 최종 결정 및 로드맵
 
 ```
-이번 주 (Phase 4 전)
-  └─ B 구현: 단일 EC2 Blue/Green 포트 스위칭
+이번 주 (Phase 4 전) ✅ **2026-06-11 완료**
+  └─ B 구현: 단일 EC2 Blue/Green 포트 스위칭 (PR #221, #222)
        ├── systemd 유닛 2개 (fandrops-blue, fandrops-green)
        ├── Nginx active.conf 구조 변경
        └── cd.yml 배포 스크립트 수정

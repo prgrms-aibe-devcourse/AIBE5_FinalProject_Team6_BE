@@ -107,7 +107,7 @@ jobs:
             --instance-ids "$INSTANCE" \
             --document-name "AWS-RunShellScript" \
             --parameters '{"commands":[
-              "curl -sf http://localhost:8080/actuator/health | grep -q UP && echo APP_OK"
+              "SLOT=$(cat /etc/fandrops/active-slot 2>/dev/null || echo blue); PORT=8082; [ $SLOT = blue ] && PORT=8081; curl -sf http://localhost:$PORT/actuator/health | grep -q UP && echo APP_OK"
             ]}' \
             --query "Command.CommandId" \
             --output text)

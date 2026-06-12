@@ -12,7 +12,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class CreateOrderRequest {
 
-    @NotNull
+    // TODO: 상시 판매는 null 허용 — 형성빈 협의 후 정식 처리
     private String accessTicket;
 
     @NotEmpty

@@ -10,6 +10,8 @@ public class PaymentConfirmRequest {
     private Long orderId;
     @NotBlank
     private String tossPaymentKey;
+    @NotBlank
+    private String orderPaymentKey;
     @Positive
     private long amount;
 
@@ -17,6 +19,8 @@ public class PaymentConfirmRequest {
     public void setOrderId(Long orderId) { this.orderId = orderId; }
     public String getTossPaymentKey() { return tossPaymentKey; }
     public void setTossPaymentKey(String tossPaymentKey) { this.tossPaymentKey = tossPaymentKey; }
+    public String getOrderPaymentKey() { return orderPaymentKey; }
+    public void setOrderPaymentKey(String orderPaymentKey) { this.orderPaymentKey = orderPaymentKey; }
     public long getAmount() { return amount; }
     public void setAmount(long amount) { this.amount = amount; }
 }

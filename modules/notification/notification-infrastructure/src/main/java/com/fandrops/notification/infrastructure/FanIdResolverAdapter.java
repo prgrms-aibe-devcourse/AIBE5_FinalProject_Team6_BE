@@ -24,4 +24,23 @@ public class FanIdResolverAdapter implements FanIdResolverPort {
         );
         return result.isEmpty() ? Optional.empty() : Optional.of(result.get(0));
     }
+
+    @Override
+    public List<Long> findFollowerFanIdsByArtistId(Long artistId) {
+        return jdbcTemplate.query(
+                "SELECT fan_id FROM user_follow WHERE artist_id = ?",
+                (rs, rowNum) -> rs.getLong("fan_id"),
+                artistId
+        );
+    }
+
+    @Override
+    public Optional<Long> findFanIdByCommentId(Long commentId) {
+        List<Long> result = jdbcTemplate.query(
+                "SELECT fan_id FROM comment WHERE id = ?",
+                (rs, rowNum) -> rs.getLong("fan_id"),
+                commentId
+        );
+        return result.isEmpty() ? Optional.empty() : Optional.of(result.get(0));
+    }
 }

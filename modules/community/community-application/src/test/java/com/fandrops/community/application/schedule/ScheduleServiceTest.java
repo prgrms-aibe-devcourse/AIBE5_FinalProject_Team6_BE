@@ -3,6 +3,7 @@ package com.fandrops.community.application.schedule;
 import com.fandrops.community.application.exception.ScheduleNotFoundException;
 import com.fandrops.community.application.port.OutboxEventPort;
 import com.fandrops.community.application.port.OutboxEventType;
+import org.springframework.context.ApplicationEventPublisher;
 import com.fandrops.community.domain.schedule.ArtistSchedule;
 import com.fandrops.community.domain.schedule.ArtistScheduleType;
 import com.fandrops.community.domain.schedule.repository.ArtistScheduleRepository;
@@ -29,6 +30,7 @@ class ScheduleServiceTest {
 
     @Mock ArtistScheduleRepository scheduleRepository;
     @Mock OutboxEventPort outboxEventPort;
+    @Mock ApplicationEventPublisher applicationEventPublisher;
 
     ScheduleService scheduleService;
 
@@ -36,7 +38,7 @@ class ScheduleServiceTest {
 
     @BeforeEach
     void setUp() {
-        scheduleService = new ScheduleService(scheduleRepository, outboxEventPort);
+        scheduleService = new ScheduleService(scheduleRepository, outboxEventPort, applicationEventPublisher);
     }
 
     @Nested

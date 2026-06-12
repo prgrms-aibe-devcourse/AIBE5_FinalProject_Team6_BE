@@ -40,9 +40,11 @@ public class OrderService {
     // 재고 부족 예외는 롤백 제외 → CANCELLED 상태가 DB에 커밋되어야 함
     @Transactional(noRollbackFor = {OutOfStockException.class, ReserveConflictException.class})
     public CreateOrderResult createOrder(CreateOrderCommand command) {
-        // 1. accessTicket 검증 (실패 시 AccessTicketInvalidException → 403)
+        // 1. accessTicket 검증 — null이면 상시 판매로 간주하고 스킵 (TODO: 형성빈 협의 후 정식 처리)
         Long primaryProductId = command.getItems().get(0).getProductId();
-        accessTicketValidatePort.validate(command.getAccessTicket(), command.getFanId(), primaryProductId);
+        if (command.getAccessTicket() != null) {
+            accessTicketValidatePort.validate(command.getAccessTicket(), command.getFanId(), primaryProductId);
+        }
 
         // 2. 상품 가격 조회 후 OrderItem 생성
         List<OrderItem> items = command.getItems().stream()
