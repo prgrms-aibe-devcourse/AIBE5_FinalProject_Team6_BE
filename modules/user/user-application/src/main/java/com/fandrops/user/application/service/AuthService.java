@@ -4,6 +4,9 @@ import com.fandrops.user.application.dto.*;
 import com.fandrops.user.application.exception.*;
 import com.fandrops.user.application.port.*;
 import com.fandrops.user.domain.AdminAccount;
+import com.fandrops.user.domain.AgencyAccount;
+import com.fandrops.user.domain.AgencyAccountStatus;
+import com.fandrops.user.domain.ArtistMember;
 import com.fandrops.user.domain.AuthProvider;
 import com.fandrops.user.domain.Fan;
 import com.fandrops.user.domain.UserRole;
@@ -18,6 +21,8 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final AdminAccountRepository adminAccountRepository;
+    private final AgencyAccountRepository agencyAccountRepository;
+    private final ArtistMemberRepository artistMemberRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtProvider jwtProvider;
     private final RefreshTokenStore refreshTokenStore;
@@ -29,6 +34,8 @@ public class AuthService {
     public AuthService(
             UserRepository userRepository,
             AdminAccountRepository adminAccountRepository,
+            AgencyAccountRepository agencyAccountRepository,
+            ArtistMemberRepository artistMemberRepository,
             PasswordEncoder passwordEncoder,
             JwtProvider jwtProvider,
             RefreshTokenStore refreshTokenStore,
@@ -37,6 +44,8 @@ public class AuthService {
             EmailNotificationPort emailNotificationPort) {
         this.userRepository = userRepository;
         this.adminAccountRepository = adminAccountRepository;
+        this.agencyAccountRepository = agencyAccountRepository;
+        this.artistMemberRepository = artistMemberRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtProvider = jwtProvider;
         this.refreshTokenStore = refreshTokenStore;
@@ -68,17 +77,38 @@ public class AuthService {
         return issueTokens(saved.getId(), UserRole.FAN);
     }
 
-    // F01-02: 이메일 로그인 — Fan 전용 (Admin은 /api/v1/admin/auth/login 사용)
+    // F01-02: 이메일/loginId 로그인 — Fan → Agency → ArtistMember 순서로 순차 조회
     public AuthTokenResult login(LoginCommand command) {
+        // Fan 조회 — 존재하면(소셜/로컬 무관) Agency/ArtistMember 쿼리 생략
         Fan fan = userRepository.findByEmail(command.email()).orElse(null);
+        if (fan != null) {
+            if (!fan.isLocalAccount()) {
+                // 소셜 계정: 패스워드 로그인 불가 — 타이밍 방어로 bcrypt 1회 실행
+                passwordEncoder.matches(command.password(), dummyPasswordHash);
+                throw new InvalidCredentialsException("이메일 또는 비밀번호가 일치하지 않습니다.");
+            }
+            boolean matches = passwordEncoder.matches(command.password(), fan.getPasswordHash());
+            if (matches) return issueTokens(fan.getId(), UserRole.FAN);
+            throw new InvalidCredentialsException("이메일 또는 비밀번호가 일치하지 않습니다.");
+        }
 
-        // 타이밍 공격 방어: 후보가 없어도 항상 bcrypt 실행해 응답 시간 평준화
-        String hashToCheck = (fan != null && fan.isLocalAccount())
-                ? fan.getPasswordHash() : dummyPasswordHash;
+        // Fan miss → Agency 조회 (ACTIVE 상태만 JWT 발급)
+        AgencyAccount agency = agencyAccountRepository.findByLoginId(command.email()).orElse(null);
+        if (agency != null) {
+            boolean matches = passwordEncoder.matches(command.password(), agency.getPasswordHash());
+            if (matches && agency.getStatus() == AgencyAccountStatus.ACTIVE) {
+                return issueTokens(agency.getId(), UserRole.AGENCY);
+            }
+            throw new InvalidCredentialsException("이메일 또는 비밀번호가 일치하지 않습니다.");
+        }
+
+        // Agency miss → ArtistMember 조회
+        // 타이밍 공격 방어: 어떤 계정도 없어도 bcrypt를 반드시 1회 실행해 응답 시간 평준화
+        ArtistMember artistMember = artistMemberRepository.findByLoginId(command.email()).orElse(null);
+        String hashToCheck = artistMember != null ? artistMember.getPasswordHash() : dummyPasswordHash;
         boolean matches = passwordEncoder.matches(command.password(), hashToCheck);
-
-        if (fan != null && fan.isLocalAccount() && matches) {
-            return issueTokens(fan.getId(), UserRole.FAN);
+        if (artistMember != null && matches) {
+            return issueTokens(artistMember.getId(), UserRole.ARTIST);
         }
         throw new InvalidCredentialsException("이메일 또는 비밀번호가 일치하지 않습니다.");
     }
