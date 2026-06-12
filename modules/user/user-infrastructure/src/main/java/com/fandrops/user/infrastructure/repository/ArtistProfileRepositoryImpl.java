@@ -1,5 +1,6 @@
 package com.fandrops.user.infrastructure.repository;
 
+import com.fandrops.user.application.dto.ArtistSummary;
 import com.fandrops.user.application.port.ArtistProfileRepository;
 import com.fandrops.user.domain.ArtistProfile;
 import com.fandrops.user.infrastructure.persistence.ArtistProfileJpaEntity;
@@ -9,6 +10,7 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 @Repository
 public class ArtistProfileRepositoryImpl implements ArtistProfileRepository {
@@ -38,5 +40,14 @@ public class ArtistProfileRepositoryImpl implements ArtistProfileRepository {
         }
         return jpaRepository.findAfterCursor(cursorId, pageable)
                 .stream().map(ArtistProfileJpaEntity::toDomain).toList();
+    }
+
+    @Override
+    public List<ArtistSummary> findAllByIds(Set<Long> artistIds) {
+        return jpaRepository.findAllById(artistIds)
+                .stream()
+                .map(ArtistProfileJpaEntity::toDomain)
+                .map(p -> new ArtistSummary(p.getId(), p.getName(), p.getProfileImageUrl()))
+                .toList();
     }
 }
