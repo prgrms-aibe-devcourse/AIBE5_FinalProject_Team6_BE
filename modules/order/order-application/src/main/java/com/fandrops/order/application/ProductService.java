@@ -73,6 +73,11 @@ public class ProductService {
 
     @Transactional
     public ProductStatus updateProduct(UpdateProductCommand command) {
+        boolean hasStart = command.getDropsStartAt() != null;
+        boolean hasEnd   = command.getDropsEndAt()   != null;
+        if (hasStart != hasEnd) {
+            throw new IllegalArgumentException("dropsStartAt, dropsEndAt은 함께 입력해야 합니다.");
+        }
         Product product = productRepository.findById(command.getProductId())
                 .orElseThrow(() -> new ProductNotFoundException(command.getProductId()));
         product.update(command.getName(), command.getPrice(), command.getStatus(),

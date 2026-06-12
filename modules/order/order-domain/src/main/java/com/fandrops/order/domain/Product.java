@@ -66,12 +66,15 @@ public class Product {
 
     public void update(String name, BigDecimal price, ProductStatus status,
                        LocalDateTime dropsStartAt, LocalDateTime dropsEndAt) {
+        // 한쪽만 전달되면 zombie product 방지 — 도메인 계층 방어
+        if ((dropsStartAt == null) != (dropsEndAt == null)) {
+            throw new IllegalArgumentException("drops 기간은 양쪽 모두 입력하거나 모두 null이어야 합니다.");
+        }
         if (name != null) this.name = name;
         if (price != null) this.price = price;
         if (status != null) this.status = status;
         if (dropsStartAt != null) this.dropsStartAt = dropsStartAt;
         if (dropsEndAt != null) this.dropsEndAt = dropsEndAt;
-        // 변경 후 dropsStartAt/EndAt 양쪽 모두 설정된 경우 유효성 검증
         if (this.dropsStartAt != null && this.dropsEndAt != null
                 && !this.dropsStartAt.isBefore(this.dropsEndAt)) {
             throw new IllegalArgumentException("dropsStartAt은 dropsEndAt보다 이전이어야 합니다.");

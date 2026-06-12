@@ -234,5 +234,25 @@ class ProductServiceTest {
                             PRODUCT_ID, null, null, null, start, end)));
             verify(productRepository, never()).save(any());
         }
+
+        @Test
+        @DisplayName("dropsStartAt만 전달 시 IllegalArgumentException — zombie product 방지 (P1)")
+        void updateProduct_onlyStartAt_throws() {
+            assertThrows(IllegalArgumentException.class,
+                    () -> sut.updateProduct(new UpdateProductCommand(
+                            PRODUCT_ID, null, null, null, LocalDateTime.now().plusDays(1), null)));
+            verify(productRepository, never()).findById(any());
+            verify(productRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("dropsEndAt만 전달 시 IllegalArgumentException — zombie product 방지 (P1)")
+        void updateProduct_onlyEndAt_throws() {
+            assertThrows(IllegalArgumentException.class,
+                    () -> sut.updateProduct(new UpdateProductCommand(
+                            PRODUCT_ID, null, null, null, null, LocalDateTime.now().plusDays(2))));
+            verify(productRepository, never()).findById(any());
+            verify(productRepository, never()).save(any());
+        }
     }
 }
