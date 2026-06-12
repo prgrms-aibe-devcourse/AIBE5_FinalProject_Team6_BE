@@ -41,6 +41,12 @@ public class ProductJpaEntity {
     @Column(nullable = false, length = 20)
     private ProductStatus status;
 
+    @Column(name = "drops_start_at")
+    private LocalDateTime dropsStartAt;
+
+    @Column(name = "drops_end_at")
+    private LocalDateTime dropsEndAt;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
@@ -49,28 +55,31 @@ public class ProductJpaEntity {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    private ProductJpaEntity(Long artistId, String name, BigDecimal price, ProductStatus status) {
+    private ProductJpaEntity(Long artistId, String name, BigDecimal price, ProductStatus status,
+                             LocalDateTime dropsStartAt, LocalDateTime dropsEndAt) {
         this.artistId = artistId;
         this.name = name;
         this.price = price;
         this.status = status;
+        this.dropsStartAt = dropsStartAt;
+        this.dropsEndAt = dropsEndAt;
     }
 
     public static ProductJpaEntity from(Product product) {
         return new ProductJpaEntity(
-                product.getArtistId(), product.getName(),
-                product.getPrice(), product.getStatus());
+                product.getArtistId(), product.getName(), product.getPrice(),
+                product.getStatus(), product.getDropsStartAt(), product.getDropsEndAt());
     }
 
     public static ProductJpaEntity fromWithId(Product product) {
         ProductJpaEntity entity = new ProductJpaEntity(
-                product.getArtistId(), product.getName(),
-                product.getPrice(), product.getStatus());
+                product.getArtistId(), product.getName(), product.getPrice(),
+                product.getStatus(), product.getDropsStartAt(), product.getDropsEndAt());
         entity.id = product.getId();
         return entity;
     }
 
     public Product toDomain() {
-        return Product.of(id, artistId, name, price, status, updatedAt);
+        return Product.of(id, artistId, name, price, status, dropsStartAt, dropsEndAt, updatedAt);
     }
 }

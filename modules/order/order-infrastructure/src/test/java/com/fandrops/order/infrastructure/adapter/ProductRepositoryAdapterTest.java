@@ -43,7 +43,7 @@ class ProductRepositoryAdapterTest {
 
     private Product savedProduct() {
         return Product.of(PRODUCT_ID, ARTIST_ID, "테스트 상품",
-                BigDecimal.valueOf(10000), ProductStatus.ON_SALE, LocalDateTime.now());
+                BigDecimal.valueOf(10000), ProductStatus.ON_SALE, null, null, LocalDateTime.now());
     }
 
     @Nested

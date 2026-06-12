@@ -4,6 +4,7 @@ import com.fandrops.order.domain.Order;
 import com.fandrops.order.domain.OrderItem;
 import com.fandrops.order.domain.OrderStatus;
 import com.fandrops.order.domain.port.OrderRepository;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -40,6 +41,13 @@ public class OrderRepositoryAdapter implements OrderRepository {
     @Override
     public void updateStatus(Long id, OrderStatus status) {
         jpaRepository.updateStatus(id, status);
+    }
+
+    @Override
+    public List<Order> findByStatusAndUpdatedAtBefore(OrderStatus status, LocalDateTime cutoff) {
+        return jpaRepository.findByStatusAndUpdatedAtBefore(status, cutoff).stream()
+                .map(this::toDomain)
+                .toList();
     }
 
     private Order toDomain(OrderEntity entity) {

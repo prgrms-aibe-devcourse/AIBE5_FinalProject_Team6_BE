@@ -51,12 +51,12 @@ class RestockAlertServiceTest {
 
     private Product soldOutProduct() {
         return Product.of(PRODUCT_ID, 5L, "상품", BigDecimal.valueOf(10000),
-                ProductStatus.SOLD_OUT, LocalDateTime.now());
+                ProductStatus.SOLD_OUT, null, null, LocalDateTime.now());
     }
 
     private Product onSaleProduct() {
         return Product.of(PRODUCT_ID, 5L, "상품", BigDecimal.valueOf(10000),
-                ProductStatus.ON_SALE, LocalDateTime.now());
+                ProductStatus.ON_SALE, null, null, LocalDateTime.now());
     }
 
     private RestockAlert pendingAlert() {

@@ -7,6 +7,7 @@ import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 @Getter
 @NoArgsConstructor
@@ -24,4 +25,8 @@ public class CreateProductRequest {
 
     @Min(1)
     private int totalQty;
+
+    /** null = 상시 상품, 값 있음 = 드롭스 상품 */
+    private LocalDateTime dropsStartAt;
+    private LocalDateTime dropsEndAt;
 }

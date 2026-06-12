@@ -4,6 +4,7 @@ import com.fandrops.inventory.application.exception.InventoryNotFoundException;
 import com.fandrops.inventory.domain.Inventory;
 import com.fandrops.inventory.domain.InventoryChangeType;
 import com.fandrops.inventory.domain.InventoryHistory;
+import com.fandrops.inventory.domain.InventoryRefType;
 import com.fandrops.inventory.domain.exception.InvalidInventoryStateException;
 import com.fandrops.inventory.domain.exception.OutOfStockException;
 import com.fandrops.inventory.domain.port.InventoryHistoryRepository;
@@ -21,6 +22,8 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -97,6 +100,18 @@ class InventoryCommandServiceTest {
     class Confirm {
 
         @Test
+        @DisplayName("DECREASE 이력 이미 존재하면 early-return — confirmAtomic·save 미호출 (멱등성)")
+        void confirm_alreadyProcessed_earlyReturn() {
+            given(inventoryHistoryRepository.existsByReferenceIdAndRefTypeAndChangeType(
+                    ORDER_ID, InventoryRefType.ORDER, InventoryChangeType.DECREASE)).willReturn(true);
+
+            sut.confirm(ORDER_ID, PRODUCT_ID, 20);
+
+            verify(inventoryRepository, never()).confirmAtomic(anyLong(), anyInt());
+            verify(inventoryHistoryRepository, never()).save(any());
+        }
+
+        @Test
         @DisplayName("재고 확정 시 DECREASE 이력 저장, save() 미호출")
         void confirm_savesHistoryWithoutDirectSave() {
             // post-update 상태: totalQty=80, reservedQty=0, availableQty=80 (20 confirm 후)
@@ -145,6 +160,18 @@ class InventoryCommandServiceTest {
     @Nested
     @DisplayName("restore()")
     class Restore {
+
+        @Test
+        @DisplayName("RELEASE 이력 이미 존재하면 early-return — restoreAtomic·save 미호출 (멱등성)")
+        void restore_alreadyProcessed_earlyReturn() {
+            given(inventoryHistoryRepository.existsByReferenceIdAndRefTypeAndChangeType(
+                    ORDER_ID, InventoryRefType.ORDER, InventoryChangeType.RELEASE)).willReturn(true);
+
+            sut.restore(ORDER_ID, PRODUCT_ID, 30);
+
+            verify(inventoryRepository, never()).restoreAtomic(anyLong(), anyInt());
+            verify(inventoryHistoryRepository, never()).save(any());
+        }
 
         @Test
         @DisplayName("재고 복원 시 RELEASE 이력 저장, save() 미호출")

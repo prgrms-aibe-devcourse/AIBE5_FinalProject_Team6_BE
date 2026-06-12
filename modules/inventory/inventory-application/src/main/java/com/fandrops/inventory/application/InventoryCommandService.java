@@ -45,6 +45,11 @@ public class InventoryCommandService {
 
     @Transactional
     public void confirm(Long orderId, Long productId, int qty) {
+        // 멱등성 가드: DECREASE 이력이 이미 존재하면 재처리(서버 재시작·중복 이벤트) — 정상 종료
+        if (inventoryHistoryRepository.existsByReferenceIdAndRefTypeAndChangeType(
+                orderId, InventoryRefType.ORDER, InventoryChangeType.DECREASE)) {
+            return;
+        }
         int affected = inventoryRepository.confirmAtomic(productId, qty);
         if (affected == 0) {
             Inventory inventory = findByProductId(productId);
@@ -61,6 +66,11 @@ public class InventoryCommandService {
 
     @Transactional
     public void restore(Long orderId, Long productId, int qty) {
+        // 멱등성 가드: RELEASE 이력이 이미 존재하면 재처리(서버 재시작·중복 이벤트) — 정상 종료
+        if (inventoryHistoryRepository.existsByReferenceIdAndRefTypeAndChangeType(
+                orderId, InventoryRefType.ORDER, InventoryChangeType.RELEASE)) {
+            return;
+        }
         int affected = inventoryRepository.restoreAtomic(productId, qty);
         if (affected == 0) {
             Inventory inventory = findByProductId(productId);

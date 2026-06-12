@@ -1,6 +1,8 @@
 package com.fandrops.order.infrastructure.persistence;
 
 import com.fandrops.order.domain.OrderStatus;
+import java.time.LocalDateTime;
+import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -12,4 +14,6 @@ public interface OrderJpaRepository extends JpaRepository<OrderEntity, Long> {
     @Modifying(clearAutomatically = true)
     @Query("UPDATE OrderEntity o SET o.status = :status WHERE o.id = :id")
     void updateStatus(@Param("id") Long id, @Param("status") OrderStatus status);
+
+    List<OrderEntity> findByStatusAndUpdatedAtBefore(OrderStatus status, LocalDateTime cutoff);
 }
