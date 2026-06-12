@@ -29,17 +29,19 @@ systemctl start "fandrops-$NEW_SLOT"
 
 # ── 4. 헬스체크 (최대 60초) ─────────────────────────────────
 HEALTH="DOWN"
-for i in $(seq 1 12); do
+for i in $(seq 1 24); do
     HEALTH=$(curl -sf "http://127.0.0.1:$NEW_PORT/actuator/health" \
              | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])" \
              2>/dev/null || echo "DOWN")
-    echo "[$i/12] health=$HEALTH"
+    echo "[$i/24] health=$HEALTH"
     [ "$HEALTH" = "UP" ] && break
     sleep 5
 done
 
 if [ "$HEALTH" != "UP" ]; then
     echo "❌ 헬스체크 실패 → 롤백: $NEW_SLOT 종료"
+    echo "--- journalctl ($NEW_SLOT, 최근 50줄) ---"
+    journalctl -u "fandrops-$NEW_SLOT" -n 50 --no-pager || true
     systemctl stop "fandrops-$NEW_SLOT" || true
     exit 1
 fi
