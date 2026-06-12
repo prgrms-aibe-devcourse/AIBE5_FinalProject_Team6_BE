@@ -73,10 +73,12 @@ Baseline 없이 튜닝하면 "얼마나 개선됐는가"를 증명할 수 없다
 | --- | --- |
 | k6 설치 | EC2에 k6 설치 여부 확인 (`k6 version`) |
 | DB seed | 각 시나리오 주석의 seed 조건 확인 |
-| 01·04 시나리오 | `product id=1 (inventory.total_qty=100)`, fan id 1~N (`FAN_POOL_SIZE` 환경변수, `infra/k6/seed/fans.csv` 참고) |
-| 02 시나리오 | `artist_profile id=1`, `artist_feed` 20개, `user_follow` fan_id 1~N & artist_id=1 (`FAN_POOL_SIZE` 참고) |
-| 03 시나리오 | Wiremock 기동 + `TOSS_API_BASE_URL=http://wiremock:8080` 앱 재기동 |
+| 01·04 시나리오 | `product id=1 (inventory.total_qty=100)`, fan id 1~2100 (seed.sql) |
+| 02 시나리오 | `artist_profile id=1`, `artist_feed` 20개, `user_follow` fan_id 1~N & artist_id=1 |
+| 03 시나리오 | Wiremock 기동 + `TOSS_API_BASE_URL=http://localhost:8090` 앱 재기동 |
 | 05 시나리오 | Nginx `worker_connections ≥ 2048`, JVM `ulimit -n ≥ 8192` |
+| **JWT tokens.csv** | 로컬에서 JwtGeneratorTest 실행 → `infra/k6/seed/tokens.csv` 생성 → S3 업로드 → EC2 다운로드 |
+| **Redis AccessTicket** | `access:ticket:1:{fanId}=test-ticket-token` fan_id 1~2100 일괄 적재 (아래 참고) |
 | Prometheus Remote Write | EC2 Prometheus 주소: `http://localhost:9090/api/v1/write` |
 
 k6 설치:
@@ -111,27 +113,60 @@ sudo systemctl restart "fandrops-$ACTIVE"
 # sudo systemctl restart "fandrops-$ACTIVE"
 ```
 
-### 3-3. 시나리오별 실행
+### 3-3. JWT 생성 및 Redis 사전 적재
+
+> **인증 방식:** prod 프로파일 유지 — JWT 사전 생성(CSV) + Redis AccessTicket 사전 적재 방식으로 운영 코드 수정 없이 실행.
+> 상세 배경 및 결정 이유: [`k6-execution-plan.md §2`](./k6-execution-plan.md)
+
+**JWT tokens.csv 생성 (로컬):**
+
+```bash
+# 로컬에서 JwtGeneratorTest 실행 (JWT_SECRET 환경변수 주입)
+# 출력: infra/k6/seed/tokens.csv (fan_id 1~2100 JWT, .gitignore 대상)
+
+# S3 업로드
+aws s3 cp infra/k6/seed/tokens.csv s3://<버킷명>/k6/tokens.csv
+
+# EC2 SSM 세션에서 다운로드
+aws s3 cp s3://<버킷명>/k6/tokens.csv /opt/fandrops/k6/seed/tokens.csv
+```
+
+**Redis AccessTicket 사전 적재 (EC2 SSM 세션):**
+
+```bash
+# productId=1, fan_id 1~2100 일괄 적재 (TTL 86400초)
+for i in {1..2100}; do
+  redis-cli -h <REDIS_ENDPOINT> setex "access:ticket:1:$i" 86400 "test-ticket-token"
+done
+
+# 적재 확인
+redis-cli -h <REDIS_ENDPOINT> get "access:ticket:1:1"    # → "test-ticket-token"
+redis-cli -h <REDIS_ENDPOINT> get "access:ticket:1:2100" # → "test-ticket-token"
+```
+
+### 3-4. 시나리오별 실행
 
 ```bash
 cd /opt/fandrops/k6   # infra/k6/ 를 EC2로 복사 또는 git clone
 
+# 02. 피드 Read P95 (가장 단순 — 먼저 서버 정상 확인)
+k6 run --out experimental-prometheus-rw \
+  -e BASE_URL=http://localhost:8081 \
+  scenarios/02_feed_read.js
+
 # 01. 주문 동시성 (오버셀 0건 핵심)
 k6 run --out experimental-prometheus-rw \
   -e BASE_URL=http://localhost:8081 \
-  -e FAN_POOL_SIZE=1000 \
   scenarios/01_order_concurrency.js
 
-# 02. 피드 Read P95
-k6 run --out experimental-prometheus-rw \
-  -e BASE_URL=http://localhost:8081 \
-  -e FAN_POOL_SIZE=1000 \
-  scenarios/02_feed_read.js
+# 01 완료 후 Redis 재적재 (04 실행 전 — 01에서 성공한 fanId 티켓 복원)
+for i in {1..2100}; do
+  redis-cli -h <REDIS_ENDPOINT> setex "access:ticket:1:$i" 86400 "test-ticket-token"
+done
 
 # 04. 드롭스 스파이크 (1,000 VU 급상승)
 k6 run --out experimental-prometheus-rw \
   -e BASE_URL=http://localhost:8081 \
-  -e FAN_POOL_SIZE=1000 \
   scenarios/04_drop_spike.js
 
 # 03. 결제 확인 (Wiremock 기동 후 실행)
@@ -148,8 +183,20 @@ k6 run --out experimental-prometheus-rw \
 # 06. 통합 워크로드 모델 (혼합 부하 — 마지막 실행)
 k6 run --out experimental-prometheus-rw \
   -e BASE_URL=http://localhost:8081 \
-  -e FAN_POOL_SIZE=1000 \
+  -e ORDERS_JSON="$(cat seed/orders.json)" \
   scenarios/06_workload_model.js
+```
+
+**테스트 완료 후 정리:**
+
+```bash
+# S3 tokens.csv 삭제 (유효한 JWT 2100개 — 테스트 완료 후 즉시 삭제)
+aws s3 rm s3://<버킷명>/k6/tokens.csv
+
+# Redis AccessTicket 테스트용 키 삭제
+for i in {1..2100}; do
+  redis-cli -h <REDIS_ENDPOINT> del "access:ticket:1:$i"
+done
 ```
 
 ### 3-4. Baseline 수치 기록표
@@ -279,10 +326,20 @@ sudo nginx -t && sudo systemctl reload nginx
 ### 4-4. k6 분산 환경 검증 실행
 
 ```bash
+# Redis AccessTicket 재적재 (분산 환경 실행 전)
+for i in {1..2100}; do
+  redis-cli -h <REDIS_ENDPOINT> setex "access:ticket:1:$i" 86400 "test-ticket-token"
+done
+
 # Baseline과 동일 시나리오를 분산 환경에서 재실행
 k6 run --out experimental-prometheus-rw \
   -e BASE_URL=http://localhost:8080 \
   scenarios/01_order_concurrency.js
+
+# 01 완료 후 Redis 재적재
+for i in {1..2100}; do
+  redis-cli -h <REDIS_ENDPOINT> setex "access:ticket:1:$i" 86400 "test-ticket-token"
+done
 
 k6 run --out experimental-prometheus-rw \
   -e BASE_URL=http://localhost:8080 \
