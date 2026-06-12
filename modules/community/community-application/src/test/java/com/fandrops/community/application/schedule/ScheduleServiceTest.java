@@ -175,8 +175,94 @@ class ScheduleServiceTest {
         }
     }
 
+    @Nested
+    @DisplayName("registerLive")
+    class RegisterLiveTest {
+
+        @Test
+        @DisplayName("유효한 커맨드 — save 호출 후 LIVE ScheduleResult 반환")
+        void success() {
+            ArtistSchedule saved = schedule(1L, 10L, ArtistScheduleType.LIVE, "라이브 방송",
+                    NOW.plusDays(1), "https://www.youtube.com/embed/abc123");
+            when(scheduleRepository.save(any())).thenReturn(saved);
+
+            ScheduleResult result = scheduleService.registerLive(
+                    new LiveCreateCommand(10L, 5L, "라이브 방송",
+                            NOW.plusDays(1).atOffset(ZoneOffset.UTC),
+                            "https://www.youtube.com/embed/abc123"));
+
+            assertEquals(1L, result.id());
+            assertEquals(ArtistScheduleType.LIVE, result.type());
+            assertEquals("라이브 방송", result.title());
+            assertEquals("https://www.youtube.com/embed/abc123", result.liveUrl());
+            verify(scheduleRepository).save(any());
+        }
+
+        @Test
+        @DisplayName("liveUrl null 허용 — save 정상 동작")
+        void nullLiveUrl_allowed() {
+            ArtistSchedule saved = schedule(2L, 10L, ArtistScheduleType.LIVE, "라이브",
+                    NOW, null);
+            when(scheduleRepository.save(any())).thenReturn(saved);
+
+            ScheduleResult result = scheduleService.registerLive(
+                    new LiveCreateCommand(10L, 5L, "라이브",
+                            NOW.atOffset(ZoneOffset.UTC), null));
+
+            assertNull(result.liveUrl());
+            verify(scheduleRepository).save(any());
+        }
+
+        @Test
+        @DisplayName("artistMemberId null → NullPointerException, save 호출 안 함")
+        void nullArtistMemberId_throws() {
+            assertThrows(NullPointerException.class,
+                    () -> scheduleService.registerLive(
+                            new LiveCreateCommand(10L, null, "라이브",
+                                    NOW.atOffset(ZoneOffset.UTC), null)));
+            verify(scheduleRepository, never()).save(any());
+        }
+    }
+
+    @Nested
+    @DisplayName("getLives")
+    class GetLivesTest {
+
+        @Test
+        @DisplayName("artistId에 해당하는 LIVE 일정 목록 반환")
+        void returnsLiveSchedules() {
+            ArtistSchedule l1 = schedule(1L, 10L, ArtistScheduleType.LIVE, "라이브1",
+                    NOW, "https://www.youtube.com/embed/aaa");
+            ArtistSchedule l2 = schedule(2L, 10L, ArtistScheduleType.LIVE, "라이브2",
+                    NOW.plusHours(2), null);
+            when(scheduleRepository.findLivesByArtistId(eq(10L))).thenReturn(List.of(l1, l2));
+
+            List<ScheduleResult> result = scheduleService.getLives(10L);
+
+            assertEquals(2, result.size());
+            assertEquals(ArtistScheduleType.LIVE, result.get(0).type());
+            assertEquals("https://www.youtube.com/embed/aaa", result.get(0).liveUrl());
+            assertNull(result.get(1).liveUrl());
+        }
+
+        @Test
+        @DisplayName("LIVE 일정 없을 경우 빈 리스트 반환")
+        void noLives_returnsEmpty() {
+            when(scheduleRepository.findLivesByArtistId(eq(10L))).thenReturn(List.of());
+
+            List<ScheduleResult> result = scheduleService.getLives(10L);
+
+            assertTrue(result.isEmpty());
+        }
+    }
+
     private static ArtistSchedule schedule(Long id, Long artistId, ArtistScheduleType type,
                                             String title, LocalDateTime scheduledAt) {
-        return ArtistSchedule.reconstruct(id, artistId, null, title, type, scheduledAt);
+        return ArtistSchedule.reconstruct(id, artistId, null, title, type, scheduledAt, null);
+    }
+
+    private static ArtistSchedule schedule(Long id, Long artistId, ArtistScheduleType type,
+                                            String title, LocalDateTime scheduledAt, String liveUrl) {
+        return ArtistSchedule.reconstruct(id, artistId, null, title, type, scheduledAt, liveUrl);
     }
 }

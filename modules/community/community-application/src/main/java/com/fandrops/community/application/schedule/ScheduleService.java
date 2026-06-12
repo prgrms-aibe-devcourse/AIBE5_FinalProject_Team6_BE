@@ -74,6 +74,22 @@ public class ScheduleService {
         return toResult(schedule);
     }
 
+    @Transactional
+    public ScheduleResult registerLive(LiveCreateCommand command) {
+        Objects.requireNonNull(command.artistMemberId(), "artistMemberId is required");
+        LocalDateTime scheduledAtUtc = command.scheduledAt().withOffsetSameInstant(ZoneOffset.UTC).toLocalDateTime();
+        ArtistSchedule schedule = ArtistSchedule.createLive(
+                command.artistId(), command.title(), scheduledAtUtc, command.liveUrl());
+        return toResult(scheduleRepository.save(schedule));
+    }
+
+    public List<ScheduleResult> getLives(Long artistId) {
+        return scheduleRepository.findLivesByArtistId(artistId)
+                .stream()
+                .map(this::toResult)
+                .toList();
+    }
+
     public List<ScheduleResult> getCalendar(Long artistId, LocalDateTime from, LocalDateTime to) {
         LocalDateTime effectiveFrom = (from != null) ? from : LocalDateTime.now().minusDays(30);
         LocalDateTime effectiveTo = (to != null) ? to : LocalDateTime.now().plusDays(90);
@@ -88,7 +104,8 @@ public class ScheduleService {
                 s.getId(),
                 s.getType(),
                 s.getTitle(),
-                s.getScheduledAt().atOffset(ZoneOffset.UTC)
+                s.getScheduledAt().atOffset(ZoneOffset.UTC),
+                s.getLiveUrl()
         );
     }
 }
