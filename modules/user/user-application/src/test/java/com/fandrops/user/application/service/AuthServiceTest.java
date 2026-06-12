@@ -142,6 +142,31 @@ class AuthServiceTest {
         assertEquals("access", result.accessToken());
     }
 
+    @Test
+    @DisplayName("로컬 Fan + Agency 동일 loginId 공존 시 Fan 우선 — Fan 토큰 반환")
+    void login_localFanAndAgencySameLoginId_fanTakesPriority() {
+        LoginCommand command = new LoginCommand("shared@test.com", "fanPass");
+        Fan fan = Fan.builder().id(1L).email("shared@test.com").nickname("nick")
+                .authProvider(AuthProvider.LOCAL).passwordHash("fanHash").build();
+        AgencyAccount agency = AgencyAccount.builder()
+                .id(99L).loginId("shared@test.com").passwordHash("agencyHash")
+                .companyName("Corp").contactEmail("shared@test.com")
+                .status(AgencyAccountStatus.ACTIVE).build();
+        when(userRepository.findByEmail("shared@test.com")).thenReturn(Optional.of(fan));
+        when(agencyAccountRepository.findByLoginId("shared@test.com")).thenReturn(Optional.of(agency));
+        when(artistMemberRepository.findByLoginId("shared@test.com")).thenReturn(Optional.empty());
+        when(passwordEncoder.matches("fanPass", "fanHash")).thenReturn(true);
+        when(jwtProvider.generateAccessToken(1L, UserRole.FAN)).thenReturn("fan-access");
+        when(jwtProvider.generateRefreshToken(1L)).thenReturn("fan-refresh");
+        when(jwtProvider.getAccessTokenExpiresIn()).thenReturn(1800L);
+
+        AuthTokenResult result = authService.login(command);
+
+        assertEquals("fan-access", result.accessToken());
+        verify(jwtProvider).generateAccessToken(1L, UserRole.FAN);
+        verify(jwtProvider, never()).generateAccessToken(99L, UserRole.AGENCY);
+    }
+
     // ── adminLogin ──────────────────────────────────────────────────────────
 
     @Test
