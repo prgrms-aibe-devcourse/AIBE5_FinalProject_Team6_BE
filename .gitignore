@@ -55,3 +55,6 @@ skills-lock.json
 
 # AI workflow generated files
 docs/ai/workflows/generated/
+
+### k6 부하 테스트 산출물 (유효한 JWT 포함 — git 노출 금지) ###
+infra/k6/seed/tokens.csv
