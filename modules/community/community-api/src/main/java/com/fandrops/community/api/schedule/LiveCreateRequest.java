@@ -9,6 +9,7 @@ import java.time.OffsetDateTime;
 public record LiveCreateRequest(
         @NotBlank String title,
         @NotNull OffsetDateTime scheduledAt,
-        @Pattern(regexp = "^https://www\\.youtube\\.com/embed/.*", message = "liveUrl은 유튜브 임베드 URL이어야 합니다.")
+        @NotBlank(message = "liveUrl은 필수입니다.")
+        @Pattern(regexp = "^https://www\\.youtube\\.com/embed/[^/?#]+$", message = "liveUrl은 유튜브 임베드 URL이어야 합니다.")
         String liveUrl
 ) {}
