@@ -107,7 +107,7 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("소셜 계정 이메일로 로그인 시 동일한 메시지 반환 (User Enumeration 방어)")
+    @DisplayName("소셜 계정 이메일로 로그인 시 동일한 메시지 반환 — Agency/ArtistMember 쿼리 없음 (User Enumeration 방어)")
     void login_socialAccount_throwsSameMessage() {
         LoginCommand command = new LoginCommand("kakao@email.com", "pass");
         Fan socialFan = Fan.builder().email("kakao@email.com").nickname("nick").authProvider(AuthProvider.KAKAO).providerId("12345").build();
@@ -116,6 +116,25 @@ class AuthServiceTest {
 
         InvalidCredentialsException ex = assertThrows(InvalidCredentialsException.class, () -> authService.login(command));
         assertEquals("이메일 또는 비밀번호가 일치하지 않습니다.", ex.getMessage());
+        // 소셜 팬 발견 시 Agency/ArtistMember DB 조회 없이 early return 검증
+        verify(agencyAccountRepository, never()).findByLoginId(anyString());
+        verify(artistMemberRepository, never()).findByLoginId(anyString());
+    }
+
+    @Test
+    @DisplayName("소셜 팬 + Agency 동일 loginId 공존 시 Agency 쿼리 실행 안 됨 — Agency 토큰 발급 방지")
+    void login_socialFanAndAgencySameLoginId_agencyNeverQueried() {
+        LoginCommand command = new LoginCommand("shared@kakao.com", "agencyPass");
+        Fan socialFan = Fan.builder().email("shared@kakao.com").nickname("nick")
+                .authProvider(AuthProvider.KAKAO).providerId("kakao-999").build();
+        when(userRepository.findByEmail("shared@kakao.com")).thenReturn(Optional.of(socialFan));
+        when(passwordEncoder.matches("agencyPass", "$2a$10$mockedDummyHash")).thenReturn(false);
+
+        assertThrows(InvalidCredentialsException.class, () -> authService.login(command));
+        // Agency 계정이 존재하더라도 소셜 팬 발견 시점에서 중단 — Agency 토큰 발급 불가
+        verify(agencyAccountRepository, never()).findByLoginId(anyString());
+        verify(artistMemberRepository, never()).findByLoginId(anyString());
+        verify(jwtProvider, never()).generateAccessToken(anyLong(), eq(UserRole.AGENCY));
     }
 
     @Test

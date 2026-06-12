@@ -79,9 +79,14 @@ public class AuthService {
 
     // F01-02: 이메일/loginId 로그인 — Fan → Agency → ArtistMember 순서로 순차 조회
     public AuthTokenResult login(LoginCommand command) {
-        // Fan 조회 (가장 많은 계정 유형) — hit이면 Agency/ArtistMember 쿼리 생략
+        // Fan 조회 — 존재하면(소셜/로컬 무관) Agency/ArtistMember 쿼리 생략
         Fan fan = userRepository.findByEmail(command.email()).orElse(null);
-        if (fan != null && fan.isLocalAccount()) {
+        if (fan != null) {
+            if (!fan.isLocalAccount()) {
+                // 소셜 계정: 패스워드 로그인 불가 — 타이밍 방어로 bcrypt 1회 실행
+                passwordEncoder.matches(command.password(), dummyPasswordHash);
+                throw new InvalidCredentialsException("이메일 또는 비밀번호가 일치하지 않습니다.");
+            }
             boolean matches = passwordEncoder.matches(command.password(), fan.getPasswordHash());
             if (matches) return issueTokens(fan.getId(), UserRole.FAN);
             throw new InvalidCredentialsException("이메일 또는 비밀번호가 일치하지 않습니다.");
