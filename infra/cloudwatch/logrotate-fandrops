@@ -1,0 +1,12 @@
+/var/log/fandrops/app.log {
+    daily
+    rotate 7
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 root root
+    postrotate
+        systemctl kill -s HUP rsyslog.service 2>/dev/null || true
+    endscript
+}

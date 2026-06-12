@@ -10,7 +10,7 @@
 
 | 도메인          | 테이블                                                                                                                 | 비고                                                                                      |
 | ------------ | ------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| **사용자·아티스트** | `FAN`, `AGENCY_APPLICATION`, `AGENCY_ACCOUNT`, `ARTIST_PROFILE`, `ARTIST_MEMBER`, `USER_FOLLOW`                     | 팬(B2C) · 입점신청(B2B) · **운영 주체(B2B)** · 아티스트 프로필·멤버 · 팔로우(팬 가입)                           |
+| **사용자·아티스트** | `FAN`, `AGENCY_APPLICATION`, `AGENCY_ACCOUNT`, `ARTIST_PROFILE`, `ARTIST_MEMBER`, `USER_FOLLOW`, `ADMIN_ACCOUNT`     | 팬(B2C) · 입점신청(B2B) · **운영 주체(B2B)** · 아티스트 프로필·멤버 · 팔로우(팬 가입) · 플랫폼 운영자(Admin)           |
 | **커뮤니티**     | `ARTIST_FEED`, `FEED_IMAGE`, `ARTIST_NOTICE`, `COMMENT`, `FEED_LIKE`, `COMMENT_LIKE`                                | 피드 · 피드 다중 이미지 · 공지 · 댓글(대댓글) · 피드/댓글 좋아요                                               |
 | **커머스**      | `PRODUCT`, `INVENTORY`, `INVENTORY_HISTORY`, `CART`, `CART_ITEM`, `ORDER`, `ORDER_ITEM`, `PAYMENT`, `RESTOCK_ALERT` | 상품·재고·재고 이력·**장바구니(RDB)** ·주문·결제 — [ADR-003](../adr/ADR-003-cart-storage-rdb-phase1.md) |
 | **일정**       | `ARTIST_SCHEDULE`                                                                                                   | 아티스트 스케줄(일정) 및 공지 연동 캘린더                                                                |
@@ -73,6 +73,19 @@ available_qty = total_qty - reserved_qty
 
 `idempotency_key`로 주문 생성 멱등을 보장한다.
 
+### `order_payment_key` — 서버 발급 주문 세션 키
+
+`POST /orders` 응답의 `orderPaymentKey` 필드에 반환되는 서버 발급 UUID 기반 식별자(`"opk_" + UUID`).
+
+> **주의:** `PAYMENT.payment_key`(Toss PG가 발급하는 `tossPaymentKey`)와 **별개의 컬럼**이다.
+
+| 컬럼 | 테이블 | 발급 주체 | 용도 |
+| --- | --- | --- | --- |
+| `order_payment_key` | `ORDER` | 서버 (주문 생성 시점) | 클라이언트가 결제 세션을 식별하는 주문 키 |
+| `payment_key` | `PAYMENT` | Toss PG | PG 웹훅 멱등·환불 요청 키 |
+
+`UNIQUE` 제약으로 중복 발급을 방지한다.
+
 ### `FAILED`가 존재하는 이유
 
 Saga 보상 트랜잭션의 **트리거 기준**이 되는 상태다. 보상이 완료되면 반드시 `CANCELLED`로 전이한다.
@@ -83,7 +96,7 @@ Saga 보상 트랜잭션의 **트리거 기준**이 되는 상태다. 보상이 
 
 ### 설계 결정 1 — `failed_at` 분리
 
-`paid_at`과 `failed_at`을 **분리된 컬럼**으로 둔다. `ORDER`와 1:1.
+`paid_at`과 `failed_at`을 **분리된 컬럼**으로 둔다. `ORDER`와 1:1. `order_id`에 **DB UNIQUE 제약**을 적용하여 하나의 주문에 결제 레코드가 하나만 존재하도록 강제한다 (V8 마이그레이션).
 
 ### 설계 결정 2 — `payment_key` Unique Index
 
@@ -95,6 +108,20 @@ Saga 보상 트랜잭션의 **트리거 기준**이 되는 상태다. 보상이 
 ERD:    PAYMENT.payment_key (Unique Index)
 ```
 
+
+### 테이블 스키마
+
+| 컬럼 | 타입 | 제약 | 설명 |
+| --- | --- | --- | --- |
+| `id` | BIGINT | PK, AUTO_INCREMENT | 내부 식별자 |
+| `order_id` | BIGINT | NOT NULL, UNIQUE, FK → ORDER.id | 주문 참조 (1:1) — 결제 레코드 중복 방지 (V8) |
+| `payment_key` | VARCHAR | UNIQUE | `tossPaymentKey` 저장 — 멱등성 보장 (P-1) |
+| `amount` | BIGINT | NOT NULL | 결제 금액 — confirm 시 PG 금액 대조용 |
+| `method` | VARCHAR | | 결제수단 (토스 PG 반환 문자열, e.g. 카드) |
+| `status` | VARCHAR | NOT NULL | `PENDING` / `SUCCESS` / `FAILED` |
+| `paid_at` | TIMESTAMP | | SUCCESS 시 기록 (P-2) |
+| `failed_at` | TIMESTAMP | | FAILED 시 기록 (P-3) |
+| `created_at` | TIMESTAMP | NOT NULL | 결제 세션 생성 시각 — 15분 타임아웃 Job 기준 (`ORDER.reserved_at`과 동일 TX) |
 
 | `status`  | 의미                          |
 | --------- | --------------------------- |
@@ -152,6 +179,7 @@ ERD:    PAYMENT.payment_key (Unique Index)
 - **1인 크리에이터:** 안내 문구에 **「개인사업자 등록 번호 입력 가능」** 명시. 미등록 신청자는 `PENDING` 유지 후 Admin이 서류 보완 요청·반려·예외 승인.
 - **구현:** ERD 컬럼 추가 없이 nullable 허용 + API/프론트 validation·Admin 심사 UI만 조정 가능. 유형별 분기가 필요해지면 이후 `operator_type` enum 추가를 검토한다.
 - `**AGENCY_ACCOUNT`**: 운영 주체(B2B) 로그인 계정. `login_id`, `password_hash`, `company_name`(회사명·활동명·매니지먼트 명칭), `contact_email`, `status`, `invitation_token`, `token_expired_at`, `role` 기본 `ROLE_AGENCY`. 입점 심사 완료 후 생성되는 로그인/권한 계정.
+- `**ADMIN_ACCOUNT`** (신규, V16): 플랫폼 운영자 전용 로그인 계정. `login_id`, `password_hash`, `created_at`. Fan·Agency와 완전히 분리된 별도 주체. `POST /auth/login` 공용 엔드포인트 사용 → JWT `role=ADMIN` 발급.
 - `**ARTIST_PROFILE`**: 아티스트 공간을 구성하는 앵커 엔티티 (`artist_id`).
   - `agency_id` FK → `AGENCY_ACCOUNT`.
   - `name`, `joined_at`.

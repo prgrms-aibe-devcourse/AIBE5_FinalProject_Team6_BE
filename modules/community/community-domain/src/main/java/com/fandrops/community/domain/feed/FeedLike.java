@@ -34,8 +34,8 @@ public class FeedLike {
         this.createdAt = createdAt;
     }
 
-    public static FeedLike byFan(Long feedId, Long fanId, Clock clock) {
-        return new FeedLike(feedId, fanId, null, null, clock);
+    public static FeedLike byFan(Long feedId, Long fanId, Long artistId, Clock clock) {
+        return new FeedLike(feedId, fanId, null, artistId, clock);
     }
 
     public static FeedLike byArtistMember(Long feedId, Long artistMemberId, Long artistId, Clock clock) {

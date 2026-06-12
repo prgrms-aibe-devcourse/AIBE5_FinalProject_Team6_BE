@@ -1,0 +1,85 @@
+name: Investigate MySQL Outage
+
+on:
+  workflow_dispatch:
+    inputs:
+      start_time:
+        description: '조회 시작 시각 (UTC, e.g. 2026-05-22T13:00:00Z)'
+        required: false
+        default: '2026-05-22T13:00:00Z'
+      end_time:
+        description: '조회 종료 시각 (UTC, e.g. 2026-05-23T03:00:00Z)'
+        required: false
+        default: '2026-05-23T03:00:00Z'
+
+jobs:
+  investigate:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: AWS 자격증명 설정 (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-northeast-2
+
+      - name: 1. RDS 인스턴스 목록 및 유지 관리 창
+        run: |
+          echo "=== RDS 인스턴스 & 유지 관리 창 ==="
+          aws rds describe-db-instances \
+            --region ap-northeast-2 \
+            --query 'DBInstances[*].{id:DBInstanceIdentifier,status:DBInstanceStatus,maint:PreferredMaintenanceWindow,backup:PreferredBackupWindow}' \
+            --output table
+
+      - name: 2. RDS 이벤트 로그
+        run: |
+          echo "=== RDS 이벤트 (${{ github.event.inputs.start_time }} ~ ${{ github.event.inputs.end_time }}) ==="
+          aws rds describe-events \
+            --source-type db-instance \
+            --start-time "${{ github.event.inputs.start_time }}" \
+            --end-time "${{ github.event.inputs.end_time }}" \
+            --region ap-northeast-2 \
+            --output table || echo "(이벤트 없음)"
+
+      - name: 3. CloudTrail — 보안 그룹 & RDS 변경 이력
+        run: |
+          START="${{ github.event.inputs.start_time }}"
+          END="${{ github.event.inputs.end_time }}"
+
+          echo "=== RevokeSecurityGroupIngress ==="
+          aws cloudtrail lookup-events \
+            --lookup-attributes AttributeKey=EventName,AttributeValue=RevokeSecurityGroupIngress \
+            --start-time "$START" --end-time "$END" \
+            --region ap-northeast-2 \
+            --query 'Events[*].{time:EventTime,user:Username,resource:Resources[0].ResourceName}' \
+            --output table || echo "(없음)"
+
+          echo ""
+          echo "=== AuthorizeSecurityGroupIngress ==="
+          aws cloudtrail lookup-events \
+            --lookup-attributes AttributeKey=EventName,AttributeValue=AuthorizeSecurityGroupIngress \
+            --start-time "$START" --end-time "$END" \
+            --region ap-northeast-2 \
+            --query 'Events[*].{time:EventTime,user:Username,resource:Resources[0].ResourceName}' \
+            --output table || echo "(없음)"
+
+          echo ""
+          echo "=== ModifyDBInstance ==="
+          aws cloudtrail lookup-events \
+            --lookup-attributes AttributeKey=EventName,AttributeValue=ModifyDBInstance \
+            --start-time "$START" --end-time "$END" \
+            --region ap-northeast-2 \
+            --query 'Events[*].{time:EventTime,user:Username,event:EventName}' \
+            --output table || echo "(없음)"
+
+          echo ""
+          echo "=== RebootDBInstance ==="
+          aws cloudtrail lookup-events \
+            --lookup-attributes AttributeKey=EventName,AttributeValue=RebootDBInstance \
+            --start-time "$START" --end-time "$END" \
+            --region ap-northeast-2 \
+            --query 'Events[*].{time:EventTime,user:Username,event:EventName}' \
+            --output table || echo "(없음)"

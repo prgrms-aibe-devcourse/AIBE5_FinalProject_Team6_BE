@@ -48,6 +48,9 @@ public class Comment {
 
     public static Comment createByArtistMember(Long feedId, Long artistId,
                                                 Long artistMemberId, Long parentId, String content, Clock clock) {
+        if (parentId == null) {
+            throw new FeedDomainException("아티스트 멤버는 팬 댓글에 대한 답글만 작성할 수 있습니다.");
+        }
         return new Comment(feedId, artistId, null, artistMemberId, parentId, content, clock);
     }
 

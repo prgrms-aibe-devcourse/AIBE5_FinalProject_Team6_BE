@@ -52,6 +52,7 @@ public class Fan {
     public String getNickname() { return nickname; }
     public AuthProvider getAuthProvider() { return authProvider; }
     public String getProviderId() { return providerId; }
+    // 인증·영속화 전용 — API 응답 DTO(FanResult)에 절대 포함하지 말 것
     public String getPasswordHash() { return passwordHash; }
     public boolean isAllowNotification() { return allowNotification; }
     public LocalDateTime getCreatedAt() { return createdAt; }
@@ -76,14 +77,15 @@ public class Fan {
         public Builder createdAt(LocalDateTime createdAt) { this.createdAt = createdAt; return this; }
 
         public Fan build() {
-            Objects.requireNonNull(email, "email은 필수입니다");
             Objects.requireNonNull(authProvider, "authProvider는 필수입니다");
             Objects.requireNonNull(nickname, "nickname은 필수입니다");
 
             if (authProvider == AuthProvider.LOCAL) {
+                Objects.requireNonNull(email, "로컬 계정은 email이 필수입니다");
                 Objects.requireNonNull(passwordHash, "로컬 계정은 passwordHash가 필수입니다");
             } else {
                 Objects.requireNonNull(providerId, "소셜 계정은 providerId가 필수입니다");
+                // 소셜 계정은 email이 null일 수 있음 (카카오 이메일 미동의 등)
             }
 
             return new Fan(this);

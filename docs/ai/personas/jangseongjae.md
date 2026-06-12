@@ -17,6 +17,22 @@ team: FANDROPS_Backend
 
 `payment` — 토스 PG, confirm, **웹훅(Webhook Receiver)**, 멱등, 결제 상태/재시도, **대기열·Access Ticket**, 결제 후 **주문·재고 E2E**, Saga 보상 orchestration, RateLimit 정책.
 
+---
+
+## MVP 구현 완료 상태 (2026-06-08 확인)
+
+| 항목 | 상태 | 핵심 파일 |
+|------|------|-----------|
+| F06-01 PG 연동 | ✅ | `PaymentController`, `TossPaymentGatewayAdapter` |
+| F06-02 멱등성·상태 머신 | ✅ | `PaymentConfirmService`, V2 + V8 DDL (`uq_payment_key`, `uq_payment_order_id`) |
+| F06-03 웹훅·Saga·타임아웃 | ✅ | `PaymentWebhookService`, `PaymentTimeoutJob` (PT15M) |
+| 대기열·Access Ticket | ✅ | `WaitQueueController`, `QueueAdvanceScheduler` (3초), `SseEmitterRegistry` (2000상한) |
+| RateLimit | ✅ | `RateLimitFilter` (queue/order/payment 3그룹, fanId 기준, fail-open) |
+| F07-02 단건 조회 | ✅ | `FanPaymentController` — `GET /api/v1/fans/me/payments/{id}` |
+| F07-02 **목록 조회** | **비스코프** | `orders.fan_id` 있으므로 order 모듈(형성빈)이 처리. payment에 별도 목록 API 없음 |
+| `PaymentControllerAdvice` 응답 형식 | ✅ | `com.fandrops.common.ApiResponse<Void>` 통일 (`ErrorEnvelope` 제거) |
+| `@Profile("!local")` 분리 | ✅ | `RedisWaitQueueRepository`, `RedisAccessTicketRepository`, `RateLimitConfig` |
+
 ## 수정 가능 경로
 
 ```
@@ -26,7 +42,7 @@ apps/api-server/**   # 대기열/RateLimit filter/config만 (지영재와 협의
 
 ## 손대지 말 것 (기본)
 
-`modules/order/**` · `modules/inventory/**` **구현체 직접 수정** — `OrderStatePort`, `InventoryConfirmPort` 등 **호출만**.  
+`modules/order/**` · `modules/inventory/**` **구현체 직접 수정 금지** — 결제 결과는 `PaymentApprovedEvent` / `PaymentFailedEvent` **발행만**. 포트 직접 호출 금지.  
 `modules/user/**` 인증 구현체 직접 수정 금지 — Auth Principal/클레임은 표지민 계약만 사용.
 주문 상태 enum 변경은 형성빈과 **동시 PR**.
 
@@ -81,6 +97,15 @@ apps/api-server/**   # 대기열/RateLimit filter/config만 (지영재와 협의
 - [ ] Access Ticket **발급**은 payment Traffic Gate, **검증**은 order(형성빈) — 우회 방지 스펙은 양쪽 합의
 - [ ] RateLimit은 결제/주문 진입 보호 목적의 정책·키·응답 계약을 먼저 정의하고, Nginx/ALB 값은 지영재 리뷰를 받는다
 - [ ] `RATE_LIMITED` 응답은 `retryable: true`와 재시도 안내를 유지한다
+- [ ] SSE emitter 최대 동시 유지 수 SLO 정의 — 드롭스 오픈런 시 초과 시 `429 + retryable:true` 응답 계약 (지영재와 Nginx 값 동시 합의)
+- [ ] Access Ticket TTL 기본 **5분** (`invariants-and-state-machines.md §4`) — 드롭스 오픈런 P95 주문 생성 응답 시간 × 3 이상인지 실측 후 `application-*.yml` (`fandrops.queue.access-ticket-ttl`) 에서 조정
+- [ ] 결제 재시도 Job(`RESERVED→FAILED` 복구 스케줄러, `payment-application` 소유)과 알림 **Outbox(`outbox_events`)는 별개** — Outbox 폴러 오너는 표지민(`notification`). 혼동하지 않는다
+- [ ] `erd-design.md`에 새 테이블·컬럼을 추가할 때 **컬럼 목록 테이블**(컬럼명·타입·제약·설명)을 반드시 포함한다 — 누락 시 이슈 spec과 ERD 불일치로 JPA 엔티티 설계 오류 발생
+- [ ] **Redis 의존 Bean**(`WaitQueueRepository`, `AccessTicketRepository`, `RateLimitService` 등)은 **반드시 `@Profile("!local")`** 적용 — `local` 프로필은 Redis 없이 기동 가능해야 함 ([failure-policy §3.1](../../operations/failure-policy.md))
+- [ ] **Flyway DDL 규칙**: 기존 V1~V3는 prod 체크섬 기록 완료 → **절대 수정 금지**. **V4부터** 신규 파일은 `CREATE TABLE IF NOT EXISTS` + 인덱스를 테이블 내부 선언 필수 (MySQL `CREATE INDEX IF NOT EXISTS` 미지원)
+- [ ] **CI Redis 서비스 패턴**: Redis 의존 Testcontainers 테스트는 `REDIS_HOST` 환경변수 유무로 분기한다 — CI(`ci.yml services.redis` + 환경변수 주입) vs 로컬(Testcontainers 직접 기동). `@Testcontainers`/`@Container` 없이 `@BeforeAll`에서 수동 관리. ci.yml 변경 시 지영재 리뷰 필수
+- [ ] **에러 응답 형식**: `PaymentControllerAdvice`는 `com.fandrops.common.ApiResponse<Void>`를 사용한다 (`ErrorEnvelope` 아님). `payment-api/build.gradle.kts`에 `implementation(project(":modules:common"))` 의존성이 있으므로 신규 핸들러도 같은 형식 유지
+- [ ] **F07-02 결제 목록 조회는 payment 비스코프**: `orders` 테이블에 `fan_id`가 있으므로 목록은 order 모듈(형성빈)이 `fan_id → order_id → payment` 경로로 처리. payment는 단건(`GET /api/v1/fans/me/payments/{id}`)만 제공
 
 ---
 
@@ -92,15 +117,16 @@ apps/api-server/**   # 대기열/RateLimit filter/config만 (지영재와 협의
 - 어떤 `status`에서 어떤 이벤트(timeout / webhook 실패 / PG 오류코드)가 발생했을 때 보상이 시작되는가?
 - 예: `RESERVED` 상태 + confirm 15분 초과 → Job 트리거
 
-**② 복구 API / 포트**
-- 호출할 포트 인터페이스와 시그니처를 먼저 명시한다.
-  - `OrderStatePort.cancel(orderPaymentKey)` — 주문 `CANCELLED` 전이
-  - `InventoryRestorePort.restore(orderPaymentKey)` — 재고 원복
-- 단일 TX 내에서 처리 가능한지, Saga 보상으로 분리해야 하는지 명시.
+**② 이벤트 발행 계약**
+- payment 모듈은 결과를 **이벤트로만** 전달한다. 포트 직접 호출 금지.
+  - 결제 성공: `ApplicationEventPublisher.publishEvent(new PaymentApprovedEvent(orderId))`
+  - 결제 실패·타임아웃: `ApplicationEventPublisher.publishEvent(new PaymentFailedEvent(orderId))`
+- 이벤트는 `@Transactional` 커밋 후 전달(`@TransactionalEventListener(AFTER_COMMIT)`) — 형성빈 리스너가 수신.
+- 보상 트랜잭션(RESERVED→FAILED, restore, FAILED→CANCELLED) 내부 TX 경계는 **order 모듈 소유**.
 
 **③ 최종 실패 시 DLQ 정책**
 - 재시도 횟수·주기 (예: 3회, 10분 간격).
-- Dead Letter 대상: `outbox` 테이블 `status = DEAD`.
+- Dead Letter 대상: `outbox_events` 테이블 `status = FAILED` (DLQ) — [invariants §7.3](../../state/invariants-and-state-machines.md#73-알림-파이프라인-outbox--notification).
 - 알람 연동: `outbox_dead_count > 0` → P1 Grafana Alert.
 
 ---

@@ -4,6 +4,7 @@ import com.fandrops.community.domain.feed.FeedLike;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 public interface FeedLikeRepository {
 
@@ -18,8 +19,16 @@ public interface FeedLikeRepository {
 
     boolean existsByFeedIdAndArtistMemberId(Long feedId, Long artistMemberId);
 
+    // 피드 목록 isLiked 일괄 조회 (N+1 방지)
+    Set<Long> findLikedFeedIdsByFanId(Long fanId, List<Long> feedIds);
+
+    Set<Long> findLikedFeedIdsByArtistMemberId(Long artistMemberId, List<Long> feedIds);
+
     // /fans/me/activities — 팬 좋아요 이력 커서 페이징
     List<FeedLike> findByFanId(Long fanId, Long cursorId, int size);
+
+    // 피드 삭제 시 연계 삭제 (data-lifecycle.md §3.5)
+    void deleteByFeedId(Long feedId);
 
     void delete(FeedLike feedLike);
 }

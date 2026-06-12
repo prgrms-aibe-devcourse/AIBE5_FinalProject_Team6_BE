@@ -6,19 +6,25 @@ import com.fandrops.payment.application.queue.QueueStatusResult;
 import com.fandrops.payment.application.queue.WaitQueueService;
 import java.util.Arrays;
 import org.springframework.core.env.Environment;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 @RestController
 @RequestMapping("/api/v1/queue")
 public class WaitQueueController {
 
     private final WaitQueueService waitQueueService;
+    private final SseEmitterRegistry sseEmitterRegistry;
     private final Environment environment;
 
-    public WaitQueueController(WaitQueueService waitQueueService, Environment environment) {
+    public WaitQueueController(WaitQueueService waitQueueService,
+                               SseEmitterRegistry sseEmitterRegistry,
+                               Environment environment) {
         this.waitQueueService = waitQueueService;
+        this.sseEmitterRegistry = sseEmitterRegistry;
         this.environment = environment;
     }
 
@@ -61,14 +67,52 @@ public class WaitQueueController {
         ));
     }
 
-    // TODO: user 모듈 Auth 계약 확정 후 JWT 클레임에서 fanId 추출로 교체 (표지민 협의)
+    /**
+     * 실시간 순번·상태 SSE 스트림. 연결 즉시 현재 상태를 전송하고, 이후 변경 시 서버에서 푸시한다.
+     * PROCESSING 전이 시 accessToken 포함. 연결 타임아웃: 60s (클라이언트가 재연결).
+     */
+    @GetMapping(value = "/stream/{productId}", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter stream(
+            @PathVariable Long productId,
+            Authentication authentication,
+            @RequestHeader(value = "X-Fan-Id", required = false) Long fanIdHeader) {
+
+        Long fanId = resolveFanId(authentication, fanIdHeader);
+        SseEmitter emitter = sseEmitterRegistry.registerOrReject(productId, fanId);
+
+        // 연결 직후 현재 상태를 즉시 전송
+        try {
+            QueueStatusResult current = waitQueueService.getStatus(fanId, productId);
+            sseEmitterRegistry.sendToFan(productId, fanId,
+                    QueueStreamEvent.waiting(current.getPosition(), current.getEstimatedWaitSec()));
+        } catch (Exception ignored) {
+            // 대기열에 없는 경우 스케줄러 첫 tick에서 처리
+        }
+
+        return emitter;
+    }
+
+    /**
+     * 대기열 이탈. WAITING 상태에서만 유효하며, PROCESSING 이후에는 무시된다.
+     */
+    @DeleteMapping("/exit/{productId}")
+    public ResponseEntity<Void> exit(
+            @PathVariable Long productId,
+            Authentication authentication,
+            @RequestHeader(value = "X-Fan-Id", required = false) Long fanIdHeader) {
+
+        Long fanId = resolveFanId(authentication, fanIdHeader);
+        waitQueueService.exit(fanId, productId);
+        return ResponseEntity.noContent().build();
+    }
+
     private Long resolveFanId(Authentication authentication, Long fanIdHeader) {
         if (fanIdHeader != null && isLocalProfile()) {
             return fanIdHeader;
         }
         if (authentication != null && authentication.isAuthenticated()
-                && !"anonymousUser".equals(authentication.getPrincipal())) {
-            return Long.parseLong(authentication.getName());
+                && authentication.getPrincipal() instanceof Long fanId) {
+            return fanId;
         }
         throw new IllegalArgumentException("인증 정보가 없습니다. Bearer 토큰을 제공하세요.");
     }

@@ -1,0 +1,18 @@
+{
+  "priority": 5,
+  "request": {
+    "method": "POST",
+    "url": "/v1/payments/confirm",
+    "bodyPatterns": [
+      { "matchesJsonPath": "$[?(@.paymentKey =~ /^balance-.*/)]" }
+    ]
+  },
+  "response": {
+    "status": 400,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": {
+      "code": "INVALID_STOPPED_MERCHANT",
+      "message": "잔액이 부족합니다."
+    }
+  }
+}

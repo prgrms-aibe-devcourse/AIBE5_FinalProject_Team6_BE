@@ -35,7 +35,8 @@
 | Default branch | **`develop`** |
 | 이슈 템플릿 | **Feature** → `feat/<이슈번호>` · **Bug** → `fix/<이슈번호>` (예: `feat/23` — 브랜치명에 `#` 없음) |
 | PR base | **`develop`** (`main`은 릴리스·배포용) |
-| **gh `--body-file`** | `.github/ISSUE_TEMPLATE/*.md` · `pull_request_template.md` **직접 사용 금지** (YAML·빈 칸). [`auto-pr.md`](./workflows/auto-pr.md)처럼 **채운** `docs/ai/workflows/generated/*-body.md` 사용 |
+| **gh `--body-file`** | `.github/ISSUE_TEMPLATE/*.md` · `pull_request_template.md` **직접 사용 금지** (YAML·빈 칸). [`auto-pr.md`](./workflows/auto-pr.md)처럼 **채운** `docs/ai/workflows/generated/*-body.md` 사용. ⚠️ **파일 생성 전 `docs/ai/workflows/generated/`가 `.gitignore` 대상인지 확인** — gitignore이면 `gh pr create --body "..."` 인라인으로 대체한다. |
+| **PR body 구조** | `docs/ai/workflows/generated/*-body.md` 작성 시 **반드시 `.github/pull_request_template.md` 섹션 순서·항목을 그대로 유지**한다. PR 작성 전 템플릿을 `@` 또는 Read로 먼저 확인 후 채운다. 임의 구조 금지. |
 | 상세 | [`docs/contributing/git-collaboration-convention.md`](../contributing/git-collaboration-convention.md) |
 
 ---
@@ -53,7 +54,7 @@
 
 ## 코드 작성 전 사고 절차
 
-코드를 바로 쓰지 말고 아래 순서를 따른다.
+코드를 바로 쓰지 말고 아래 순서를 따른다. **1~4단계는 사전·진행 단계, 5단계(Retro)는 작업 완료 후 사후 단계**다.
 
 | 단계 | 행동 |
 | --- | --- |
@@ -61,6 +62,7 @@
 | **2. Plan** | 변경할 파일·메서드·DB 컬럼을 나열한다. 영향 범위(타 도메인 포트 포함)를 확인한다. |
 | **3. Execute** | Plan에서 확정한 최소 범위만 구현한다. Plan 밖 리팩터·신규 abstraction 금지. |
 | **4. Debug** | persona의 `./gradlew` 명령 실행. 테스트 실패 시 원인을 먼저 분석하고, 테스트를 수정하지 않는다. |
+| **5. Retro** | **사후(post-work) 단계** — 코딩·디버깅이 끝난 뒤 실행한다. ① SHARED·페르소나 룰이 충분히 명확했는지 자체 평가한다. ② 비효율·모호·충돌이 있었던 지시는 구체적 문구와 함께 기록한다. ③ 아래 **4-field 한 줄 형식**으로 출력한다: `[Retro] 룰 작동: <1줄> \| 튜닝 제안: <1줄> \| SSOT 동기화 필요: <있음/없음> \| Edge Case: <있음(내용)/없음>` — PR 생성 완료 시에는 `docs/ai/workflows/generated/retro-<PR번호>.md` 저장 추가 ([auto-pr.md step 9](./workflows/auto-pr.md) 참고). feat/fix 브랜치에서 응답 종료 시 Stop 훅(`.claude/hooks/retro-reminder.py`)이 자동 상기. **⚠️ 훅에 의존하지 말 것 — `feat/*`·`fix/*` 브랜치에서 코드 작성·수정·파일 생성이 1건 이상 있었던 응답 마지막에 Claude가 직접 Retro를 출력한다.** |
 
 ### 복잡한 문제 처리 (동시성·상태 정합·Saga)
 
@@ -70,6 +72,18 @@
 2. 각 방안의 **장단점과 위험**(정합성 깨짐·성능·롤백 가능성)을 평가한다.
 3. 최적 방안을 선택하고 **선택 이유를 한 줄**로 명시한다.
 4. 그 후 Plan → Execute로 진행한다.
+
+### Execute 직후 자가 검증 (신규 코드 필수)
+
+코드를 작성한 직후, 빌드·테스트 전에 아래 4개 질문에 답한다.  
+하나라도 "미확인"이면 먼저 확인하고 나서 다음 단계로 진행한다.
+
+| # | 질문 | 확인 방법 |
+|---|---|---|
+| ① DB 제약 | 새 DB 접근 패턴에 필요한 **UNIQUE·FK 제약**이 DDL에 있는가? | 관련 `V*.sql` 파일을 열어 인덱스 타입 확인 — `orElseGet(save)` 패턴은 반드시 확인 |
+| ② 예외 핸들러 | 새 `throw`가 어느 `@ExceptionHandler`에서 잡히는가? | `@RestControllerAdvice` grep — 핸들러 없으면 500 반환됨 |
+| ③ 직렬화 설정 | 새 응답 필드(`Instant`, `LocalDate` 등)의 **Jackson 직렬화 형식**이 보장되는가? | `application.yml`에서 `spring.jackson` 설정 확인 — 기본값은 ISO-8601 아님 |
+| ④ 테스트 파일 | 신규 클래스(Service, Port 구현체 등)에 대응하는 **테스트 파일**이 있는가? | `src/test/`에 `<ClassName>Test.java` 생성 여부 — 새 클래스 = 새 테스트 |
 
 ---
 
@@ -86,8 +100,6 @@
 | P0 | `docs/api/api-contract.md` | 응답 envelope, `error.code`, `retryable`, 커서 |
 | P0 | `docs/README.md` | 설계·운영 문서 **목차** (필요한 파일만 골라 열기) |
 | P0 | `docs/requirements/mvp-functional-requirements-v2.md` | **§1 F-ID·기능명 (SSOT)** · 모듈 오너십은 `architecture.md` |
-| P0 | `docs/01_service_intro.html` ~ `docs/05_architecture.html` | 포트폴리오 시리즈 (서비스→리서치→기획→IA→아키텍처) |
-| P0 | `docs/03_planning.html` · `docs/04_IA.html` | Not Scope · KPI · 로드맵 · 화면 흐름 (보조) |
 
 ---
 
@@ -95,6 +107,7 @@
 
 | 유형 | 추가로 읽을 문서 |
 | --- | --- |
+| 서비스 개요·기획·IA·화면 흐름 | `docs/01_service_intro.html` ~ `docs/05_architecture.html` (포트폴리오 시리즈 — Not Scope·KPI·로드맵·드롭스 화면 흐름 포함) |
 | HTTP API 추가·수정 | `docs/api/mvp-api-spec.md` (해당 Endpoint 섹션만) |
 | 주문·결제·재고·상태 | `docs/state/invariants-and-state-machines.md` |
 | 결제·웹훅·Saga | `docs/sequence/payment-flow-reason.md` |
@@ -152,6 +165,13 @@
 
 1. **SSOT 문서 동기화**: 코드에 변경사항이 발생하면 `docs/api/`, `docs/architecture/` 등 연관된 SSOT(Single Source of Truth) 문서를 **반드시 함께 수정하여 최신 상태를 유지**합니다. (문서가 예전 것이면 AI도 예전 방식으로 코드를 작성하게 됩니다).
 2. **페르소나 파일 개선**: 작업 과정에서 파악된 노하우나 각 팀원의 작업 스타일에 맞춰, 지속적으로 `personas/*.md` 파일과 체크리스트를 다듬고 업데이트합니다.
+
+---
+
+## Flyway 규칙 (공통)
+
+- **기존 migration 파일(V1~현재) 수정 금지** — Flyway 체크섬 감지로 앱 기동 거부됨
+- **신규 파일(다음 버전부터)**: `CREATE TABLE IF NOT EXISTS` 필수, 인덱스는 테이블 내부 선언 (MySQL `CREATE INDEX IF NOT EXISTS` 미지원)
 
 ---
 

@@ -1,0 +1,321 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: FANDROPS P0 Alerts
+    folder: FANDROPS
+    interval: 1m
+    rules:
+
+      # P0: 5xx 에러율 > 1% (5m)
+      - uid: fandrops-5xx-p0
+        title: "[P0] 5xx 에러율 > 1%"
+        condition: threshold
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              expr: >
+                sum(rate(http_server_requests_seconds_count{job="fandrops-api",status=~"5.."}[5m])) /
+                sum(rate(http_server_requests_seconds_count{job="fandrops-api"}[5m])) * 100
+              instant: true
+              refId: A
+          - refId: threshold
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              datasource:
+                type: __expr__
+                uid: __expr__
+              conditions:
+                - evaluator:
+                    params: [1]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    type: last
+                  type: query
+              expression: A
+              refId: threshold
+        noDataState: NoData
+        execErrState: Alerting
+        for: 5m
+        annotations:
+          summary: "5xx 에러율 {{ $values.A.Value | printf \"%.2f\" }}% — SLO 0.1% 위반"
+        labels:
+          severity: p0
+
+      # P0: FAILED 주문 5분 이상 체류
+      - uid: fandrops-failed-order-p0
+        title: "[P0] FAILED 주문 5분 초과"
+        condition: threshold
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              expr: >
+                sum(fandrops_orders_status{job="fandrops-api",status="FAILED"}) or vector(0)
+              instant: true
+              refId: A
+          - refId: threshold
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              datasource:
+                type: __expr__
+                uid: __expr__
+              conditions:
+                - evaluator:
+                    params: [0]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    type: last
+                  type: query
+              expression: A
+              refId: threshold
+        noDataState: NoData
+        execErrState: Alerting
+        for: 5m
+        annotations:
+          summary: "FAILED 주문 {{ $values.A.Value }}건이 5분 이상 체류 중"
+        labels:
+          severity: p0
+
+  - orgId: 1
+    name: FANDROPS P1 Alerts
+    folder: FANDROPS
+    interval: 1m
+    rules:
+
+      # P1: Write P95 > 300ms (10m)
+      - uid: fandrops-write-p95-p1
+        title: "[P1] Write P95 응답시간 > 300ms"
+        condition: threshold
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              expr: >
+                histogram_quantile(0.95,
+                  sum(rate(http_server_requests_seconds_bucket{
+                    job="fandrops-api",
+                    method=~"POST|PUT|PATCH|DELETE"
+                  }[5m])) by (le)
+                )
+              instant: true
+              refId: A
+          - refId: threshold
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              datasource:
+                type: __expr__
+                uid: __expr__
+              conditions:
+                - evaluator:
+                    params: [0.3]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    type: last
+                  type: query
+              expression: A
+              refId: threshold
+        noDataState: NoData
+        execErrState: Alerting
+        for: 10m
+        annotations:
+          summary: "Write P95 {{ $values.A.Value | printf \"%.0f\" }}ms — SLO 300ms 위반"
+        labels:
+          severity: p1
+
+      # P1: Outbox pending > 1000 (15m)
+      - uid: fandrops-outbox-pending-p1
+        title: "[P1] Outbox pending > 1000"
+        condition: threshold
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              expr: fandrops_outbox_pending{job="fandrops-api"} or vector(0)
+              instant: true
+              refId: A
+          - refId: threshold
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              datasource:
+                type: __expr__
+                uid: __expr__
+              conditions:
+                - evaluator:
+                    params: [1000]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    type: last
+                  type: query
+              expression: A
+              refId: threshold
+        noDataState: NoData
+        execErrState: Alerting
+        for: 15m
+        annotations:
+          summary: "Outbox pending {{ $values.A.Value }}건 — 알림·후처리 지연"
+        labels:
+          severity: p1
+
+      # P1: DB 커넥션 풀 80% 초과 (5m)
+      - uid: fandrops-db-pool-p1
+        title: "[P1] DB 커넥션 풀 사용률 > 80%"
+        condition: threshold
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              expr: >
+                hikaricp_connections_active{job="fandrops-api"} /
+                hikaricp_connections_max{job="fandrops-api"} * 100
+              instant: true
+              refId: A
+          - refId: threshold
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              datasource:
+                type: __expr__
+                uid: __expr__
+              conditions:
+                - evaluator:
+                    params: [80]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    type: last
+                  type: query
+              expression: A
+              refId: threshold
+        noDataState: NoData
+        execErrState: Alerting
+        for: 5m
+        annotations:
+          summary: "DB 커넥션 풀 {{ $values.A.Value | printf \"%.1f\" }}% 사용 중"
+        labels:
+          severity: p1
+
+  - orgId: 1
+    name: FANDROPS P2 Alerts
+    folder: FANDROPS
+    interval: 1m
+    rules:
+
+      # P2: 캐시 히트율 < 80% (10m)
+      - uid: fandrops-cache-hit-p2
+        title: "[P2] 캐시 히트율 < 80%"
+        condition: threshold
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              expr: >
+                rate(cache_gets_total{job="fandrops-api",result="hit"}[5m]) /
+                rate(cache_gets_total{job="fandrops-api"}[5m]) * 100
+              instant: true
+              refId: A
+          - refId: threshold
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              datasource:
+                type: __expr__
+                uid: __expr__
+              conditions:
+                - evaluator:
+                    params: [80]
+                    type: lt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    type: last
+                  type: query
+              expression: A
+              refId: threshold
+        noDataState: NoData
+        execErrState: Alerting
+        for: 10m
+        annotations:
+          summary: "캐시 히트율 {{ $values.A.Value | printf \"%.1f\" }}% — DB 부하 증가 가능성"
+        labels:
+          severity: p2

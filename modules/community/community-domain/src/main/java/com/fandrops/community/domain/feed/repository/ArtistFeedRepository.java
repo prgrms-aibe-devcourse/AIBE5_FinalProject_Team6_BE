@@ -15,4 +15,12 @@ public interface ArtistFeedRepository {
     List<ArtistFeed> findByArtistId(Long artistId, Long cursorId, int size);
 
     void delete(ArtistFeed feed);
+
+    void incrementLikeCount(Long feedId);
+
+    void decrementLikeCount(Long feedId);
+
+    void incrementCommentCount(Long feedId);
+
+    void decrementCommentCount(Long feedId);
 }

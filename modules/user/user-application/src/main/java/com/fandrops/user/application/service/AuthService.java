@@ -3,8 +3,10 @@ package com.fandrops.user.application.service;
 import com.fandrops.user.application.dto.*;
 import com.fandrops.user.application.exception.*;
 import com.fandrops.user.application.port.*;
+import com.fandrops.user.domain.AdminAccount;
 import com.fandrops.user.domain.AuthProvider;
 import com.fandrops.user.domain.Fan;
+import com.fandrops.user.domain.UserRole;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,6 +17,7 @@ import java.util.UUID;
 public class AuthService {
 
     private final UserRepository userRepository;
+    private final AdminAccountRepository adminAccountRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtProvider jwtProvider;
     private final RefreshTokenStore refreshTokenStore;
@@ -25,6 +28,7 @@ public class AuthService {
 
     public AuthService(
             UserRepository userRepository,
+            AdminAccountRepository adminAccountRepository,
             PasswordEncoder passwordEncoder,
             JwtProvider jwtProvider,
             RefreshTokenStore refreshTokenStore,
@@ -32,6 +36,7 @@ public class AuthService {
             OAuthClient oAuthClient,
             EmailNotificationPort emailNotificationPort) {
         this.userRepository = userRepository;
+        this.adminAccountRepository = adminAccountRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtProvider = jwtProvider;
         this.refreshTokenStore = refreshTokenStore;
@@ -60,25 +65,36 @@ public class AuthService {
                 .build();
 
         Fan saved = userRepository.save(fan);
-        return issueTokens(saved.getId());
+        return issueTokens(saved.getId(), UserRole.FAN);
     }
 
-    // F01-02: 이메일 로그인 (DB read만 — 트랜잭션 불필요, 커넥션 즉시 반납)
+    // F01-02: 이메일 로그인 — Fan 전용 (Admin은 /api/v1/admin/auth/login 사용)
     public AuthTokenResult login(LoginCommand command) {
         Fan fan = userRepository.findByEmail(command.email()).orElse(null);
 
-        // 타이밍 공격 방어: 미가입 이메일에도 항상 bcrypt 실행해 응답 시간 평준화
+        // 타이밍 공격 방어: 후보가 없어도 항상 bcrypt 실행해 응답 시간 평준화
         String hashToCheck = (fan != null && fan.isLocalAccount())
-                ? fan.getPasswordHash()
-                : dummyPasswordHash;
+                ? fan.getPasswordHash() : dummyPasswordHash;
         boolean matches = passwordEncoder.matches(command.password(), hashToCheck);
 
-        // User Enumeration 방어: 소셜 계정 여부를 외부에 노출하지 않음
-        if (fan == null || !fan.isLocalAccount() || !matches) {
-            throw new InvalidCredentialsException("이메일 또는 비밀번호가 일치하지 않습니다.");
+        if (fan != null && fan.isLocalAccount() && matches) {
+            return issueTokens(fan.getId(), UserRole.FAN);
         }
+        throw new InvalidCredentialsException("이메일 또는 비밀번호가 일치하지 않습니다.");
+    }
 
-        return issueTokens(fan.getId());
+    // Admin 전용 로그인 — /api/v1/admin/auth/login 전용
+    public AuthTokenResult adminLogin(LoginCommand command) {
+        AdminAccount admin = adminAccountRepository.findByLoginId(command.email()).orElse(null);
+
+        // 타이밍 공격 방어: 후보가 없어도 항상 bcrypt 실행해 응답 시간 평준화
+        String hashToCheck = admin != null ? admin.getPasswordHash() : dummyPasswordHash;
+        boolean matches = passwordEncoder.matches(command.password(), hashToCheck);
+
+        if (admin != null && matches) {
+            return issueTokens(admin.getId(), UserRole.ADMIN);
+        }
+        throw new InvalidCredentialsException("이메일 또는 비밀번호가 일치하지 않습니다.");
     }
 
     // F01-03: 소셜 로그인·가입 (Authorization Code 방식, upsert)
@@ -105,7 +121,7 @@ public class AuthService {
                     return userRepository.save(newFan);
                 });
 
-        return issueTokens(fan.getId());
+        return issueTokens(fan.getId(), UserRole.FAN);
     }
 
     // 로그아웃: Redis만 사용 — 트랜잭션 불필요
@@ -113,13 +129,17 @@ public class AuthService {
         refreshTokenStore.delete(refreshToken);
     }
 
-    // Access Token 재발급 (Refresh Token Rotation) — Redis만 사용
+    // Access Token 재발급 (Refresh Token Rotation) — GETDEL로 조회+삭제 원자 처리
     public AuthTokenResult refreshAccessToken(String refreshToken) {
-        Long fanId = refreshTokenStore.findFanIdByToken(refreshToken)
+        RefreshTokenEntry entry = refreshTokenStore.getAndDelete(refreshToken)
                 .orElseThrow(() -> new InvalidTokenException("유효하지 않은 리프레시 토큰입니다."));
-
-        refreshTokenStore.delete(refreshToken);
-        return issueTokens(fanId);
+        try {
+            return issueTokens(entry.userId(), entry.role());
+        } catch (RuntimeException e) {
+            // issueTokens 실패 시 구 토큰 소실 → 재로그인 필요.
+            // Redis 장애 확률 < 토큰 재사용 방지를 우선한 의도적 선택.
+            throw new InvalidTokenException("토큰 재발급에 실패했습니다. 다시 로그인해 주세요.", e);
+        }
     }
 
     // 비밀번호 재설정 요청 — 이메일 발송 포함, 트랜잭션 없음 (커넥션 풀 고갈 방지)
@@ -133,14 +153,11 @@ public class AuthService {
                 });
     }
 
-    // 비밀번호 재설정 확인
+    // 비밀번호 재설정 확인 — GETDEL로 토큰 조회+삭제 원자 처리 (TOCTOU 방지)
     @Transactional
     public void confirmPasswordReset(String token, String newPassword) {
-        Long fanId = passwordResetTokenStore.findFanIdByToken(token)
+        Long fanId = passwordResetTokenStore.getAndDelete(token)
                 .orElseThrow(() -> new InvalidTokenException("유효하지 않거나 만료된 재설정 토큰입니다."));
-
-        // 토큰 선삭제: Redis 장애 시에도 토큰 재사용 불가
-        passwordResetTokenStore.delete(token);
 
         Fan fan = userRepository.findById(fanId)
                 .orElseThrow(() -> new FanNotFoundException("존재하지 않는 팬입니다."));
@@ -148,34 +165,10 @@ public class AuthService {
         userRepository.save(fan);
     }
 
-    // 내 정보 조회
-    @Transactional(readOnly = true)
-    public FanResult getMyInfo(Long fanId) {
-        Fan fan = userRepository.findById(fanId)
-                .orElseThrow(() -> new FanNotFoundException("존재하지 않는 팬입니다."));
-        return FanResult.from(fan);
-    }
-
-    // 내 정보 수정
-    @Transactional
-    public FanResult updateMyInfo(UpdateFanCommand command) {
-        Fan fan = userRepository.findById(command.fanId())
-                .orElseThrow(() -> new FanNotFoundException("존재하지 않는 팬입니다."));
-
-        if (command.nickname() != null) {
-            fan.updateNickname(command.nickname());
-        }
-        if (command.allowNotification() != null) {
-            fan.updateNotificationConsent(command.allowNotification());
-        }
-
-        return FanResult.from(userRepository.save(fan));
-    }
-
-    private AuthTokenResult issueTokens(Long fanId) {
-        String accessToken = jwtProvider.generateAccessToken(fanId);
-        String refreshToken = jwtProvider.generateRefreshToken(fanId);
-        refreshTokenStore.save(refreshToken, fanId);
+    private AuthTokenResult issueTokens(Long userId, UserRole role) {
+        String accessToken = jwtProvider.generateAccessToken(userId, role);
+        String refreshToken = jwtProvider.generateRefreshToken(userId);
+        refreshTokenStore.save(refreshToken, userId, role);
         return new AuthTokenResult(accessToken, refreshToken, jwtProvider.getAccessTokenExpiresIn());
     }
 

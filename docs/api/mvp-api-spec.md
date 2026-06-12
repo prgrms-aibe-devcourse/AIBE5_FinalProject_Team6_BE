@@ -23,7 +23,7 @@ Gradle 모듈·담당자: [architecture.md § 도메인 오너십](../architectu
 | F-ID | Endpoint (요약) | 모듈 |
 | --- | --- | --- |
 | F01-01~03 | `/auth/*` | `user` |
-| F01-04 | `POST /artists/{id}/join` | `community` |
+| F01-04 | `POST /artists/{id}/follow`, `DELETE /artists/{id}/follow` | `community` |
 | F02-01 | `POST /b2b/apply` (입점 신청) | `user` |
 | F02-02 | `/admin/artist-applications` (Admin 심사) | `user` |
 | F02-03 | `GET /artists/{id}` (프로필·SNS) | `community` |
@@ -81,15 +81,19 @@ Gradle 모듈·담당자: [architecture.md § 도메인 오너십](../architectu
 | Method | Endpoint | 설명 | Request Body | Response |
 | --- | --- | --- | --- | --- |
 | POST | `/auth/signup` | 이메일 회원가입 + 약관 동의 | `email`, `password`, `nickname`, `termsAgreed: true` | `201` `{ fanId, accessToken, refreshToken }` |
-| POST | `/auth/login` | 이메일 로그인 | `email`, `password` | `{ accessToken, refreshToken }` |
+| POST | `/auth/login` | 이메일 로그인 (Fan 전용) | `email`, `password` | `{ accessToken, refreshToken }` — `role=FAN` JWT 발급 |
 | POST | `/auth/social/{provider}` | 소셜 로그인·가입 (`kakao` · `google`) | `code` | `{ accessToken, refreshToken }` — `FAN` 행 upsert |
 | POST | `/auth/password-reset/request` | 비밀번호 재설정 메일 발송 | `email` | `204 No Content` |
 | POST | `/auth/password-reset/confirm` | 재설정 토큰 검증 후 비밀번호 변경 | `token`, `newPassword` | `204 No Content` |
 | POST | `/auth/logout` | 로그아웃 (토큰 무효화) | — | `204 No Content` |
-| POST | `/auth/token/refresh` | Access Token 재발급 | `refreshToken` | `{ accessToken, expiresIn }` |
+| POST | `/auth/token/refresh` | Access Token 재발급 (RTR — 매 호출마다 새 refreshToken 발급) | `refreshToken` | `{ accessToken, refreshToken, expiresIn }` |
 | GET | `/fans/me` | 내 정보 조회 | — | `{ fanId, email, nickname, allowNotification, createdAt }` |
 | PUT | `/fans/me` | 내 정보 수정 | `nickname` (optional), `allowNotification` (optional) | `{ fanId, nickname, allowNotification }` |
 | POST | `/b2b/apply` | 운영 입점 신청 (F02-01) | `companyName`, `businessRegistrationNumber`, `representativeName`, `contactEmail`, `contactPhone`, `introduction`, `targetArtistName` | `201` `{ applicationId, status: "PENDING" }` |
+
+> **[프론트 연동 주의 — RTR]** `/auth/token/refresh` 응답에 `refreshToken`이 포함됩니다.
+> 클라이언트는 매 refresh 응답마다 저장된 refreshToken을 새 값으로 교체해야 합니다.
+> 로그아웃 시에는 현재 보유 중인 최신 refreshToken을 전송합니다.
 
 ---
 
@@ -123,6 +127,7 @@ Gradle 모듈·담당자: [architecture.md § 도메인 오너십](../architectu
 | POST | `/artists/{id}/notices` | 공지 작성 (아티스트 멤버) | `title`, `content`, `imageUrls[]` | `201` `{ noticeId }` |
 | POST | `/artists/{id}/feeds` | 아티스트 게시글 작성(텍스트+이미지) | `content`, `imageUrls[]` | `201` `{ feedId }` |
 | GET | `/artists/{id}/feeds` | 피드 목록 | `?cursor`, `size` | `{ items: [...], nextCursor }` |
+| DELETE | `/artists/{id}/feeds/{feedId}` | 피드 삭제 (작성자 아티스트 멤버만) | — | `204 No Content` |
 | POST | `/feeds/{id}/comments` | 댓글/답글 작성 | `content`, `parentId` (optional) | `201` `{ commentId }` |
 | POST | `/feeds/{id}/likes` | 피드 좋아요 (`FEED_LIKE`) | — | `201` |
 | DELETE | `/feeds/{id}/likes` | 피드 좋아요 취소 | — | `204 No Content` |
@@ -174,7 +179,7 @@ Gradle 모듈·담당자: [architecture.md § 도메인 오너십](../architectu
 
 | Method | Endpoint | 설명 | Request Body / Param | Response |
 | --- | --- | --- | --- | --- |
-| GET | `/cart` | 내 장바구니 조회 | — | `{ items: [{ productId, quantity, price }] }` |
+| GET | `/cart` | 내 장바구니 조회 | — | `{ items: [{ cartItemId, productId, quantity, price }] }` |
 | POST | `/cart/items` | 장바구니 담기 | `productId`, `quantity` | `201` `{ cartItemId }` |
 | PATCH | `/cart/items/{id}` | 수량 변경 | `quantity` | `{ cartItemId, quantity }` |
 | DELETE | `/cart/items/{id}` | 장바구니 항목 삭제 | — | `204 No Content` |
@@ -231,7 +236,7 @@ PG  → POST .../webhook      → payload 내 키 → tossPaymentKey로 매핑 �
 | GET | `/fans/me/orders` | `order` | 형성빈 | 내 주문 목록 |
 | DELETE | `/orders/{id}` | `order` | 형성빈 | 주문 취소 (사용자) |
 | POST | `/payments/toss/confirm` | `payment` | 장성재 | 결제창 승인 (클라이언트 → 서버 → 토스) |
-| POST | `/payments/webhook` | `payment` | 장성재 | 토스 웹훅 (PG → 서버, **외부 비노출**) |
+| POST | `/payments/toss/webhook` | `payment` | 장성재 | 토스 웹훅 (PG → 서버, **외부 비노출**) |
 | GET | `/fans/me/payments/{id}` | `payment` | 장성재 | 결제 상세 |
 
 ### POST `/orders`
@@ -260,9 +265,34 @@ PG  → POST .../webhook      → payload 내 키 → tossPaymentKey로 매핑 �
 - `tossPaymentKey`: 토스 SDK·결제 성공 콜백의 `paymentKey` 값을 **본 API 필드명으로 매핑**해 전달한다.
 - `orderId`: `POST /orders` 응답의 `orderId`. 금액·상태 검증에 사용.
 
-### POST `/payments/webhook`
+### POST `/payments/toss/webhook`
 
-토스 payload 수신 → payload의 PG `paymentKey`를 **`tossPaymentKey`로 매핑** → `PAYMENT.payment_key` 멱등(Unique) → 주문·재고 후처리. 상세: [payment-flow-reason.md](../sequence/payment-flow-reason.md).
+Toss PG → 서버 비동기 결제 상태 수신. 상세: [payment-flow-reason.md](../sequence/payment-flow-reason.md).
+
+| 항목 | 내용 |
+| --- | --- |
+| **서명 검증** | `X-Signature-256: sha256=<hex>` 헤더 HMAC-SHA256 검증 — 불일치 시 `401` |
+| **멱등** | `tossPaymentKey` = `PAYMENT.payment_key` Unique — 동일 키 재수신 시 `200` 즉시 반환, 이벤트 재발행 없음 (P-1) |
+| **성공 처리** | `data.status = DONE` → `PAYMENT PENDING→SUCCESS`, `paid_at` 기록 → `PaymentApprovedEvent` (AFTER_COMMIT) |
+| **실패 처리** | `data.status = ABORTED \| EXPIRED` → `PAYMENT PENDING→FAILED`, `failed_at` 기록 → `PaymentFailedEvent` (AFTER_COMMIT) |
+| **기타 status** | `CANCELED` 등 → 무시 (로그만) |
+| **Response** | `200 OK` (성공·멱등 모두) / `401` (서명 실패) / `500` (파싱·처리 오류) |
+
+**요청 페이로드 (Toss 표준):**
+```json
+{
+  "eventType": "PAYMENT_STATUS_CHANGED",
+  "createdAt": "2024-01-01T09:00:00+09:00",
+  "data": {
+    "paymentKey": "<tossPaymentKey>",
+    "orderId": "<orderId>",
+    "status": "DONE | ABORTED | EXPIRED",
+    "method": "카드",
+    "totalAmount": 15000,
+    "approvedAt": "2024-01-01T09:00:00+09:00"
+  }
+}
+```
 
 ---
 
@@ -275,6 +305,7 @@ PG  → POST .../webhook      → payload 내 키 → tossPaymentKey로 매핑 �
 | POST | `/internal/inventory/reserve` | 재고 예약 (`reserved_qty` ↑, `available_qty` ↓, 이력 기록) | `productId`, `quantity` | `OrderService` |
 | POST | `/internal/inventory/confirm` | 결제 확정 (`reserved_qty` ↓, `total_qty` ↓, 이력 기록) | `productId`, `quantity` | `PaymentService` (웹훅 후) |
 | POST | `/internal/inventory/restore` | 결제 실패 복구 (`reserved_qty` ↓ rollback, `available_qty` ↑, 이력 기록) | `productId`, `quantity` | Saga 보상 |
+| POST | `/internal/inventory/increase` | 재입고 (`total_qty` ↑, `available_qty` ↑, 이력 기록) | `productId`, `quantity` | `RestockAlertService` (F04-05) |
 
 > 멀티모듈 모놀리스에서는 위 표는 **계약(포트) 문서화**용이다. 실제 구현은 HTTP가 아닌 `InventoryReservePort` 등 **interface 직접 호출**.
 
@@ -309,6 +340,7 @@ PG  → POST .../webhook      → payload 내 키 → tossPaymentKey로 매핑 �
 
 | Method | Endpoint | 모듈 | 담당 | 설명 |
 | --- | --- | --- | --- | --- |
+| POST | `/admin/auth/login` | `user` | 표지민 | Admin 전용 로그인 — `email`, `password` → `role=ADMIN` JWT 발급 (seed: `admin@fandrops.com`) |
 | GET | `/admin/artist-applications` | `user` | 표지민 | 입점 신청 목록 `?status=PENDING` — DB `AGENCY_APPLICATION` ([ERD §4](../erd/erd-design.md#4-agency_account--artist_profile--artist_member--fan)) |
 | PATCH | `/admin/artist-applications/{id}` | `user` | 표지민 | 승인·반려 `status` ("APPROVED | REJECTED"), `rejectReason` (반려 시 필수) |
 | GET | `/admin/monitoring` | platform | 지영재 | 주문·결제·재고 모니터링 `?from`, `to` |

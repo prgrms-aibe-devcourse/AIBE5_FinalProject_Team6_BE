@@ -1,10 +1,15 @@
-# 로컬 모니터링용 Compose 오버라이드
+# 모니터링 Compose 오버라이드 (로컬 + EC2 공용)
 # 기본 개발 환경(MySQL/Redis)과 분리해 필요할 때만 실행합니다.
 #
-# 실행:
+# [로컬] 실행:
 #   docker compose -f compose.yaml -f compose.monitoring.yml up -d
-# 중단:
+# [로컬] 중단:
 #   docker compose -f compose.yaml -f compose.monitoring.yml down
+#
+# [EC2] 실행 (레포 루트에서):
+#   docker compose -f compose.monitoring.yml up -d
+# [EC2] 중단:
+#   docker compose -f compose.monitoring.yml down
 
 services:
   prometheus:
@@ -13,6 +18,10 @@ services:
       - "9090:9090"
     volumes:
       - ./infra/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    extra_hosts:
+      # Linux(EC2)에서 host.docker.internal → 호스트 머신으로 라우팅
+      # Mac/Windows는 기본 지원되므로 이 설정이 있어도 무관
+      - "host.docker.internal:host-gateway"
 
   grafana:
     image: grafana/grafana:12.0.1
@@ -22,6 +31,12 @@ services:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SMTP_ENABLED=true
+      - GF_SMTP_HOST=smtp.gmail.com:587
+      - GF_SMTP_USER=xxjyj1022@gmail.com
+      - GF_SMTP_PASSWORD=${GMAIL_APP_PASSWORD}
+      - GF_SMTP_FROM_ADDRESS=xxjyj1022@gmail.com
+      - GF_SMTP_FROM_NAME=FANDROPS Grafana
     volumes:
       - ./infra/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
       - grafana_data:/var/lib/grafana

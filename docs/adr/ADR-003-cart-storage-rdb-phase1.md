@@ -54,6 +54,7 @@ k6 드롭스 부하 테스트(Phase 4)에서 아래 **하나 이상**이 확인�
 | T1 | `cart_item` write P95 | **주문 생성 트랜잭션 P95의 20% 이상**을 차지 |
 | T2 | DB 커넥션 풀 점유율 | 드롭스 구간 **80% 초과**가 **5분 이상** 지속 |
 | T3 | HikariCP active connections | `maximum-pool-size`에 **근접**(운영 설정값 기준, 예: ≥90%) |
+| T4 | `GET /cart` P95 | **120ms 초과** — 아이템 수(N)만큼 `productPricePort.getPrice()` 호출로 N+1 발생. 상품 API 구현 후 `getPrices(Set<Long>)` 벌크 메서드로 교체 또는 캐시 도입 검토 |
 
 트리거 미충족 시 **RDB 유지**. Redis는 [ADR-001](./ADR-001-multi-module-monolith.md)대로 **대기열·캐시** 등 기존 용도만 사용한다.
 
@@ -84,8 +85,8 @@ k6 드롭스 부하 테스트(Phase 4)에서 아래 **하나 이상**이 확인�
 
 ## 구현 체크리스트 (형성빈)
 
-- [ ] `CART` 1:1 `FAN`, `CART_ITEM` FK·UK(`cart_id`, `product_id`) 적용
-- [ ] 담기/수량 변경/삭제 API는 `cart_item` RDB CRUD
+- [x] `CART` 1:1 `FAN`, `CART_ITEM` FK·UK(`cart_id`, `product_id`) 적용
+- [x] 담기/수량 변경/삭제 API는 `cart_item` RDB CRUD
 - [ ] `POST /orders` 시 재고·주문 TX와 장바구니 정리 경계 문서화 (코드·PR)
 - [ ] k6 시나리오에 `cart_item` write·pool 메트릭 포함 — [observability-metrics §2.1](../operations/observability-metrics.md#21-k6--장바구니-phase-2-전환-트리거)
 

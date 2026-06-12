@@ -58,22 +58,22 @@ class AgencyApplicationTest {
     }
 
     @Test
-    @DisplayName("APPROVED 상태에서 다시 승인하면 예외가 발생한다 (AA-1)")
+    @DisplayName("APPROVED 상태에서 다시 승인하면 AgencyApplicationAlreadyReviewedException (AA-1)")
     void approve_after_approved_throws() {
         AgencyApplication app = newPendingApplication();
         app.approve(LocalDateTime.now());
 
-        assertThrows(IllegalStateException.class,
+        assertThrows(AgencyApplicationAlreadyReviewedException.class,
                 () -> app.approve(LocalDateTime.now()));
     }
 
     @Test
-    @DisplayName("REJECTED 상태에서 승인하면 예외가 발생한다 (AA-1)")
+    @DisplayName("REJECTED 상태에서 승인하면 AgencyApplicationAlreadyReviewedException (AA-1)")
     void approve_after_rejected_throws() {
         AgencyApplication app = newPendingApplication();
         app.reject("서류 미비", LocalDateTime.now());
 
-        assertThrows(IllegalStateException.class,
+        assertThrows(AgencyApplicationAlreadyReviewedException.class,
                 () -> app.approve(LocalDateTime.now()));
     }
 
@@ -88,12 +88,12 @@ class AgencyApplicationTest {
     }
 
     @Test
-    @DisplayName("REJECTED 상태에서 다시 반려하면 예외가 발생한다 (AA-1)")
+    @DisplayName("REJECTED 상태에서 다시 반려하면 AgencyApplicationAlreadyReviewedException (AA-1)")
     void reject_after_rejected_throws() {
         AgencyApplication app = newPendingApplication();
         app.reject("서류 미비", LocalDateTime.now(ZoneOffset.UTC));
 
-        assertThrows(IllegalStateException.class,
+        assertThrows(AgencyApplicationAlreadyReviewedException.class,
                 () -> app.reject("추가 사유", LocalDateTime.now(ZoneOffset.UTC)));
     }
 
@@ -126,6 +126,32 @@ class AgencyApplicationTest {
 
         assertEquals(AgencyApplicationStatus.REJECTED, app.getStatus());
         assertEquals("서류 미비", app.getRejectReason());
+    }
+
+    @Test
+    @DisplayName("reconstitute — REJECTED 상태에서 rejectReason 없으면 예외 (AA-2)")
+    void reconstitute_rejected_without_reason_throws() {
+        assertThrows(IllegalArgumentException.class, () ->
+                AgencyApplication.reconstitute(
+                        1L, "HYBE", "123-45-67890", "방시혁",
+                        "contact@hybe.com", "02-1234-5678", "소개", "BTS",
+                        AgencyApplicationStatus.REJECTED, null,
+                        LocalDateTime.now(ZoneOffset.UTC), LocalDateTime.now(ZoneOffset.UTC)
+                )
+        );
+    }
+
+    @Test
+    @DisplayName("reconstitute — 종료 상태에서 reviewedAt 없으면 예외")
+    void reconstitute_terminal_without_reviewedAt_throws() {
+        assertThrows(IllegalArgumentException.class, () ->
+                AgencyApplication.reconstitute(
+                        1L, "HYBE", "123-45-67890", "방시혁",
+                        "contact@hybe.com", "02-1234-5678", "소개", "BTS",
+                        AgencyApplicationStatus.APPROVED, null,
+                        LocalDateTime.now(ZoneOffset.UTC), null
+                )
+        );
     }
 
     @Test
