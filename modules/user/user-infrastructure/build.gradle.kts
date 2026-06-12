@@ -12,6 +12,7 @@
     implementation("com.fasterxml.jackson.core:jackson-annotations")
     compileOnly("org.projectlombok:lombok")
     annotationProcessor("org.projectlombok:lombok")
+    implementation("io.micrometer:micrometer-core")
     testImplementation("org.mockito:mockito-core")
     testImplementation("org.mockito:mockito-junit-jupiter")
 }

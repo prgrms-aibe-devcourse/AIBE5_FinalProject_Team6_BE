@@ -7,10 +7,12 @@ import com.fandrops.user.api.dto.ReviewAgencyApplicationRequest;
 import com.fandrops.user.application.dto.CreateAgencyApplicationCommand;
 import com.fandrops.user.application.service.AgencyApplicationService;
 import com.fandrops.user.domain.AgencyApplicationStatus;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.core.env.Environment;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -67,14 +69,19 @@ public class AgencyApplicationController extends UserControllerSupport {
     @PatchMapping("/api/v1/admin/artist-applications/{id}")
     public ResponseEntity<Void> review(
             @PathVariable Long id,
-            @Valid @RequestBody ReviewAgencyApplicationRequest request) {
+            @Valid @RequestBody ReviewAgencyApplicationRequest request,
+            Authentication authentication,
+            HttpServletRequest httpRequest) {
+        Long adminId = resolveAdminId(authentication);
+        String clientIp = resolveClientIp(httpRequest);
+        String traceId = traceId();
         switch (request.status().toUpperCase()) {
-            case "APPROVED" -> agencyApplicationService.approveApplication(id);
+            case "APPROVED" -> agencyApplicationService.approveApplication(id, adminId, clientIp, traceId);
             case "REJECTED" -> {
                 if (request.rejectReason() == null || request.rejectReason().isBlank()) {
                     throw new IllegalArgumentException("반려 시 rejectReason은 필수입니다.");
                 }
-                agencyApplicationService.rejectApplication(id, request.rejectReason());
+                agencyApplicationService.rejectApplication(id, request.rejectReason(), adminId, clientIp, traceId);
             }
             default -> throw new IllegalArgumentException(
                     "유효하지 않은 status 값입니다: " + request.status());

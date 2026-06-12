@@ -7,4 +7,5 @@ dependencies {
     compileOnly("org.springframework.security:spring-security-core")
     compileOnly("org.springframework.security:spring-security-web")
     testImplementation("org.mockito:mockito-junit-jupiter")
+    testImplementation("org.springframework.security:spring-security-core")
 }

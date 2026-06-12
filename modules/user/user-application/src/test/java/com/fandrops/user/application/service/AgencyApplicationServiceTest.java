@@ -8,6 +8,7 @@ import com.fandrops.user.application.exception.DuplicateApplicationException;
 import com.fandrops.user.application.port.AgencyAccountRepository;
 import com.fandrops.user.application.port.AgencyApplicationRepository;
 import com.fandrops.user.application.port.ArtistProfileRepository;
+import com.fandrops.user.application.port.AuditLogPort;
 import com.fandrops.user.application.port.EmailNotificationPort;
 import com.fandrops.user.domain.AgencyAccount;
 import com.fandrops.user.domain.AgencyAccountStatus;
@@ -15,6 +16,7 @@ import com.fandrops.user.domain.AgencyApplication;
 import com.fandrops.user.domain.AgencyApplicationAlreadyReviewedException;
 import com.fandrops.user.domain.AgencyApplicationStatus;
 import com.fandrops.user.domain.ArtistProfile;
+import com.fandrops.user.domain.AuditLog;
 import com.fandrops.user.domain.UserRole;
 import com.fandrops.user.application.event.AgencyApprovedEvent;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,14 +47,20 @@ class AgencyApplicationServiceTest {
     @Mock EmailNotificationPort emailNotificationPort;
     @Mock PasswordEncoder passwordEncoder;
     @Mock ApplicationEventPublisher eventPublisher;
+    @Mock AuditLogPort auditLogPort;
 
     AgencyApplicationService service;
+
+    private static final Long ADMIN_ID = 1L;
+    private static final String CLIENT_IP = "127.0.0.1";
+    private static final String TRACE_ID = "test-trace-id";
 
     @BeforeEach
     void setUp() {
         service = new AgencyApplicationService(
                 agencyApplicationRepository, agencyAccountRepository,
-                artistProfileRepository, emailNotificationPort, passwordEncoder, eventPublisher);
+                artistProfileRepository, emailNotificationPort, passwordEncoder,
+                eventPublisher, auditLogPort);
     }
 
     // ── submitApplication ────────────────────────────────────────────────────
@@ -161,13 +169,14 @@ class AgencyApplicationServiceTest {
         when(agencyAccountRepository.save(any())).thenReturn(buildSavedAccount(100L));
         when(artistProfileRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        service.approveApplication(1L);
+        service.approveApplication(1L, ADMIN_ID, CLIENT_IP, TRACE_ID);
 
         verify(agencyApplicationRepository).save(any());
         verify(agencyAccountRepository).save(any());
         verify(artistProfileRepository).save(any());
         verify(emailNotificationPort).sendApplicationApprovedEmail(
                 eq("contact@hybe.com"), eq("contact@hybe.com"), anyString());
+        verify(auditLogPort).save(any(AuditLog.class));
     }
 
     @Test
@@ -176,7 +185,7 @@ class AgencyApplicationServiceTest {
         when(agencyApplicationRepository.findById(99L)).thenReturn(Optional.empty());
 
         assertThrows(AgencyApplicationNotFoundException.class,
-                () -> service.approveApplication(99L));
+                () -> service.approveApplication(99L, ADMIN_ID, CLIENT_IP, TRACE_ID));
         verify(agencyAccountRepository, never()).save(any());
         verify(emailNotificationPort, never()).sendApplicationApprovedEmail(any(), any(), any());
     }
@@ -189,7 +198,7 @@ class AgencyApplicationServiceTest {
         when(agencyAccountRepository.existsByLoginId("contact@hybe.com")).thenReturn(true);
 
         assertThrows(DuplicateAgencyAccountException.class,
-                () -> service.approveApplication(1L));
+                () -> service.approveApplication(1L, ADMIN_ID, CLIENT_IP, TRACE_ID));
 
         // 중복 체크 후 approve()가 호출되지 않았으므로 save도 없어야 함
         verify(agencyApplicationRepository, never()).save(any());
@@ -203,7 +212,8 @@ class AgencyApplicationServiceTest {
         when(agencyApplicationRepository.findById(1L)).thenReturn(Optional.of(approved));
         when(agencyAccountRepository.existsByLoginId(anyString())).thenReturn(false);
 
-        assertThrows(AgencyApplicationAlreadyReviewedException.class, () -> service.approveApplication(1L));
+        assertThrows(AgencyApplicationAlreadyReviewedException.class,
+                () -> service.approveApplication(1L, ADMIN_ID, CLIENT_IP, TRACE_ID));
     }
 
     @Test
@@ -213,7 +223,8 @@ class AgencyApplicationServiceTest {
         when(agencyApplicationRepository.findById(1L)).thenReturn(Optional.of(rejected));
         when(agencyAccountRepository.existsByLoginId(anyString())).thenReturn(false);
 
-        assertThrows(AgencyApplicationAlreadyReviewedException.class, () -> service.approveApplication(1L));
+        assertThrows(AgencyApplicationAlreadyReviewedException.class,
+                () -> service.approveApplication(1L, ADMIN_ID, CLIENT_IP, TRACE_ID));
         verify(agencyAccountRepository, never()).save(any());
     }
 
@@ -228,7 +239,7 @@ class AgencyApplicationServiceTest {
         when(agencyAccountRepository.save(any())).thenReturn(buildSavedAccount(100L));
         when(artistProfileRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        service.approveApplication(1L);
+        service.approveApplication(1L, ADMIN_ID, CLIENT_IP, TRACE_ID);
 
         ArgumentCaptor<AgencyAccount> captor = ArgumentCaptor.forClass(AgencyAccount.class);
         verify(agencyAccountRepository).save(captor.capture());
@@ -248,7 +259,7 @@ class AgencyApplicationServiceTest {
         when(agencyAccountRepository.save(any())).thenReturn(buildSavedAccount(100L));
         when(artistProfileRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        service.approveApplication(1L);
+        service.approveApplication(1L, ADMIN_ID, CLIENT_IP, TRACE_ID);
 
         ArgumentCaptor<ArtistProfile> captor = ArgumentCaptor.forClass(ArtistProfile.class);
         verify(artistProfileRepository).save(captor.capture());
@@ -270,7 +281,7 @@ class AgencyApplicationServiceTest {
         when(agencyAccountRepository.save(any())).thenReturn(buildSavedAccount(100L));
         when(artistProfileRepository.save(any())).thenReturn(buildSavedProfile(42L));
 
-        service.approveApplication(1L);
+        service.approveApplication(1L, ADMIN_ID, CLIENT_IP, TRACE_ID);
 
         ArgumentCaptor<AgencyApprovedEvent> captor = ArgumentCaptor.forClass(AgencyApprovedEvent.class);
         verify(eventPublisher).publishEvent(captor.capture());
@@ -292,7 +303,8 @@ class AgencyApplicationServiceTest {
         doThrow(new RuntimeException("DB 저장 실패"))
                 .when(artistProfileRepository).save(any());
 
-        assertThrows(RuntimeException.class, () -> service.approveApplication(1L));
+        assertThrows(RuntimeException.class,
+                () -> service.approveApplication(1L, ADMIN_ID, CLIENT_IP, TRACE_ID));
         verify(emailNotificationPort, never()).sendApplicationApprovedEmail(any(), any(), any());
     }
 
@@ -309,7 +321,8 @@ class AgencyApplicationServiceTest {
         doThrow(new RuntimeException("메일 서버 연결 실패"))
                 .when(emailNotificationPort).sendApplicationApprovedEmail(any(), any(), any());
 
-        assertThrows(RuntimeException.class, () -> service.approveApplication(1L));
+        assertThrows(RuntimeException.class,
+                () -> service.approveApplication(1L, ADMIN_ID, CLIENT_IP, TRACE_ID));
     }
 
     // ── rejectApplication ────────────────────────────────────────────────────
@@ -321,10 +334,11 @@ class AgencyApplicationServiceTest {
         when(agencyApplicationRepository.findById(1L)).thenReturn(Optional.of(application));
         when(agencyApplicationRepository.save(any())).thenReturn(application);
 
-        service.rejectApplication(1L, "서류 미비");
+        service.rejectApplication(1L, "서류 미비", ADMIN_ID, CLIENT_IP, TRACE_ID);
 
         verify(agencyApplicationRepository).save(any());
         verify(emailNotificationPort).sendApplicationRejectedEmail("contact@hybe.com", "서류 미비");
+        verify(auditLogPort).save(any(AuditLog.class));
     }
 
     @Test
@@ -333,7 +347,7 @@ class AgencyApplicationServiceTest {
         when(agencyApplicationRepository.findById(99L)).thenReturn(Optional.empty());
 
         assertThrows(AgencyApplicationNotFoundException.class,
-                () -> service.rejectApplication(99L, "서류 미비"));
+                () -> service.rejectApplication(99L, "서류 미비", ADMIN_ID, CLIENT_IP, TRACE_ID));
         verify(emailNotificationPort, never()).sendApplicationRejectedEmail(any(), any());
     }
 
@@ -344,7 +358,7 @@ class AgencyApplicationServiceTest {
         when(agencyApplicationRepository.findById(1L)).thenReturn(Optional.of(approved));
 
         assertThrows(AgencyApplicationAlreadyReviewedException.class,
-                () -> service.rejectApplication(1L, "추가 사유"));
+                () -> service.rejectApplication(1L, "추가 사유", ADMIN_ID, CLIENT_IP, TRACE_ID));
         verify(agencyApplicationRepository, never()).save(any());
         verify(emailNotificationPort, never()).sendApplicationRejectedEmail(any(), any());
     }
@@ -358,7 +372,8 @@ class AgencyApplicationServiceTest {
         doThrow(new RuntimeException("메일 서버 연결 실패"))
                 .when(emailNotificationPort).sendApplicationRejectedEmail(any(), any());
 
-        assertThrows(RuntimeException.class, () -> service.rejectApplication(1L, "서류 미비"));
+        assertThrows(RuntimeException.class,
+                () -> service.rejectApplication(1L, "서류 미비", ADMIN_ID, CLIENT_IP, TRACE_ID));
     }
 
     @Test
@@ -368,7 +383,7 @@ class AgencyApplicationServiceTest {
         when(agencyApplicationRepository.findById(1L)).thenReturn(Optional.of(rejected));
 
         assertThrows(AgencyApplicationAlreadyReviewedException.class,
-                () -> service.rejectApplication(1L, "추가 사유"));
+                () -> service.rejectApplication(1L, "추가 사유", ADMIN_ID, CLIENT_IP, TRACE_ID));
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────
