@@ -2,9 +2,11 @@
 -- H2 in-memory (MODE=MySQL) 전용 — MySQL 전용 문법(NOW(6), INTERVAL 산술) 사용 불가
 -- ============================================================
 -- 테스트 계정
---   팬 로그인  : fan@fandrops.test / Test1234!
---   아티스트   : NOVA(id=1) LUNA(id=2) ECHO(id=3)
---   팬 팔로우  : fan(id=1) -> NOVA(id=1) 초기 팔로우 상태
+--   팬 로그인      : fan@fandrops.test / Test1234!
+--   에이전시 로그인 : agency@fandrops.test / Test1234!
+--   아티스트 로그인 : hani / Test1234!
+--   아티스트 프로필 : NOVA(id=1) LUNA(id=2) ECHO(id=3)
+--   팬 팔로우      : fan(id=1) -> NOVA(id=1) 초기 팔로우 상태
 -- ============================================================
 
 -- 1. 팬 계정 (id=1 고정 -> JWT sub=1 -> X-Fan-Id: 1)

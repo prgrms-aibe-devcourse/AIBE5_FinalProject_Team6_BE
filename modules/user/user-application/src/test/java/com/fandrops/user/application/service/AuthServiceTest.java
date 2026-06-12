@@ -23,7 +23,9 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -143,18 +145,12 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("로컬 Fan + Agency 동일 loginId 공존 시 Fan 우선 — Fan 토큰 반환")
+    @DisplayName("로컬 Fan + Agency 동일 loginId 공존 시 Fan 우선 — Fan 토큰 반환, Agency 쿼리 없음")
     void login_localFanAndAgencySameLoginId_fanTakesPriority() {
         LoginCommand command = new LoginCommand("shared@test.com", "fanPass");
         Fan fan = Fan.builder().id(1L).email("shared@test.com").nickname("nick")
                 .authProvider(AuthProvider.LOCAL).passwordHash("fanHash").build();
-        AgencyAccount agency = AgencyAccount.builder()
-                .id(99L).loginId("shared@test.com").passwordHash("agencyHash")
-                .companyName("Corp").contactEmail("shared@test.com")
-                .status(AgencyAccountStatus.ACTIVE).build();
         when(userRepository.findByEmail("shared@test.com")).thenReturn(Optional.of(fan));
-        when(agencyAccountRepository.findByLoginId("shared@test.com")).thenReturn(Optional.of(agency));
-        when(artistMemberRepository.findByLoginId("shared@test.com")).thenReturn(Optional.empty());
         when(passwordEncoder.matches("fanPass", "fanHash")).thenReturn(true);
         when(jwtProvider.generateAccessToken(1L, UserRole.FAN)).thenReturn("fan-access");
         when(jwtProvider.generateRefreshToken(1L)).thenReturn("fan-refresh");
@@ -164,7 +160,10 @@ class AuthServiceTest {
 
         assertEquals("fan-access", result.accessToken());
         verify(jwtProvider).generateAccessToken(1L, UserRole.FAN);
-        verify(jwtProvider, never()).generateAccessToken(99L, UserRole.AGENCY);
+        verify(jwtProvider, never()).generateAccessToken(anyLong(), eq(UserRole.AGENCY));
+        // 순차 조회 — Fan hit 시 Agency/ArtistMember DB 쿼리 미실행 검증
+        verify(agencyAccountRepository, never()).findByLoginId(anyString());
+        verify(artistMemberRepository, never()).findByLoginId(anyString());
     }
 
     // ── adminLogin ──────────────────────────────────────────────────────────
@@ -211,7 +210,7 @@ class AuthServiceTest {
     // ── login — Agency ──────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("Agency 로그인 성공 — role=AGENCY 토큰 발급")
+    @DisplayName("Agency 로그인 성공 — role=AGENCY 토큰 발급, ArtistMember 쿼리 없음")
     void login_agency_success_returnsAgencyToken() {
         LoginCommand command = new LoginCommand("agency@fandrops.com", "agencyPass");
         AgencyAccount agency = AgencyAccount.builder()
@@ -220,7 +219,6 @@ class AuthServiceTest {
                 .status(AgencyAccountStatus.ACTIVE).build();
         when(userRepository.findByEmail("agency@fandrops.com")).thenReturn(Optional.empty());
         when(agencyAccountRepository.findByLoginId("agency@fandrops.com")).thenReturn(Optional.of(agency));
-        when(artistMemberRepository.findByLoginId("agency@fandrops.com")).thenReturn(Optional.empty());
         when(passwordEncoder.matches("agencyPass", "agencyHash")).thenReturn(true);
         when(jwtProvider.generateAccessToken(10L, UserRole.AGENCY)).thenReturn("agency-access");
         when(jwtProvider.generateRefreshToken(10L)).thenReturn("agency-refresh");
@@ -230,6 +228,7 @@ class AuthServiceTest {
 
         assertEquals("agency-access", result.accessToken());
         verify(jwtProvider).generateAccessToken(10L, UserRole.AGENCY);
+        verify(artistMemberRepository, never()).findByLoginId(anyString());
     }
 
     @Test
@@ -242,10 +241,25 @@ class AuthServiceTest {
                 .status(AgencyAccountStatus.ACTIVE).build();
         when(userRepository.findByEmail("agency@fandrops.com")).thenReturn(Optional.empty());
         when(agencyAccountRepository.findByLoginId("agency@fandrops.com")).thenReturn(Optional.of(agency));
-        when(artistMemberRepository.findByLoginId("agency@fandrops.com")).thenReturn(Optional.empty());
         when(passwordEncoder.matches("wrong", "agencyHash")).thenReturn(false);
 
         assertThrows(InvalidCredentialsException.class, () -> authService.login(command));
+    }
+
+    @Test
+    @DisplayName("Agency SUSPENDED 계정 로그인 — 비밀번호 일치해도 InvalidCredentialsException")
+    void login_agency_suspended_throwsInvalidCredentials() {
+        LoginCommand command = new LoginCommand("suspended@fandrops.com", "correctPass");
+        AgencyAccount suspended = AgencyAccount.builder()
+                .id(11L).loginId("suspended@fandrops.com").passwordHash("suspHash")
+                .companyName("SuspendedCorp").contactEmail("suspended@fandrops.com")
+                .status(AgencyAccountStatus.SUSPENDED).build();
+        when(userRepository.findByEmail("suspended@fandrops.com")).thenReturn(Optional.empty());
+        when(agencyAccountRepository.findByLoginId("suspended@fandrops.com")).thenReturn(Optional.of(suspended));
+        when(passwordEncoder.matches("correctPass", "suspHash")).thenReturn(true);
+
+        assertThrows(InvalidCredentialsException.class, () -> authService.login(command));
+        verify(jwtProvider, never()).generateAccessToken(anyLong(), any(UserRole.class));
     }
 
     // ── login — ArtistMember ────────────────────────────────────────────────
