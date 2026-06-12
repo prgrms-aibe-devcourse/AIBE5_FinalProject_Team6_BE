@@ -14,11 +14,14 @@ public class ProductResponse {
     private final int totalQty;
     private final int reservedQty;
     private final int availableQty;
+    private final LocalDateTime dropsStartAt;
+    private final LocalDateTime dropsEndAt;
     private final LocalDateTime updatedAt;
 
     public ProductResponse(Long id, Long artistId, String name, BigDecimal price,
-                           String status, int totalQty, int reservedQty,
-                           int availableQty, LocalDateTime updatedAt) {
+                           String status, int totalQty, int reservedQty, int availableQty,
+                           LocalDateTime dropsStartAt, LocalDateTime dropsEndAt,
+                           LocalDateTime updatedAt) {
         this.id = id;
         this.artistId = artistId;
         this.name = name;
@@ -27,6 +30,8 @@ public class ProductResponse {
         this.totalQty = totalQty;
         this.reservedQty = reservedQty;
         this.availableQty = availableQty;
+        this.dropsStartAt = dropsStartAt;
+        this.dropsEndAt = dropsEndAt;
         this.updatedAt = updatedAt;
     }
 }

@@ -30,8 +30,10 @@ public class ProductService {
     }
 
     @Transactional(readOnly = true)
-    public ProductListResponse getProducts(Long cursor, int size) {
-        List<Product> products = productRepository.findRegularProducts(cursor, size);
+    public ProductListResponse getProducts(String type, Long cursor, int size) {
+        List<Product> products = "drops".equals(type)
+                ? productRepository.findDropsProducts(cursor, size)
+                : productRepository.findRegularProducts(cursor, size);
         List<ProductListItemResponse> items = products.stream()
                 .map(ProductListItemResponse::from)
                 .toList();
@@ -50,13 +52,20 @@ public class ProductService {
                 product.getId(), product.getArtistId(), product.getName(),
                 product.getPrice(), product.getStatus().name(),
                 inventory.getTotalQty(), inventory.getReservedQty(), inventory.getAvailableQty(),
-                product.getUpdatedAt());
+                product.getDropsStartAt(), product.getDropsEndAt(), product.getUpdatedAt());
     }
 
     @Transactional
     public Long createProduct(CreateProductCommand command) {
-        Product product = Product.createRegular(
-                command.getArtistId(), command.getName(), command.getPrice());
+        boolean hasStart = command.getDropsStartAt() != null;
+        boolean hasEnd = command.getDropsEndAt() != null;
+        if (hasStart != hasEnd) {
+            throw new IllegalArgumentException("dropsStartAt, dropsEndAt은 함께 입력해야 합니다.");
+        }
+        Product product = command.isDrops()
+                ? Product.createDrops(command.getArtistId(), command.getName(), command.getPrice(),
+                        command.getDropsStartAt(), command.getDropsEndAt())
+                : Product.createRegular(command.getArtistId(), command.getName(), command.getPrice());
         Product saved = productRepository.save(product);
         inventoryCreatePort.createInventory(saved.getId(), command.getTotalQty());
         return saved.getId();
@@ -64,9 +73,15 @@ public class ProductService {
 
     @Transactional
     public ProductStatus updateProduct(UpdateProductCommand command) {
+        boolean hasStart = command.getDropsStartAt() != null;
+        boolean hasEnd   = command.getDropsEndAt()   != null;
+        if (hasStart != hasEnd) {
+            throw new IllegalArgumentException("dropsStartAt, dropsEndAt은 함께 입력해야 합니다.");
+        }
         Product product = productRepository.findById(command.getProductId())
                 .orElseThrow(() -> new ProductNotFoundException(command.getProductId()));
-        product.update(command.getName(), command.getPrice(), command.getStatus());
+        product.update(command.getName(), command.getPrice(), command.getStatus(),
+                command.getDropsStartAt(), command.getDropsEndAt());
         return productRepository.save(product).getStatus();
     }
 }

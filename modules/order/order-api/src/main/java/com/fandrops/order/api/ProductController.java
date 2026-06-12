@@ -53,7 +53,7 @@ public class ProductController {
             @RequestParam(required = false) Long cursor,
             @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(ApiResponse.ok(
-                productService.getProducts(cursor, size), traceId()));
+                productService.getProducts(type, cursor, size), traceId()));
     }
 
     @GetMapping("/{id}")
@@ -67,8 +67,8 @@ public class ProductController {
     public ResponseEntity<ApiResponse<Map<String, Long>>> createProduct(
             @Valid @RequestBody CreateProductRequest request) {
         Long productId = productService.createProduct(new CreateProductCommand(
-                request.getArtistId(), request.getName(),
-                request.getPrice(), request.getTotalQty()));
+                request.getArtistId(), request.getName(), request.getPrice(), request.getTotalQty(),
+                request.getDropsStartAt(), request.getDropsEndAt()));
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.ok(Map.of("productId", productId), traceId()));
     }
@@ -78,7 +78,8 @@ public class ProductController {
             @PathVariable("id") Long id,
             @Valid @RequestBody UpdateProductRequest request) {
         ProductStatus status = productService.updateProduct(new UpdateProductCommand(
-                id, request.getName(), request.getPrice(), request.getStatus()));
+                id, request.getName(), request.getPrice(), request.getStatus(),
+                request.getDropsStartAt(), request.getDropsEndAt()));
         return ResponseEntity.ok(ApiResponse.ok(
                 Map.of("productId", id, "status", status.name()), traceId()));
     }

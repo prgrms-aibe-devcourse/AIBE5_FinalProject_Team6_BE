@@ -38,7 +38,7 @@ class ProductPriceAdapterTest {
 
     private ProductJpaEntity entity() {
         return ProductJpaEntity.fromWithId(
-                Product.of(PRODUCT_ID, 10L, "상품", PRICE, ProductStatus.ON_SALE, LocalDateTime.now()));
+                Product.of(PRODUCT_ID, 10L, "상품", PRICE, ProductStatus.ON_SALE, null, null, LocalDateTime.now()));
     }
 
     @Nested

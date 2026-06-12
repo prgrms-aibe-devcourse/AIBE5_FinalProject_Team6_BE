@@ -8,6 +8,7 @@ scrape_configs:
     static_configs:
       # host.docker.internal → 로컬(Mac/Windows)은 기본 지원
       # EC2(Linux)는 compose.monitoring.yml의 extra_hosts로 라우팅
-      - targets: ["host.docker.internal:8081"]
+      # Nginx(:80) 경유 → Blue/Green 슬롯 전환에 무관하게 active 슬롯을 scrape
+      - targets: ["host.docker.internal:80"]
         labels:
           application: "fandrops"
