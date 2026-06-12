@@ -36,7 +36,7 @@ class PaymentEventListenerTest {
 
     private Order orderWithStatus(OrderStatus status) {
         return Order.reconstitute(ORDER_ID, 1L, List.of(), status,
-                BigDecimal.valueOf(10000), "opk_test", "idem_test");
+                BigDecimal.valueOf(10000), "opk_test", "idem_test", null);
     }
 
     @Nested

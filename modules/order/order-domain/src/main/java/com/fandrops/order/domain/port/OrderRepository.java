@@ -17,4 +17,7 @@ public interface OrderRepository {
 
     /** 특정 상태이면서 updatedAt이 cutoff보다 오래된 주문 목록을 반환한다. 복구 스케줄러용. */
     List<Order> findByStatusAndUpdatedAtBefore(OrderStatus status, LocalDateTime cutoff);
+
+    /** fanId 기준 최신순 cursor-based 페이지네이션. cursor 미제공 시 첫 페이지. */
+    List<Order> findByFanId(Long fanId, Long cursor, int size);
 }

@@ -1,6 +1,7 @@
 package com.fandrops.order.domain;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 import lombok.Getter;
@@ -16,9 +17,10 @@ public class Order {
     private final BigDecimal totalAmount;
     private final String orderPaymentKey;
     private final String idempotencyKey;
+    private final LocalDateTime createdAt;
 
-    private Order(Long id, Long fanId, List<OrderItem> items, OrderStatus status, BigDecimal totalAmount
-            , String orderPaymentKey, String idempotencyKey) {
+    private Order(Long id, Long fanId, List<OrderItem> items, OrderStatus status, BigDecimal totalAmount,
+                  String orderPaymentKey, String idempotencyKey, LocalDateTime createdAt) {
         this.id = id;
         this.fanId = fanId;
         this.items = items;
@@ -26,6 +28,7 @@ public class Order {
         this.totalAmount = totalAmount;
         this.orderPaymentKey = orderPaymentKey;
         this.idempotencyKey = idempotencyKey;
+        this.createdAt = createdAt;
     }
 
     public static Order create(Long fanId, List<OrderItem> items) {
@@ -38,12 +41,15 @@ public class Order {
         String orderPaymentKey = "opk_" + UUID.randomUUID().toString().replace("-", "");
         String idempotencyKey = UUID.randomUUID().toString();
 
-        return new Order(null, fanId, List.copyOf(items), OrderStatus.PENDING, totalAmount, orderPaymentKey, idempotencyKey);
+        return new Order(null, fanId, List.copyOf(items), OrderStatus.PENDING, totalAmount,
+                orderPaymentKey, idempotencyKey, null);
     }
 
     public static Order reconstitute(Long id, Long fanId, List<OrderItem> items, OrderStatus status,
-                                     BigDecimal totalAmount, String orderPaymentKey, String idempotencyKey) {
-        return new Order(id, fanId, List.copyOf(items), status, totalAmount, orderPaymentKey, idempotencyKey);
+                                     BigDecimal totalAmount, String orderPaymentKey, String idempotencyKey,
+                                     LocalDateTime createdAt) {
+        return new Order(id, fanId, List.copyOf(items), status, totalAmount,
+                orderPaymentKey, idempotencyKey, createdAt);
     }
 
 }

@@ -40,7 +40,7 @@ class OrderRecoverySchedulerTest {
 
     private Order orderWith(OrderStatus status, List<OrderItem> items) {
         return Order.reconstitute(ORDER_ID, 1L, items, status,
-                BigDecimal.valueOf(10000), "opk_test", "idem_test");
+                BigDecimal.valueOf(10000), "opk_test", "idem_test", null);
     }
 
     @Nested
@@ -78,7 +78,7 @@ class OrderRecoverySchedulerTest {
             Long orderId2 = 2L;
             Order failingOrder = orderWith(OrderStatus.RESERVED, List.of());
             Order normalOrder = Order.reconstitute(orderId2, 1L, List.of(), OrderStatus.RESERVED,
-                    BigDecimal.valueOf(5000), "opk_2", "idem_2");
+                    BigDecimal.valueOf(5000), "opk_2", "idem_2", null);
 
             given(orderRepository.findByStatusAndUpdatedAtBefore(eq(OrderStatus.RESERVED), any()))
                     .willReturn(List.of(failingOrder, normalOrder));
