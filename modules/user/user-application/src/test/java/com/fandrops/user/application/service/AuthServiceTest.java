@@ -4,6 +4,9 @@ import com.fandrops.user.application.dto.*;
 import com.fandrops.user.application.exception.*;
 import com.fandrops.user.application.port.*;
 import com.fandrops.user.domain.AdminAccount;
+import com.fandrops.user.domain.AgencyAccount;
+import com.fandrops.user.domain.AgencyAccountStatus;
+import com.fandrops.user.domain.ArtistMember;
 import com.fandrops.user.domain.AuthProvider;
 import com.fandrops.user.domain.Fan;
 import com.fandrops.user.domain.UserRole;
@@ -28,6 +31,8 @@ class AuthServiceTest {
 
     @Mock UserRepository userRepository;
     @Mock AdminAccountRepository adminAccountRepository;
+    @Mock AgencyAccountRepository agencyAccountRepository;
+    @Mock ArtistMemberRepository artistMemberRepository;
     @Mock PasswordEncoder passwordEncoder;
     @Mock JwtProvider jwtProvider;
     @Mock RefreshTokenStore refreshTokenStore;
@@ -41,7 +46,8 @@ class AuthServiceTest {
     void setUp() {
         when(passwordEncoder.encode("dummy")).thenReturn("$2a$10$mockedDummyHash");
         authService = new AuthService(
-                userRepository, adminAccountRepository, passwordEncoder, jwtProvider,
+                userRepository, adminAccountRepository, agencyAccountRepository,
+                artistMemberRepository, passwordEncoder, jwtProvider,
                 refreshTokenStore, passwordResetTokenStore, oAuthClient, emailNotificationPort
         );
     }
@@ -174,6 +180,97 @@ class AuthServiceTest {
         when(passwordEncoder.matches("pass", "$2a$10$mockedDummyHash")).thenReturn(false);
 
         assertThrows(InvalidCredentialsException.class, () -> authService.adminLogin(command));
+        verify(passwordEncoder).matches("pass", "$2a$10$mockedDummyHash");
+    }
+
+    // ── login — Agency ──────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("Agency 로그인 성공 — role=AGENCY 토큰 발급")
+    void login_agency_success_returnsAgencyToken() {
+        LoginCommand command = new LoginCommand("agency@fandrops.com", "agencyPass");
+        AgencyAccount agency = AgencyAccount.builder()
+                .id(10L).loginId("agency@fandrops.com").passwordHash("agencyHash")
+                .companyName("FanCorp").contactEmail("agency@fandrops.com")
+                .status(AgencyAccountStatus.ACTIVE).build();
+        when(userRepository.findByEmail("agency@fandrops.com")).thenReturn(Optional.empty());
+        when(agencyAccountRepository.findByLoginId("agency@fandrops.com")).thenReturn(Optional.of(agency));
+        when(artistMemberRepository.findByLoginId("agency@fandrops.com")).thenReturn(Optional.empty());
+        when(passwordEncoder.matches("agencyPass", "agencyHash")).thenReturn(true);
+        when(jwtProvider.generateAccessToken(10L, UserRole.AGENCY)).thenReturn("agency-access");
+        when(jwtProvider.generateRefreshToken(10L)).thenReturn("agency-refresh");
+        when(jwtProvider.getAccessTokenExpiresIn()).thenReturn(1800L);
+
+        AuthTokenResult result = authService.login(command);
+
+        assertEquals("agency-access", result.accessToken());
+        verify(jwtProvider).generateAccessToken(10L, UserRole.AGENCY);
+    }
+
+    @Test
+    @DisplayName("Agency 비밀번호 불일치 — InvalidCredentialsException")
+    void login_agency_wrongPassword_throwsInvalidCredentials() {
+        LoginCommand command = new LoginCommand("agency@fandrops.com", "wrong");
+        AgencyAccount agency = AgencyAccount.builder()
+                .id(10L).loginId("agency@fandrops.com").passwordHash("agencyHash")
+                .companyName("FanCorp").contactEmail("agency@fandrops.com")
+                .status(AgencyAccountStatus.ACTIVE).build();
+        when(userRepository.findByEmail("agency@fandrops.com")).thenReturn(Optional.empty());
+        when(agencyAccountRepository.findByLoginId("agency@fandrops.com")).thenReturn(Optional.of(agency));
+        when(artistMemberRepository.findByLoginId("agency@fandrops.com")).thenReturn(Optional.empty());
+        when(passwordEncoder.matches("wrong", "agencyHash")).thenReturn(false);
+
+        assertThrows(InvalidCredentialsException.class, () -> authService.login(command));
+    }
+
+    // ── login — ArtistMember ────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("ArtistMember 로그인 성공 — role=ARTIST 토큰 발급")
+    void login_artistMember_success_returnsArtistToken() {
+        LoginCommand command = new LoginCommand("hani", "memberPass");
+        ArtistMember member = ArtistMember.builder()
+                .id(20L).artistId(1L).loginId("hani")
+                .passwordHash("memberHash").memberName("하니").build();
+        when(userRepository.findByEmail("hani")).thenReturn(Optional.empty());
+        when(agencyAccountRepository.findByLoginId("hani")).thenReturn(Optional.empty());
+        when(artistMemberRepository.findByLoginId("hani")).thenReturn(Optional.of(member));
+        when(passwordEncoder.matches("memberPass", "memberHash")).thenReturn(true);
+        when(jwtProvider.generateAccessToken(20L, UserRole.ARTIST)).thenReturn("artist-access");
+        when(jwtProvider.generateRefreshToken(20L)).thenReturn("artist-refresh");
+        when(jwtProvider.getAccessTokenExpiresIn()).thenReturn(1800L);
+
+        AuthTokenResult result = authService.login(command);
+
+        assertEquals("artist-access", result.accessToken());
+        verify(jwtProvider).generateAccessToken(20L, UserRole.ARTIST);
+    }
+
+    @Test
+    @DisplayName("ArtistMember 비밀번호 불일치 — InvalidCredentialsException")
+    void login_artistMember_wrongPassword_throwsInvalidCredentials() {
+        LoginCommand command = new LoginCommand("hani", "wrong");
+        ArtistMember member = ArtistMember.builder()
+                .id(20L).artistId(1L).loginId("hani")
+                .passwordHash("memberHash").memberName("하니").build();
+        when(userRepository.findByEmail("hani")).thenReturn(Optional.empty());
+        when(agencyAccountRepository.findByLoginId("hani")).thenReturn(Optional.empty());
+        when(artistMemberRepository.findByLoginId("hani")).thenReturn(Optional.of(member));
+        when(passwordEncoder.matches("wrong", "memberHash")).thenReturn(false);
+
+        assertThrows(InvalidCredentialsException.class, () -> authService.login(command));
+    }
+
+    @Test
+    @DisplayName("Fan·Agency·ArtistMember 모두 없을 때 — dummy hash로 bcrypt 1회 실행 후 예외")
+    void login_noMatchingAccount_runsDummyHashAndThrows() {
+        LoginCommand command = new LoginCommand("nobody", "pass");
+        when(userRepository.findByEmail("nobody")).thenReturn(Optional.empty());
+        when(agencyAccountRepository.findByLoginId("nobody")).thenReturn(Optional.empty());
+        when(artistMemberRepository.findByLoginId("nobody")).thenReturn(Optional.empty());
+        when(passwordEncoder.matches("pass", "$2a$10$mockedDummyHash")).thenReturn(false);
+
+        assertThrows(InvalidCredentialsException.class, () -> authService.login(command));
         verify(passwordEncoder).matches("pass", "$2a$10$mockedDummyHash");
     }
 
