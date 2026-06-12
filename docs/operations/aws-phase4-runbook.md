@@ -147,16 +147,18 @@ redis-cli -h <REDIS_ENDPOINT> get "access:ticket:1:2100" # → "test-ticket-toke
 ### 3-4. 시나리오별 실행
 
 ```bash
-cd /opt/fandrops/k6   # infra/k6/ 를 EC2로 복사 또는 git clone
+cd /opt/fandrops/k6
+
+# 활성 슬롯 자동 감지 (Blue/Green 공통 패턴)
+ACTIVE=$(cat /etc/fandrops/active-slot)
+PORT=$([ "$ACTIVE" = "blue" ] && echo 8081 || echo 8082)
 
 # 02. 피드 Read P95 (가장 단순 — 먼저 서버 정상 확인)
-k6 run --out experimental-prometheus-rw \
-  -e BASE_URL=http://localhost:8081 \
+k6 run -e BASE_URL=http://localhost:$PORT --out experimental-prometheus-rw \
   scenarios/02_feed_read.js
 
 # 01. 주문 동시성 (오버셀 0건 핵심)
-k6 run --out experimental-prometheus-rw \
-  -e BASE_URL=http://localhost:8081 \
+k6 run -e BASE_URL=http://localhost:$PORT --out experimental-prometheus-rw \
   scenarios/01_order_concurrency.js
 
 # 01 완료 후 Redis 재적재 (04 실행 전 — 01에서 성공한 fanId 티켓 복원)
@@ -165,24 +167,20 @@ for i in {1..2100}; do
 done
 
 # 04. 드롭스 스파이크 (1,000 VU 급상승)
-k6 run --out experimental-prometheus-rw \
-  -e BASE_URL=http://localhost:8081 \
+k6 run -e BASE_URL=http://localhost:$PORT --out experimental-prometheus-rw \
   scenarios/04_drop_spike.js
 
 # 03. 결제 확인 (Wiremock 기동 후 실행)
-k6 run --out experimental-prometheus-rw \
-  -e BASE_URL=http://localhost:8081 \
+k6 run -e BASE_URL=http://localhost:$PORT --out experimental-prometheus-rw \
   -e ORDERS_JSON="$(cat seed/orders.json)" \
   scenarios/03_payment_confirm.js
 
 # 05. SSE 대기열 연결 안정성
-k6 run --out experimental-prometheus-rw \
-  -e BASE_URL=http://localhost:8081 \
+k6 run -e BASE_URL=http://localhost:$PORT --out experimental-prometheus-rw \
   scenarios/05_sse_queue.js
 
 # 06. 통합 워크로드 모델 (혼합 부하 — 마지막 실행)
-k6 run --out experimental-prometheus-rw \
-  -e BASE_URL=http://localhost:8081 \
+k6 run -e BASE_URL=http://localhost:$PORT --out experimental-prometheus-rw \
   -e ORDERS_JSON="$(cat seed/orders.json)" \
   scenarios/06_workload_model.js
 ```
@@ -205,12 +203,12 @@ done
 
 | 시나리오 | Write/Read P95 | 5xx 에러율 | 오버셀 건수 | SLO 통과 여부 |
 | --- | --- | --- | --- | --- |
-| 01 주문 동시성 | ms | % | 건 | ✅/❌ |
-| 02 피드 Read | ms | % | — | ✅/❌ |
-| 03 결제 확인 (Wiremock) | ms | % | — | ✅/❌ |
-| 04 드롭스 스파이크 | ms | % | 건 | ✅/❌ |
-| 05 SSE 대기열 | — | % | — | ✅/❌ |
-| 06 통합 워크로드 | ms | % | 건 | ✅/❌ |
+| 01 주문 동시성 | — | — | — | 미실행 |
+| 02 피드 Read | **231ms** | 0.00% | — | ❌ (목표 120ms) |
+| 03 결제 확인 (Wiremock) | — | — | — | 미실행 |
+| 04 드롭스 스파이크 | — | — | — | 미실행 |
+| 05 SSE 대기열 | — | — | — | 미실행 |
+| 06 통합 워크로드 | — | — | — | 미실행 |
 
 > Grafana 대시보드(`api.fandrops.site:3000`) 패널 1(RPS), 2(P95), 3(5xx 에러율)에서 확인.
 
@@ -482,7 +480,7 @@ PR 머지 + 배포 완료 후:
 ## 9. 최종 DoD
 
 - [x] Blue/Green EC2 적용 완료 확인 (Phase 3 §8 DoD 참고) — 2026-06-11 완료, PR #221·#222
-- [ ] k6 Baseline 수치 기록 (시나리오 01·02·04·05)
+- [x] k6 Baseline 수치 기록 — 시나리오 02 완료 (P95=231ms, 2026-06-12) / 01·04·05 미실행
 - [ ] D 단기 실험 완료 — 오버셀 0건 확인 + SSE 한계 기록
 - [ ] SLO 목표 달성 확인 (Write P95 < 300ms, Read P95 < 120ms, 5xx < 0.1%)
 - [ ] Grafana 커스텀 메트릭 알람 활성화 (#191)
