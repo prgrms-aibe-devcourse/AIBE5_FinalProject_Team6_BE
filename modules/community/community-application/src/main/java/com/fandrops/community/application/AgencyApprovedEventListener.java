@@ -37,6 +37,12 @@ public class AgencyApprovedEventListener {
                 if (attempt < MAX_ACTIVATE_ATTEMPTS) {
                     log.warn("아티스트 공간 활성화 실패 (attempt {}/{}) — artistId={}, 재시도",
                             attempt, MAX_ACTIVATE_ATTEMPTS, event.getArtistId(), e);
+                    try {
+                        Thread.sleep(50L * attempt);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
                 } else {
                     // AFTER_COMMIT 단계라 외부 트랜잭션 롤백 불가 — 수동 처리 필요
                     log.error("[MANUAL_ACTION_REQUIRED] 아티스트 공간 활성화 최종 실패 — artistId={}, agencyId={}, artistName={}",
