@@ -1,0 +1,171 @@
+name: Run k6 Load Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: '실행할 시나리오 번호'
+        required: true
+        type: choice
+        options:
+          - '02'
+          - '01'
+          - '04'
+          - '05'
+          - '03'
+          - '06'
+      confirm:
+        description: 'EC2에서 k6 부하 테스트를 실행합니다. "yes" 입력'
+        required: true
+        default: 'no'
+
+jobs:
+  run-k6:
+    if: ${{ github.event.inputs.confirm == 'yes' }}
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: AWS 자격증명 설정 (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-northeast-2
+
+      - name: k6 실행 스크립트 S3 업로드
+        run: |
+          BUCKET="${{ secrets.S3_BUCKET }}"
+          SCENARIO="${{ github.event.inputs.scenario }}"
+
+          cat > /tmp/run-k6.sh << 'SCRIPT'
+          #!/bin/bash
+          set -euo pipefail
+          SCENARIO="$1"
+
+          cd /opt/fandrops/k6
+          ACTIVE=$(cat /etc/fandrops/active-slot)
+          PORT=$([ "$ACTIVE" = "blue" ] && echo 8081 || echo 8082)
+          BASE="http://localhost:$PORT"
+          echo "활성 슬롯: $ACTIVE (포트 $PORT)"
+
+          case "$SCENARIO" in
+            01)
+              echo "=== 시나리오 01: 주문 동시성 (200 VU) ==="
+              k6 run -e BASE_URL=$BASE -e FAN_POOL_SIZE=200 \
+                --out experimental-prometheus-rw \
+                scenarios/01_order_concurrency.js
+              ;;
+            02)
+              echo "=== 시나리오 02: 피드 조회 Read P95 (50 VU, 2분) ==="
+              k6 run -e BASE_URL=$BASE \
+                --out experimental-prometheus-rw \
+                scenarios/02_feed_read.js
+              ;;
+            03)
+              echo "=== 시나리오 03: 결제 확인 (Wiremock 필요) ==="
+              if [ ! -f seed/orders.json ]; then
+                echo "❌ seed/orders.json 없음 — EC2에서 사전 준비 필요"
+                exit 1
+              fi
+              k6 run -e BASE_URL=$BASE \
+                -e ORDERS_JSON="$(cat seed/orders.json)" \
+                --out experimental-prometheus-rw \
+                scenarios/03_payment_confirm.js
+              ;;
+            04)
+              echo "=== 시나리오 04: 드롭스 스파이크 (0→1000 VU) ==="
+              k6 run -e BASE_URL=$BASE \
+                --out experimental-prometheus-rw \
+                scenarios/04_drop_spike.js
+              ;;
+            05)
+              echo "=== 시나리오 05: SSE 대기열 안정성 (~6분) ==="
+              k6 run -e BASE_URL=$BASE \
+                --out experimental-prometheus-rw \
+                scenarios/05_sse_queue.js
+              ;;
+            06)
+              echo "=== 시나리오 06: 통합 워크로드 (Wiremock 필요) ==="
+              if [ ! -f seed/orders.json ]; then
+                echo "❌ seed/orders.json 없음 — EC2에서 사전 준비 필요"
+                exit 1
+              fi
+              k6 run -e BASE_URL=$BASE \
+                -e PRODUCT_ID=1 \
+                -e ARTIST_ID=1 \
+                -e ORDERS_JSON="$(cat seed/orders.json)" \
+                --out experimental-prometheus-rw \
+                scenarios/06_workload_model.js
+              ;;
+            *)
+              echo "❌ 알 수 없는 시나리오: $SCENARIO"
+              exit 1
+              ;;
+          esac
+          SCRIPT
+
+          aws s3 cp /tmp/run-k6.sh "s3://$BUCKET/deploy/run-k6.sh"
+          echo "S3 업로드 완료 (시나리오 $SCENARIO)"
+
+      - name: EC2에서 k6 실행 (SSM)
+        run: |
+          INSTANCE="${{ secrets.EC2_INSTANCE_ID }}"
+          BUCKET="${{ secrets.S3_BUCKET }}"
+          SCENARIO="${{ github.event.inputs.scenario }}"
+
+          COMMANDS=$(jq -n \
+            --arg bucket "$BUCKET" \
+            --arg scenario "$SCENARIO" \
+            '[
+              ("aws s3 cp s3://" + $bucket + "/deploy/run-k6.sh /tmp/run-k6.sh"),
+              "chmod +x /tmp/run-k6.sh",
+              ("/tmp/run-k6.sh " + $scenario)
+            ]')
+
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE" \
+            --document-name "AWS-RunShellScript" \
+            --parameters "{\"commands\": $COMMANDS}" \
+            --comment "k6 scenario $SCENARIO" \
+            --query "Command.CommandId" \
+            --output text)
+
+          echo "SSM Command ID: $COMMAND_ID"
+          echo "COMMAND_ID=$COMMAND_ID" >> $GITHUB_ENV
+
+          # 완료 대기 (10초 간격, 최대 10분 — 시나리오 05·06 포함)
+          for i in $(seq 1 60); do
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" \
+              --instance-id "$INSTANCE" \
+              --query "Status" --output text 2>/dev/null || echo "Pending")
+            echo "[$i/60] 상태: $STATUS"
+            [ "$STATUS" = "Success"   ] && break
+            [ "$STATUS" = "Failed"    ] && {
+              echo "❌ k6 실행 실패"
+              aws ssm get-command-invocation \
+                --command-id "$COMMAND_ID" \
+                --instance-id "$INSTANCE" \
+                --query "StandardErrorContent" --output text || true
+              exit 1
+            }
+            [ "$STATUS" = "Cancelled" ] && { echo "취소됨"; exit 1; }
+            sleep 10
+          done
+
+          [ "$STATUS" = "Success" ] || { echo "타임아웃 (10분 초과)"; exit 1; }
+
+      - name: k6 결과 출력
+        if: always()
+        run: |
+          INSTANCE="${{ secrets.EC2_INSTANCE_ID }}"
+          echo "=== k6 시나리오 ${{ github.event.inputs.scenario }} 결과 ==="
+          aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$INSTANCE" \
+            --query "StandardOutputContent" --output text || true
