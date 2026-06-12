@@ -4,8 +4,10 @@
  * 파라미터: 형성빈 확정 (2026-06-05)
  *
  * 사전 준비:
- *   - DB seed: product id=1 (inventory.total_qty=100), fan id 1~FAN_POOL_SIZE
- *   - 서버 설정: fandrops.queue.max-concurrent-processing=300  (≥ vus=200 이어야 전 VU 단일 배치)
+ *   - DB seed: product id=1 (inventory.total_qty=100), fan id=1~2100
+ *   - Redis: access:ticket:1:{fanId} = "test-ticket-token" (fan_id 1~2100 일괄 적재)
+ *   - tokens.csv: infra/k6/seed/tokens.csv (fan_id 1~2100 JWT)
+ *   - 서버 설정: fandrops.queue.max-concurrent-processing=300
  *                fandrops.queue.advance-batch-size=300
  *                fandrops.queue.scheduler.interval-ms=1000
  *   - 실행: k6 run -e FAN_POOL_SIZE=200 --out experimental-prometheus-rw scenarios/01_order_concurrency.js
@@ -18,14 +20,18 @@
 import http from 'k6/http';
 import { check } from 'k6';
 import { Counter } from 'k6/metrics';
-import { BASE_URL, localHeaders } from '../lib/auth.js';
-import { waitForAccessToken } from '../lib/sse.js';
+import { SharedArray } from 'k6/data';
+import papaparse from 'https://jslib.k6.io/papaparse/5.1.1/index.js';
+import { BASE_URL, authHeaders } from '../lib/auth.js';
 import { WRITE_THRESHOLDS } from '../lib/thresholds.js';
 
-const PRODUCT_ID   = parseInt(__ENV.PRODUCT_ID   || '1');
-const FAN_POOL_SIZE = parseInt(__ENV.FAN_POOL_SIZE || '200');
+const PRODUCT_ID = parseInt(__ENV.PRODUCT_ID || '1');
 
-const reservedCount  = new Counter('orders_reserved');
+const userTokens = new SharedArray('users', function () {
+  return papaparse.parse(open('../seed/tokens.csv'), { header: true }).data;
+});
+
+const reservedCount = new Counter('orders_reserved');
 const cancelledCount = new Counter('orders_cancelled');
 
 // VU별 accessToken — module-level 변수는 VU마다 독립된 메모리에 저장됨
@@ -47,37 +53,11 @@ export const options = {
 };
 
 export default function () {
-  const fanId = ((__VU - 1) % FAN_POOL_SIZE) + 1;
-
-  // iteration 1: 대기열 진입 + 토큰 획득
-  if (!vuToken) {
-    const joinRes = http.post(
-      `${BASE_URL}/api/v1/queue/join/${PRODUCT_ID}`,
-      null,
-      { headers: { 'X-Fan-Id': String(fanId) } },
-    );
-    if (joinRes.status !== 200 && joinRes.status !== 201) {
-      console.error(`[VU ${__VU} fan ${fanId}] queue join 실패: ${joinRes.status} ${joinRes.body}`);
-      return;
-    }
-
-    vuToken = waitForAccessToken(PRODUCT_ID, fanId, 30000);
-    if (!vuToken) {
-      console.error(
-        `[VU ${__VU} fan ${fanId}] accessToken 획득 실패. 서버 설정 확인:\n` +
-        '  fandrops.queue.max-concurrent-processing=300\n' +
-        '  fandrops.queue.advance-batch-size=300\n' +
-        '  fandrops.queue.scheduler.interval-ms=1000',
-      );
-    }
-    return; // iteration 1 종료 — iteration 2에서 주문 진행
-  }
-
-  // iteration 2: 주문 생성
+  const token = userTokens[(__VU - 1) % userTokens.length].token;
   const res = http.post(
     `${BASE_URL}/api/v1/orders`,
-    JSON.stringify({ accessTicket: vuToken, items: [{ productId: PRODUCT_ID, quantity: 1 }] }),
-    { headers: localHeaders(fanId) },
+    JSON.stringify({ accessTicket: 'test-ticket-token', items: [{ productId: PRODUCT_ID, quantity: 1 }] }),
+    { headers: authHeaders(token) },
   );
 
   if (res.status === 201) {

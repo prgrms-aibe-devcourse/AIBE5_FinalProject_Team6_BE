@@ -4,11 +4,11 @@
  *
  * 사전 준비:
  *   - DB seed: fans.csv, orders.json (infra/k6/seed/ 참고)
- *              fan id 1~FAN_POOL_SIZE
+ *   - Redis: access:ticket:1:{fanId} = "test-ticket-token" (fan_id 1~2100 일괄 적재)
+ *   - tokens.csv: infra/k6/seed/tokens.csv (fan_id 1~2100 JWT)
  *   - Wiremock 기동 (결제 5% 구간): infra/k6/wiremock/ 참고
  *   - 실행:
  *     k6 run \
- *       -e FAN_POOL_SIZE=1000 \
  *       -e PRODUCT_ID=1 \
  *       -e ARTIST_ID=1 \
  *       -e ORDERS_JSON="$(cat seed/orders.json)" \
@@ -21,14 +21,18 @@
 import http from 'k6/http';
 import { check } from 'k6';
 import { Counter } from 'k6/metrics';
-import { BASE_URL, localHeaders } from '../lib/auth.js';
-import { waitForAccessToken } from '../lib/sse.js';
+import { SharedArray } from 'k6/data';
+import papaparse from 'https://jslib.k6.io/papaparse/5.1.1/index.js';
+import { BASE_URL, authHeaders } from '../lib/auth.js';
 import { WRITE_THRESHOLDS } from '../lib/thresholds.js';
 
-const PRODUCT_ID    = parseInt(__ENV.PRODUCT_ID    || '1');
-const ARTIST_ID     = parseInt(__ENV.ARTIST_ID     || '1');
-const FAN_POOL_SIZE = parseInt(__ENV.FAN_POOL_SIZE || '1000');
+const PRODUCT_ID = parseInt(__ENV.PRODUCT_ID || '1');
+const ARTIST_ID  = parseInt(__ENV.ARTIST_ID  || '1');
 const ORDERS = JSON.parse(__ENV.ORDERS_JSON || '[{"orderId":1,"amount":15000,"fanId":1}]');
+
+const userTokens = new SharedArray('users', function () {
+  return papaparse.parse(open('../seed/tokens.csv'), { header: true }).data;
+});
 
 // 워크로드 분포 확인용 카운터 (Grafana에서 분포 검증)
 const wlFeed    = new Counter('wl_feed');
@@ -64,27 +68,7 @@ export const options = {
 };
 
 export default function () {
-  const fanId = ((__VU - 1) % FAN_POOL_SIZE) + 1;
-
-  // 첫 번째 iteration: 주문 15% 구간에 대비해 accessToken 미리 획득
-  if (!vuInitialized) {
-    vuInitialized = true;
-    const joinRes = http.post(
-      `${BASE_URL}/api/v1/queue/join/${PRODUCT_ID}`,
-      null,
-      { headers: { 'X-Fan-Id': String(fanId) } },
-    );
-    if (joinRes.status === 200 || joinRes.status === 201) {
-      vuToken = waitForAccessToken(PRODUCT_ID, fanId, 30000);
-      if (!vuToken) {
-        console.warn(`[VU ${__VU} fan ${fanId}] accessToken 획득 실패 — 주문 구간 건너뜀`);
-      }
-    } else {
-      console.warn(`[VU ${__VU} fan ${fanId}] queue join 실패: ${joinRes.status} — 주문 구간 건너뜀`);
-    }
-    return; // 첫 번째 iteration은 초기화 전용
-  }
-
+  const token = userTokens[(__VU - 1) % userTokens.length].token;
   const r = Math.random();
 
   if (r < 0.60) {
@@ -92,11 +76,9 @@ export default function () {
     wlFeed.add(1);
     const res = http.get(
       `${BASE_URL}/api/v1/artists/${ARTIST_ID}/feeds`,
-      { headers: localHeaders(fanId) },
+      { headers: authHeaders(token) },
     );
-    check(res, {
-      '[feed] status 200': (r) => r.status === 200,
-    });
+    check(res, { '[feed] status 200': (r) => r.status === 200 });
 
   } else if (r < 0.80) {
     // ── 대기열 진입 20% (join만 호출, SSE 대기 없음 — 워크로드 분산 측정 목적) ──
@@ -104,7 +86,7 @@ export default function () {
     const res = http.post(
       `${BASE_URL}/api/v1/queue/join/${PRODUCT_ID}`,
       null,
-      { headers: { 'X-Fan-Id': String(fanId) } },
+      { headers: authHeaders(token) },
     );
     check(res, {
       '[queue] join accepted': (r) => r.status === 200 || r.status === 201 || r.status === 409,
@@ -116,8 +98,8 @@ export default function () {
     if (!vuToken) return; // 토큰 미획득 시 주문 건너뜀
     const res = http.post(
       `${BASE_URL}/api/v1/orders`,
-      JSON.stringify({ accessTicket: vuToken, items: [{ productId: PRODUCT_ID, quantity: 1 }] }),
-      { headers: localHeaders(fanId) },
+      JSON.stringify({ accessTicket: 'test-ticket-token', items: [{ productId: PRODUCT_ID, quantity: 1 }] }),
+      { headers: authHeaders(token) },
     );
     check(res, {
       '[order] reserved or depleted': (r) => r.status === 201 || r.status === 409,
@@ -127,11 +109,12 @@ export default function () {
     // ── 결제 확인 5% (Wiremock 필요) ───────────────────────────────────────
     wlPayment.add(1);
     const order = ORDERS[(__VU - 1) % ORDERS.length];
+    const orderToken = userTokens[(order.fanId - 1 || __VU - 1) % userTokens.length].token;
     const tossPaymentKey = `wl-${order.orderId}-${__ITER}`;
     const res = http.post(
       `${BASE_URL}/api/v1/payments/toss/confirm`,
       JSON.stringify({ tossPaymentKey, orderId: order.orderId, amount: order.amount }),
-      { headers: localHeaders(order.fanId || fanId) },
+      { headers: authHeaders(orderToken) },
     );
     check(res, {
       '[payment] confirm accepted': (r) => r.status === 200 || r.status === 201,

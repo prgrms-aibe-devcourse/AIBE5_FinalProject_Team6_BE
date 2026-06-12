@@ -63,7 +63,7 @@ docs/assets/phase5/
 
 > 1. **Blue/Green 포트 스위칭**: systemd 이중 슬롯(blue :8081 / green :8082), `/etc/nginx/fandrops-active.conf` 교체로 nginx reload 시 0~2초 내 전환. `proxy_next_upstream`으로 reload 순간 클라이언트 오류 최소화
 > 2. **t3.small 메모리 관리**: 동시 기동 구간 OOM 방지를 위해 슬롯당 `-Xmx768m` 제한 (합계 1.5GB + OS 300MB = 1.8GB ≤ 2GB)
-> 3. **k6 시나리오 6종 설계**: 단순 API 단위 테스트에서 벗어나 FAN_POOL_SIZE 파라미터화(VU별 고유 fan_id)·Wiremock 결제 모킹·통합 워크로드 모델(피드 60%+대기열 20%+주문 15%+결제 5%)까지 구현
+> 3. **k6 시나리오 6종 설계**: 단순 API 단위 테스트에서 벗어나 JWT 사전 생성(fan_id 1~2100 개별 토큰 CSV) + Redis AccessTicket 사전 적재로 prod 프로파일 유지·Wiremock 결제 모킹·통합 워크로드 모델(피드 60%+대기열 20%+주문 15%+결제 5%)까지 구현
 > 4. **D 단기 실험**: EC2-2 t3.micro 2일(약 700원) 기동 → k6 01·04 시나리오 분산 재실행 → 오버셀 0건, SSE 메시지 유실 현상 직접 확인
 > 5. **알람 실전 테스트**: status=FAILED 주문 수동 INSERT → Grafana P0 Alert Firing → Gmail 수신 확인
 

@@ -7,14 +7,21 @@
  * 사전 준비:
  *   - Nginx: worker_connections ≥ 2048 확인 (지영재)
  *   - JVM: ulimit -n ≥ 8192 확인 (지영재)
+ *   - tokens.csv: infra/k6/seed/tokens.csv (fan_id 1~2100 JWT)
  *   - 실행: k6 run --out experimental-prometheus-rw scenarios/05_sse_queue.js
  */
 import http from 'k6/http';
 import { check } from 'k6';
 import { Counter } from 'k6/metrics';
-import { BASE_URL } from '../lib/auth.js';
+import { SharedArray } from 'k6/data';
+import papaparse from 'https://jslib.k6.io/papaparse/5.1.1/index.js';
+import { BASE_URL, authHeaders } from '../lib/auth.js';
 
 const PRODUCT_ID = parseInt(__ENV.PRODUCT_ID || '1');
+
+const userTokens = new SharedArray('users', function () {
+  return papaparse.parse(open('../seed/tokens.csv'), { header: true }).data;
+});
 
 const connectionAccepted = new Counter('sse_connections_accepted');
 const connectionRejected = new Counter('sse_connections_rejected');
@@ -28,7 +35,7 @@ export const options = {
       stages: [
         { target: 1000, duration: '30s' },
         { target: 1000, duration: '1m' },
-        { target: 0, duration: '15s' },
+        { target: 0,    duration: '15s' },
       ],
       gracefulRampDown: '15s',
     },
@@ -40,7 +47,7 @@ export const options = {
       stages: [
         { target: 1800, duration: '30s' },
         { target: 1800, duration: '1m' },
-        { target: 0, duration: '15s' },
+        { target: 0,    duration: '15s' },
       ],
       gracefulRampDown: '15s',
     },
@@ -52,7 +59,7 @@ export const options = {
       stages: [
         { target: 2100, duration: '30s' },
         { target: 2100, duration: '30s' },
-        { target: 0, duration: '15s' },
+        { target: 0,    duration: '15s' },
       ],
       gracefulRampDown: '10s',
     },
@@ -60,20 +67,18 @@ export const options = {
   thresholds: {
     // 단계 1·2: 연결 거부 없어야 함
     'http_req_failed{scenario:normal_load}': ['rate<0.001'],
-    'http_req_failed{scenario:boundary}': ['rate<0.01'],
+    'http_req_failed{scenario:boundary}':    ['rate<0.01'],
     // 단계 3: 429 비율 검증 (초과 구간은 일부 거부 정상)
     sse_connections_rejected: ['count>0'],  // 초과 구간에서 반드시 거부 발생해야 함
   },
 };
 
 export default function () {
-  // SSE 연결 (SseEmitterRegistry IP당 3연결 제한 → VU당 1연결 유지)
-  // timeout은 SSE emitter 기본 60s보다 길게 설정하지 않음
-  const fanId = __VU;  // VU ID를 fanId로 사용
+  const token = userTokens[(__VU - 1) % userTokens.length].token;
   const res = http.get(
     `${BASE_URL}/api/v1/queue/stream/${PRODUCT_ID}`,
     {
-      headers: { Accept: 'text/event-stream', 'X-Fan-Id': String(fanId) },
+      headers: { Accept: 'text/event-stream', Authorization: `Bearer ${token}` },
       timeout: '65s',
     },
   );
@@ -88,6 +93,6 @@ export default function () {
       },
     });
   } else {
-    check(res, { 'unexpected status': (r) => false });
+    check(res, { 'unexpected status': () => false });
   }
 }

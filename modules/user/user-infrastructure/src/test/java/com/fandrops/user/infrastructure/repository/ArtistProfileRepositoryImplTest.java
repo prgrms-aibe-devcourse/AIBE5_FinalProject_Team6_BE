@@ -1,5 +1,6 @@
 package com.fandrops.user.infrastructure.repository;
 
+import com.fandrops.user.application.dto.ArtistSummary;
 import com.fandrops.user.domain.ArtistProfile;
 import com.fandrops.user.infrastructure.persistence.ArtistProfileJpaEntity;
 import com.fandrops.user.infrastructure.persistence.ArtistProfileJpaRepository;
@@ -15,6 +16,7 @@ import org.springframework.data.domain.PageRequest;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -88,5 +90,29 @@ class ArtistProfileRepositoryImplTest {
         verify(jpaRepository).findAfterCursor(eq(5L), captor.capture());
         assertEquals(10, captor.getValue().getPageSize());
         verify(jpaRepository, never()).findAllByOrderByFanCountDescIdAsc(any());
+    }
+
+    @Test
+    @DisplayName("findAllByIds — 매칭되는 ID 있으면 ArtistSummary 리스트 반환")
+    void findAllByIds_withMatchingIds_returnsArtistSummaryList() {
+        when(jpaRepository.findAllById(Set.of(1L, 2L)))
+                .thenReturn(List.of(buildEntity(1L, 10L), buildEntity(2L, 20L)));
+
+        List<ArtistSummary> result = repository.findAllByIds(Set.of(1L, 2L));
+
+        assertEquals(2, result.size());
+        assertEquals(1L, result.get(0).artistId());
+        assertEquals("아티스트1", result.get(0).artistName());
+        assertNull(result.get(0).profileImageUrl());
+    }
+
+    @Test
+    @DisplayName("findAllByIds — 빈 Set이면 빈 리스트 반환")
+    void findAllByIds_withEmptySet_returnsEmptyList() {
+        when(jpaRepository.findAllById(Set.of())).thenReturn(List.of());
+
+        List<ArtistSummary> result = repository.findAllByIds(Set.of());
+
+        assertTrue(result.isEmpty());
     }
 }

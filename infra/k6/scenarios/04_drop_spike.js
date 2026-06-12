@@ -5,21 +5,24 @@
  *
  * 사전 준비: 01_order_concurrency.js와 동일한 서버 설정 필요
  *   - DB seed: product id=1 (inventory.total_qty=100 또는 스파이크 전 재설정)
- *              fan id 1~FAN_POOL_SIZE
- *   - 실행: k6 run -e FAN_POOL_SIZE=1000 --out experimental-prometheus-rw scenarios/04_drop_spike.js
- *
- * VU 흐름: 각 VU 첫 번째 iteration — 대기열 진입(fanId별) + accessToken 획득
- *           이후 iteration — POST /orders (재고 소진까지 반복)
+ *   - Redis: access:ticket:1:{fanId} = "test-ticket-token" (fan_id 1~2100 일괄 적재)
+ *     ※ 시나리오 01 실행 후 invalidate된 티켓이 있으므로 재적재 필요
+ *   - tokens.csv: infra/k6/seed/tokens.csv (fan_id 1~2100 JWT)
+ *   - 실행: k6 run --out experimental-prometheus-rw scenarios/04_drop_spike.js
  */
 import http from 'k6/http';
 import { check } from 'k6';
 import { Counter } from 'k6/metrics';
-import { BASE_URL, localHeaders } from '../lib/auth.js';
-import { waitForAccessToken } from '../lib/sse.js';
+import { SharedArray } from 'k6/data';
+import papaparse from 'https://jslib.k6.io/papaparse/5.1.1/index.js';
+import { BASE_URL, authHeaders } from '../lib/auth.js';
 import { WRITE_THRESHOLDS } from '../lib/thresholds.js';
 
-const PRODUCT_ID    = parseInt(__ENV.PRODUCT_ID    || '1');
-const FAN_POOL_SIZE = parseInt(__ENV.FAN_POOL_SIZE || '1000');
+const PRODUCT_ID = parseInt(__ENV.PRODUCT_ID || '1');
+
+const userTokens = new SharedArray('users', function () {
+  return papaparse.parse(open('../seed/tokens.csv'), { header: true }).data;
+});
 
 const reservedCount = new Counter('spike_orders_reserved');
 
@@ -46,31 +49,11 @@ export const options = {
 };
 
 export default function () {
-  const fanId = ((__VU - 1) % FAN_POOL_SIZE) + 1;
-
-  // 첫 번째 iteration: 대기열 진입 + 토큰 획득
-  if (!vuToken) {
-    const joinRes = http.post(
-      `${BASE_URL}/api/v1/queue/join/${PRODUCT_ID}`,
-      null,
-      { headers: { 'X-Fan-Id': String(fanId) } },
-    );
-    if (joinRes.status !== 200 && joinRes.status !== 201) {
-      console.error(`[VU ${__VU} fan ${fanId}] queue join 실패: ${joinRes.status} ${joinRes.body}`);
-      return;
-    }
-    vuToken = waitForAccessToken(PRODUCT_ID, fanId, 30000);
-    if (!vuToken) {
-      console.error(`[VU ${__VU} fan ${fanId}] accessToken 획득 실패 — 서버 queue 설정 확인`);
-    }
-    return; // 첫 번째 iteration 종료
-  }
-
-  // 이후 iteration: 주문 생성
+  const token = userTokens[(__VU - 1) % userTokens.length].token;
   const res = http.post(
     `${BASE_URL}/api/v1/orders`,
-    JSON.stringify({ accessTicket: vuToken, items: [{ productId: PRODUCT_ID, quantity: 1 }] }),
-    { headers: localHeaders(fanId) },
+    JSON.stringify({ accessTicket: 'test-ticket-token', items: [{ productId: PRODUCT_ID, quantity: 1 }] }),
+    { headers: authHeaders(token) },
   );
 
   if (res.status === 201) reservedCount.add(1);

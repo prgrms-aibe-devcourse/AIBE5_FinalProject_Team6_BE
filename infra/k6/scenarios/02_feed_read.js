@@ -5,15 +5,21 @@
  *
  * 사전 준비:
  *   - DB seed: artist_profile id=1, artist_feed artist_id=1 20개, user_follow fan_id=1 artist_id=1
+ *   - tokens.csv: infra/k6/seed/tokens.csv (fan_id 1~2100 JWT)
  *   - 실행: k6 run --out experimental-prometheus-rw scenarios/02_feed_read.js
  */
 import http from 'k6/http';
 import { check } from 'k6';
-import { BASE_URL, localHeaders } from '../lib/auth.js';
+import { SharedArray } from 'k6/data';
+import papaparse from 'https://jslib.k6.io/papaparse/5.1.1/index.js';
+import { BASE_URL, authHeaders } from '../lib/auth.js';
 import { READ_THRESHOLDS } from '../lib/thresholds.js';
 
 const ARTIST_ID = parseInt(__ENV.ARTIST_ID || '1');
-const FAN_POOL_SIZE = parseInt(__ENV.FAN_POOL_SIZE || '1000');
+
+const userTokens = new SharedArray('users', function () {
+  return papaparse.parse(open('../seed/tokens.csv'), { header: true }).data;
+});
 
 export const options = {
   scenarios: {
@@ -27,10 +33,10 @@ export const options = {
 };
 
 export default function () {
-  const fanId = ((__VU - 1) % FAN_POOL_SIZE) + 1;
+  const token = userTokens[(__VU - 1) % userTokens.length].token;
   const res = http.get(
     `${BASE_URL}/api/v1/artists/${ARTIST_ID}/feeds`,
-    { headers: localHeaders(fanId) },
+    { headers: authHeaders(token) },
   );
 
   check(res, {

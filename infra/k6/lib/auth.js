@@ -17,8 +17,3 @@ export function login(email, password) {
 export function authHeaders(token) {
   return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
 }
-
-// local 프로파일 전용: JWT 없이 X-Fan-Id 헤더로 인증 우회
-export function localHeaders(fanId) {
-  return { 'Content-Type': 'application/json', 'X-Fan-Id': String(fanId) };
-}
