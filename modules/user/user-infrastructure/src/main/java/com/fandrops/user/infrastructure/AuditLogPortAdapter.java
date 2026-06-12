@@ -23,11 +23,11 @@ public class AuditLogPortAdapter implements AuditLogPort {
     public void save(AuditLog auditLog) {
         try {
             auditLogJpaRepository.save(AuditLogJpaEntity.from(auditLog));
-            meterRegistry.counter("audit_log_save_total",
+            meterRegistry.counter("fandrops_audit_log_save_total",
                     "action", auditLog.getAction(),
                     "result", "success").increment();
         } catch (Exception e) {
-            meterRegistry.counter("audit_log_save_total",
+            meterRegistry.counter("fandrops_audit_log_save_total",
                     "action", auditLog.getAction(),
                     "result", "failure").increment();
             throw e;

@@ -35,7 +35,7 @@ class AuditLogPortAdapterTest {
     }
 
     @Test
-    @DisplayName("save 성공 시 audit_log_save_total{result=success} 카운터 1 증가")
+    @DisplayName("save 성공 시 fandrops_audit_log_save_total{result=success} 카운터 1 증가")
     void save_success_incrementsSuccessCounter() {
         AuditLog auditLog = sampleAuditLog("ADMIN_BANNER_CREATE");
 
@@ -47,7 +47,7 @@ class AuditLogPortAdapterTest {
     }
 
     @Test
-    @DisplayName("save 실패 시 audit_log_save_total{result=failure} 카운터 1 증가 + 예외 전파")
+    @DisplayName("save 실패 시 fandrops_audit_log_save_total{result=failure} 카운터 1 증가 + 예외 전파")
     void save_failure_incrementsFailureCounterAndRethrows() {
         AuditLog auditLog = sampleAuditLog("ADMIN_BANNER_DELETE");
         doThrow(new RuntimeException("DB 저장 실패")).when(auditLogJpaRepository).save(any());
@@ -80,7 +80,7 @@ class AuditLogPortAdapterTest {
     }
 
     private double count(String action, String result) {
-        Counter counter = meterRegistry.find("audit_log_save_total")
+        Counter counter = meterRegistry.find("fandrops_audit_log_save_total")
                 .tag("action", action)
                 .tag("result", result)
                 .counter();
