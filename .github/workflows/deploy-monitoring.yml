@@ -79,6 +79,10 @@ jobs:
           cd /opt/fandrops-monitoring
           GMAIL_APP_PASSWORD="${GMAIL_APP_PASSWORD}" docker compose -f compose.monitoring.yml up -d --remove-orphans
 
+          # prometheus.yml 변경은 컨테이너 재생성 조건이 아니므로 명시적 재시작
+          docker compose -f compose.monitoring.yml restart prometheus
+          echo "Prometheus 재시작 완료 (새 scrape 설정 적용)"
+
           echo "=== 컨테이너 상태 ==="
           sleep 5
           docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
