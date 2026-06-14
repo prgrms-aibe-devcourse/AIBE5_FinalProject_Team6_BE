@@ -50,6 +50,7 @@ fandrops:
   feature-flags:
     enabled: false
   s3:
+    # ⚠️ stg도 prod 버킷 사용 — 테스트 시 실제 S3에 파일이 올라갑니다
     bucket: fandrops-prod-storage-495264909330-ap-northeast-2-an
     region: ap-northeast-2
     presigned-url-expiry-minutes: 10

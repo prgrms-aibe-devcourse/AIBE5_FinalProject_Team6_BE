@@ -10,7 +10,7 @@ import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 @EnableConfigurationProperties(S3Properties.class)
 public class S3Config {
 
-    @Bean
+    @Bean(destroyMethod = "close")
     public S3Presigner s3Presigner(S3Properties properties) {
         // 자격증명(신분증)은 AWS SDK Default Chain이 자동 탐색:
         // 1순위 환경변수(AWS_ACCESS_KEY_ID) → 2순위 ~/.aws/credentials → 3순위 EC2 IAM Role
