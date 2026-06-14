@@ -1,5 +1,6 @@
 package com.fandrops.user.infrastructure.config;
 
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
@@ -12,6 +13,7 @@ public class S3Properties {
     private String bucket;
     @NotBlank
     private String region;
+    @Min(1)
     private int presignedUrlExpiryMinutes = 10;
     private String uploadPrefix = "uploads/banners";
 

@@ -1,6 +1,8 @@
 package com.fandrops.user.infrastructure;
 
+import com.fandrops.user.application.constant.AllowedImageContentType;
 import com.fandrops.user.application.dto.PresignedUploadResult;
+import com.fandrops.user.application.exception.InvalidContentTypeException;
 import com.fandrops.user.infrastructure.config.S3Properties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -15,6 +17,8 @@ import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
@@ -50,7 +54,7 @@ class S3PresignedUrlAdapterTest {
     void generate_correctExtensionAndImageUrl(String contentType, String expectedExt) {
         when(presigner.presignPutObject(any(PutObjectPresignRequest.class)).url().toString()).thenReturn("https://presigned");
 
-        PresignedUploadResult result = adapter.generate(contentType);
+        PresignedUploadResult result = adapter.generate(contentType, 1024L);
 
         // imageUrl이 올바른 S3 도메인 + 경로 + 확장자를 가지는지 검증
         assertTrue(result.imageUrl().startsWith(
@@ -65,7 +69,7 @@ class S3PresignedUrlAdapterTest {
     void generate_objectKeyStartsWithUploadsPrefix() {
         when(presigner.presignPutObject(any(PutObjectPresignRequest.class)).url().toString()).thenReturn("https://presigned");
 
-        PresignedUploadResult result = adapter.generate("image/jpeg");
+        PresignedUploadResult result = adapter.generate("image/jpeg", 1024L);
 
         // IAM Role이 uploads/* 경로에만 PutObject 권한을 가지므로,
         // 이 prefix를 벗어나면 403 Forbidden 발생 — 반드시 확인
@@ -80,8 +84,29 @@ class S3PresignedUrlAdapterTest {
         String expectedPresignedUrl = "https://test-bucket.s3.amazonaws.com/uploads/banners/uuid.jpg?X-Amz-Signature=abc";
         when(presigner.presignPutObject(any(PutObjectPresignRequest.class)).url().toString()).thenReturn(expectedPresignedUrl);
 
-        PresignedUploadResult result = adapter.generate("image/png");
+        PresignedUploadResult result = adapter.generate("image/png", 1024L);
 
         assertEquals(expectedPresignedUrl, result.presignedUrl());
+    }
+
+    @Test
+    @DisplayName("uploadPrefix에 trailing slash가 있어도 imageUrl에 이중 슬래시가 생기지 않는다")
+    void generate_trailingSlashInPrefix_noDoubleSlash() {
+        properties.setUploadPrefix("uploads/banners/"); // trailing slash
+        when(presigner.presignPutObject(any(PutObjectPresignRequest.class)).url().toString()).thenReturn("https://presigned");
+
+        PresignedUploadResult result = adapter.generate("image/jpeg", 1024L);
+
+        assertFalse(result.imageUrl().contains("//uploads"), "imageUrl에 이중 슬래시가 없어야 한다");
+        assertTrue(result.imageUrl().startsWith(
+                "https://test-bucket.s3.ap-northeast-2.amazonaws.com/uploads/banners/"),
+                "trailing slash 제거 후 정상 prefix여야 한다");
+    }
+
+    @Test
+    @DisplayName("AllowedImageContentType.extensionFor() — 허용되지 않은 타입이면 InvalidContentTypeException")
+    void extensionFor_unknownType_throwsInvalidContentTypeException() {
+        assertThrows(InvalidContentTypeException.class,
+                () -> AllowedImageContentType.extensionFor("image/gif"));
     }
 }

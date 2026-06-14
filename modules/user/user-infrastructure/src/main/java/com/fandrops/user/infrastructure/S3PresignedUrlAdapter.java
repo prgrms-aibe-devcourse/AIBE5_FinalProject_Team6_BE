@@ -1,14 +1,18 @@
 package com.fandrops.user.infrastructure;
 
+import com.fandrops.user.application.constant.AllowedImageContentType;
 import com.fandrops.user.application.dto.PresignedUploadResult;
+import com.fandrops.user.application.exception.S3OperationException;
 import com.fandrops.user.application.port.S3PresignedUrlPort;
 import com.fandrops.user.infrastructure.config.S3Properties;
 import org.springframework.stereotype.Component;
+import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.UUID;
 
 @Component
@@ -23,13 +27,15 @@ public class S3PresignedUrlAdapter implements S3PresignedUrlPort {
     }
 
     @Override
-    public PresignedUploadResult generate(String contentType) {
-        String objectKey = properties.getUploadPrefix() + "/" + UUID.randomUUID() + extensionFor(contentType);
+    public PresignedUploadResult generate(String contentType, long contentLength) {
+        String normalizedPrefix = properties.getUploadPrefix().replaceAll("/+$", "");
+        String objectKey = normalizedPrefix + "/" + UUID.randomUUID() + AllowedImageContentType.extensionFor(contentType);
 
         PutObjectRequest putRequest = PutObjectRequest.builder()
                 .bucket(properties.getBucket())
                 .key(objectKey)
                 .contentType(contentType)
+                .contentLength(contentLength)
                 .build();
 
         PutObjectPresignRequest presignRequest = PutObjectPresignRequest.builder()
@@ -37,19 +43,17 @@ public class S3PresignedUrlAdapter implements S3PresignedUrlPort {
                 .putObjectRequest(putRequest)
                 .build();
 
-        String presignedUrl = presigner.presignPutObject(presignRequest).url().toString();
+        String presignedUrl;
+        try {
+            presignedUrl = presigner.presignPutObject(presignRequest).url().toString();
+        } catch (SdkClientException e) {
+            throw new S3OperationException("S3 Presigned URL 생성 실패", e);
+        }
+
         String imageUrl = "https://%s.s3.%s.amazonaws.com/%s"
                 .formatted(properties.getBucket(), properties.getRegion(), objectKey);
+        Instant expiresAt = Instant.now().plusSeconds(properties.getPresignedUrlExpiryMinutes() * 60L);
 
-        return new PresignedUploadResult(presignedUrl, imageUrl);
-    }
-
-    private static String extensionFor(String contentType) {
-        return switch (contentType) {
-            case "image/jpeg" -> ".jpg";
-            case "image/png"  -> ".png";
-            case "image/webp" -> ".webp";
-            default -> throw new IllegalArgumentException("Unsupported content type: " + contentType);
-        };
+        return new PresignedUploadResult(presignedUrl, imageUrl, expiresAt);
     }
 }
