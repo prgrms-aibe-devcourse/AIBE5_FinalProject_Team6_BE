@@ -35,4 +35,7 @@ public class ArtistScheduleJpaEntity {
 
     @Column(name = "scheduled_at", nullable = false)
     private LocalDateTime scheduledAt;
+
+    @Column(name = "live_url", length = 2048)
+    private String liveUrl;
 }

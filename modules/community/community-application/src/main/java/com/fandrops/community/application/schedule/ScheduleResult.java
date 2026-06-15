@@ -8,5 +8,6 @@ public record ScheduleResult(
         Long id,
         ArtistScheduleType type,
         String title,
-        OffsetDateTime startTime
+        OffsetDateTime startTime,
+        String liveUrl
 ) {}

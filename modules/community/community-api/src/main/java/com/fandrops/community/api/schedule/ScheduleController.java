@@ -4,6 +4,7 @@ import com.fandrops.common.ApiResponse;
 import com.fandrops.community.api.CommunityControllerSupport;
 import com.fandrops.community.application.exception.ForbiddenException;
 import com.fandrops.community.application.schedule.EventCreateCommand;
+import com.fandrops.community.application.schedule.LiveCreateCommand;
 import com.fandrops.community.application.schedule.ScheduleResult;
 import com.fandrops.community.application.schedule.ScheduleService;
 import jakarta.validation.Valid;
@@ -58,6 +59,33 @@ public class ScheduleController extends CommunityControllerSupport {
         Long artistMemberId = resolveArtistMemberId(authentication, artistMemberIdHeader);
         ScheduleResult result = scheduleService.startLive(scheduleId, artistMemberId);
         return ResponseEntity.ok(ApiResponse.ok(result, traceId()));
+    }
+
+    // POST /api/v1/artists/{artistId}/lives — 라이브 등록 (F03-07, AGENCY)
+    @PostMapping("/api/v1/artists/{artistId}/lives")
+    public ResponseEntity<ApiResponse<Map<String, Long>>> registerLive(
+            @PathVariable Long artistId,
+            @Valid @RequestBody LiveCreateRequest request,
+            Authentication authentication,
+            @RequestHeader(value = "X-Artist-Member-Id", required = false) Long artistMemberIdHeader) {
+
+        if (!isLocalProfile() && (authentication == null || !hasAgencyRole(authentication))) {
+            throw new ForbiddenException("AGENCY 권한이 필요합니다.");
+        }
+        Long artistMemberId = resolveArtistMemberId(authentication, artistMemberIdHeader);
+        ScheduleResult result = scheduleService.registerLive(
+                new LiveCreateCommand(artistId, artistMemberId,
+                        request.title(), request.scheduledAt(), request.liveUrl()));
+        return ResponseEntity.status(201).body(ApiResponse.ok(Map.of("scheduleId", result.id()), traceId()));
+    }
+
+    // GET /api/v1/artists/{artistId}/lives — 활성 라이브 목록 (F03-07, 공개)
+    @GetMapping("/api/v1/artists/{artistId}/lives")
+    public ResponseEntity<ApiResponse<Map<String, List<ScheduleResult>>>> getLives(
+            @PathVariable Long artistId) {
+
+        List<ScheduleResult> lives = scheduleService.getLives(artistId);
+        return ResponseEntity.ok(ApiResponse.ok(Map.of("lives", lives), traceId()));
     }
 
     // GET /api/v1/artists/{artistId}/calendar?from=...&to=... — 통합 스케줄 조회 (F03-05)
