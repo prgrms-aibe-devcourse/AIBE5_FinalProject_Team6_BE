@@ -5,6 +5,7 @@ import com.fandrops.community.domain.schedule.ArtistScheduleType;
 import com.fandrops.community.domain.schedule.repository.ArtistScheduleRepository;
 import com.fandrops.community.infrastructure.schedule.jpa.ArtistScheduleJpaEntity;
 import com.fandrops.community.infrastructure.schedule.jpa.ArtistScheduleJpaRepository;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
@@ -48,6 +49,16 @@ public class ArtistScheduleRepositoryAdapter implements ArtistScheduleRepository
     }
 
     @Override
+    public List<ArtistSchedule> findNoticesByArtistId(Long artistId, Long cursorId, int size) {
+        List<ArtistScheduleJpaEntity> entities = (cursorId == null)
+                ? jpaRepository.findByArtistIdAndTypeOrderByIdDesc(
+                        artistId, ArtistScheduleType.NOTICE, PageRequest.of(0, size))
+                : jpaRepository.findByArtistIdAndTypeAndIdLessThanOrderByIdDesc(
+                        artistId, ArtistScheduleType.NOTICE, cursorId, PageRequest.of(0, size));
+        return entities.stream().map(this::toDomain).toList();
+    }
+
+    @Override
     public ArtistSchedule save(ArtistSchedule schedule) {
         return toDomain(jpaRepository.save(toJpa(schedule)));
     }
@@ -55,12 +66,12 @@ public class ArtistScheduleRepositoryAdapter implements ArtistScheduleRepository
     private ArtistScheduleJpaEntity toJpa(ArtistSchedule s) {
         return new ArtistScheduleJpaEntity(
                 s.getId(), s.getArtistId(), s.getNoticeId(),
-                s.getTitle(), s.getType(), s.getScheduledAt(), s.getLiveUrl());
+                s.getTitle(), s.getType(), s.getScheduledAt(), s.getLiveUrl(), s.getContent());
     }
 
     private ArtistSchedule toDomain(ArtistScheduleJpaEntity e) {
         return ArtistSchedule.reconstruct(
                 e.getId(), e.getArtistId(), e.getNoticeId(),
-                e.getTitle(), e.getType(), e.getScheduledAt(), e.getLiveUrl());
+                e.getTitle(), e.getType(), e.getScheduledAt(), e.getLiveUrl(), e.getContent());
     }
 }
