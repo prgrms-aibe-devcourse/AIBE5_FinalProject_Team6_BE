@@ -83,8 +83,8 @@ fandrops:
   order:
     payment-timeout: PT15M
   s3:
-    # ⚠️ 로컬도 prod 버킷 사용 — 테스트 시 실제 S3에 파일이 올라갑니다
-    bucket: fandrops-prod-storage-495264909330-ap-northeast-2-an
+    # S3 버킷 설정은 application-local.override.yml 에서 지정하세요.
+    # 템플릿: application-local.example.yml 의 fandrops.s3 섹션 참고
     region: ap-northeast-2
     presigned-url-expiry-minutes: 10
     upload-prefix: uploads/banners
