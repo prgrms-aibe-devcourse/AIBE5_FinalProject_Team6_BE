@@ -252,6 +252,34 @@ PG  → POST .../webhook      → payload 내 키 → tossPaymentKey로 매핑 �
 - 성공 시 `status=RESERVED` + **`orderPaymentKey`** 반환 → 클라이언트가 주문·결제 세션을 식별한 뒤 토스 결제창 진입.
 - PG에서 받은 키는 **`tossPaymentKey`** 로만 다룬다 ([결제 식별자](#결제-식별자-orderpaymentkey--tosspaymentkey) 참고).
 
+### GET `/orders/{id}`
+
+| 필드 | 설명 |
+| --- | --- |
+| Path | `id` — 주문 ID |
+| Header | `Authorization: Bearer <accessToken>` |
+| Response `200` | `{ orderId, status, totalAmount, orderPaymentKey, items: [{ productId, quantity, unitPrice, subtotal }], createdAt }` |
+| Response `404` | 주문 없음 또는 본인 소유가 아닌 경우 (소유자 노출 방지) |
+
+**설계 근거**
+
+- fanId는 JWT에서 추출하여 주문 소유자와 비교. 불일치 시 존재 자체를 숨기기 위해 `404` 반환.
+- `orderPaymentKey`는 결제창 진입·취소 시 클라이언트 식별자로 사용.
+
+### GET `/fans/me/orders`
+
+| 필드 | 설명 |
+| --- | --- |
+| Header | `Authorization: Bearer <accessToken>` |
+| Query | `cursor` (선택, Long) — 이전 페이지 마지막 orderId / `size` (선택, 기본 20, 최대 100) |
+| Response `200` | `{ items: [{ orderId, status, totalAmount, createdAt }], nextCursor }` |
+
+**설계 근거**
+
+- 최신순(id DESC) cursor-based pagination. `nextCursor`가 `null`이면 마지막 페이지.
+- 다음 페이지 요청: `?cursor={nextCursor}&size={size}`.
+- `idx_orders_fan_id` 인덱스(V23)로 fan_id 범위 스캔 최적화.
+
 ### confirm / fail API 비노출
 
 `PAID→COMPLETED`, `RESERVED→FAILED→CANCELLED` 전이는 **웹훅 수신 후 서버 내부** 처리.  
