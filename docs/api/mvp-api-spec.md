@@ -252,6 +252,48 @@ PG  → POST .../webhook      → payload 내 키 → tossPaymentKey로 매핑 �
 - 성공 시 `status=RESERVED` + **`orderPaymentKey`** 반환 → 클라이언트가 주문·결제 세션을 식별한 뒤 토스 결제창 진입.
 - PG에서 받은 키는 **`tossPaymentKey`** 로만 다룬다 ([결제 식별자](#결제-식별자-orderpaymentkey--tosspaymentkey) 참고).
 
+### GET `/orders/{id}`
+
+| 필드 | 설명 |
+| --- | --- |
+| Path | `id` — 주문 ID |
+| Header | `Authorization: Bearer <accessToken>` |
+| Response `200` | `{ orderId, status, totalAmount, orderPaymentKey, items: [{ productId, quantity, unitPrice, subtotal }], createdAt }` |
+| Response `404` | 주문 없음 또는 본인 소유가 아닌 경우 (소유자 노출 방지) |
+
+**설계 근거**
+
+- fanId는 JWT에서 추출하여 주문 소유자와 비교. 불일치 시 존재 자체를 숨기기 위해 `404` 반환.
+- `orderPaymentKey`는 결제창 진입·취소 시 클라이언트 식별자로 사용.
+
+### GET `/fans/me/orders`
+
+| 필드 | 설명 |
+| --- | --- |
+| Header | `Authorization: Bearer <accessToken>` |
+| Query | `cursor` (선택, Long) — 이전 페이지 마지막 orderId / `size` (선택, 기본 20, 최대 100) |
+| Response `200` | `{ items: [{ orderId, status, totalAmount, createdAt }], nextCursor }` |
+
+**설계 근거**
+
+- 최신순(id DESC) cursor-based pagination. `nextCursor`가 `null`이면 마지막 페이지.
+- 다음 페이지 요청: `?cursor={nextCursor}&size={size}`.
+- `idx_orders_fan_id` 인덱스(V25)로 fan_id 범위 스캔 최적화.
+
+### DELETE `/orders/{id}`
+
+| 항목 | 내용 |
+| --- | --- |
+| **인증** | Bearer JWT (또는 로컬 `X-Fan-Id` 헤더) |
+| **Response `204`** | 취소 성공, Body 없음 |
+| **Response `404`** | `ORDER_NOT_FOUND` — 존재하지 않거나 본인 소유가 아닌 주문 |
+| **Response `409`** | `ORDER_CANCELLATION_NOT_ALLOWED` — `RESERVED` 가 아닌 상태 (PAID·COMPLETED·CANCELLED·FAILED) |
+
+**취소 가능 상태**
+
+- `RESERVED` 만 취소 가능. `PAID` 이후 단계는 결제가 확정된 상태이므로 API 취소 불가 (환불은 별도 CS 프로세스).
+- 취소 처리 순서: 재고 복구(`inventoryRestorePort.restore`) → 상태 `CANCELLED` 업데이트 (원자적 트랜잭션).
+
 ### confirm / fail API 비노출
 
 `PAID→COMPLETED`, `RESERVED→FAILED→CANCELLED` 전이는 **웹훅 수신 후 서버 내부** 처리.  
@@ -348,7 +390,34 @@ Toss PG → 서버 비동기 결제 상태 수신. 상세: [payment-flow-reason.
 | POST | `/admin/main-banners` | `user` | 표지민 | 메인 배너 등록 |
 | PATCH | `/admin/main-banners/{id}` | `user` | 표지민 | 메인 배너 수정 |
 | DELETE | `/admin/main-banners/{id}` | `user` | 표지민 | 메인 배너 삭제 |
+| POST | `/admin/uploads` | `user` | 표지민 | 배너 이미지 S3 Presigned PUT URL 발급 — `{ contentType, contentLength }` → `{ presignedUrl, imageUrl, expiresAt }` · 클라이언트가 presignedUrl로 직접 S3 PUT 후 imageUrl을 배너 등록에 사용 (#180) |
 | GET | `/banners/main` | `user` | 표지민 | GNB 홈 메인 배너 노출 (F04-03) |
+
+#### POST `/admin/uploads` — S3 PUT 시 주의사항
+
+```
+요청 필드:
+  contentType   string  허용값: image/jpeg · image/png · image/webp
+  contentLength number  파일 바이트 크기. 1 이상, 5,242,880(5MB) 이하.
+
+응답 필드:
+  presignedUrl  string  S3 직접 PUT 전용 URL (expiresAt까지 유효)
+  imageUrl      string  배너 등록 API(POST /admin/main-banners)에 전달할 실제 이미지 URL
+  expiresAt     string  presignedUrl 만료 시각 (ISO 8601)
+```
+
+**⚠️ S3 PUT 시 Content-Length 헤더 필수**
+`presignedUrl`에는 요청 시 선언한 `contentLength` 값이 서명에 바인딩됩니다.
+S3 PUT 요청의 `Content-Length` 헤더가 선언한 값과 **다를 경우 S3가 403을 반환**합니다.
+
+```
+올바른 흐름:
+1. 파일 크기를 미리 확인 (예: file.size === 102400)
+2. POST /admin/uploads { contentType: "image/jpeg", contentLength: 102400 }
+3. PUT presignedUrl, headers: { "Content-Type": "image/jpeg", "Content-Length": 102400 }
+   body: <파일 바이너리>
+4. POST /admin/main-banners { imageUrl: ... }  ← PUT 완료 후에만 유효
+```
 
 F04-03은 **메인 배너만**. 스토어 아티스트 노출 순서는 F04-01 (`GET /artists?sort=fanCount`).
 

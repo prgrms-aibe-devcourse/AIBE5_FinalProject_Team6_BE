@@ -2,9 +2,13 @@ package com.fandrops.order.application;
 
 import com.fandrops.order.application.dto.CreateOrderCommand;
 import com.fandrops.order.application.dto.CreateOrderResult;
+import com.fandrops.order.application.dto.OrderDetailResponse;
+import com.fandrops.order.application.dto.OrderListItemResponse;
+import com.fandrops.order.application.dto.OrderListResponse;
 import com.fandrops.order.domain.Order;
 import com.fandrops.order.domain.OrderItem;
 import com.fandrops.order.domain.OrderStatus;
+import com.fandrops.order.domain.exception.OrderCancellationNotAllowedException;
 import com.fandrops.order.domain.exception.OrderNotFoundException;
 import com.fandrops.order.domain.exception.OutOfStockException;
 import com.fandrops.order.domain.exception.ReserveConflictException;
@@ -82,6 +86,26 @@ public class OrderService {
                 .orElseThrow(() -> new OrderNotFoundException(orderId));
     }
 
+    @Transactional(readOnly = true)
+    public OrderDetailResponse getOrderDetail(Long orderId, Long fanId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new OrderNotFoundException(orderId));
+        if (!order.getFanId().equals(fanId)) {
+            throw new OrderNotFoundException(orderId);
+        }
+        return OrderDetailResponse.from(order);
+    }
+
+    @Transactional(readOnly = true)
+    public OrderListResponse getMyOrders(Long fanId, Long cursor, int size) {
+        List<Order> orders = orderRepository.findByFanId(fanId, cursor, size);
+        List<OrderListItemResponse> items = orders.stream()
+                .map(OrderListItemResponse::from)
+                .toList();
+        Long nextCursor = orders.size() == size ? orders.get(orders.size() - 1).getId() : null;
+        return new OrderListResponse(items, nextCursor);
+    }
+
     @Transactional
     public void markAsFailed(Long orderId) {
         Order order = orderRepository.findById(orderId)
@@ -120,5 +144,22 @@ public class OrderService {
             return;
         }
         orderRepository.updateStatus(orderId, OrderStatus.COMPLETED);
+    }
+
+    /** 사용자 취소: RESERVED 상태만 허용. 재고 복구 후 CANCELLED 전이. */
+    @Transactional
+    public void cancelOrder(Long orderId, Long fanId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new OrderNotFoundException(orderId));
+        if (!order.getFanId().equals(fanId)) {
+            throw new OrderNotFoundException(orderId);
+        }
+        if (order.getStatus() != OrderStatus.RESERVED) {
+            throw new OrderCancellationNotAllowedException(orderId, order.getStatus());
+        }
+        for (OrderItem item : order.getItems()) {
+            inventoryRestorePort.restore(item.getProductId(), item.getQuantity(), orderId);
+        }
+        orderRepository.updateStatus(orderId, OrderStatus.CANCELLED);
     }
 }

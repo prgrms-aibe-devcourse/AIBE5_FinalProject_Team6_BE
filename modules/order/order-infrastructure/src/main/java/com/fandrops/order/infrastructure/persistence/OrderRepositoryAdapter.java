@@ -50,6 +50,13 @@ public class OrderRepositoryAdapter implements OrderRepository {
                 .toList();
     }
 
+    @Override
+    public List<Order> findByFanId(Long fanId, Long cursor, int size) {
+        return jpaRepository.findByFanIdCursor(fanId, cursor, size).stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
     private Order toDomain(OrderEntity entity) {
         List<OrderItem> items = entity.getItems().stream()
                 .map(i -> new OrderItem(i.getProductId(), i.getQuantity(), i.getPrice()))
@@ -61,7 +68,8 @@ public class OrderRepositoryAdapter implements OrderRepository {
                 entity.getStatus(),
                 entity.getTotalAmount(),
                 entity.getOrderPaymentKey(),
-                entity.getIdempotencyKey()
+                entity.getIdempotencyKey(),
+                entity.getCreatedAt()
         );
     }
 }
