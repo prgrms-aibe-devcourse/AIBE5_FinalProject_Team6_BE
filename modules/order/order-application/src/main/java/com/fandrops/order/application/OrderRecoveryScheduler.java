@@ -11,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Saga 후처리 정체 복구 스케줄러.
@@ -43,6 +44,7 @@ public class OrderRecoveryScheduler {
     }
 
     /** 결제 대기 타임아웃: RESERVED → FAILED → CANCELLED */
+    @Transactional
     @Scheduled(fixedDelay = 60_000)
     public void cancelExpiredReservations() {
         LocalDateTime cutoff = LocalDateTime.now().minusMinutes(RESERVED_TIMEOUT_MINUTES);
@@ -61,6 +63,7 @@ public class OrderRecoveryScheduler {
     }
 
     /** 후처리 정체 재처리: PAID → (재고 확정) → COMPLETED */
+    @Transactional
     @Scheduled(fixedDelay = 60_000)
     public void recoverStuckPaidOrders() {
         LocalDateTime cutoff = LocalDateTime.now().minusMinutes(STUCK_THRESHOLD_MINUTES);
@@ -78,6 +81,7 @@ public class OrderRecoveryScheduler {
     }
 
     /** 보상 정체 재처리: FAILED → (재고 복구) → CANCELLED */
+    @Transactional
     @Scheduled(fixedDelay = 60_000)
     public void recoverStuckFailedOrders() {
         LocalDateTime cutoff = LocalDateTime.now().minusMinutes(STUCK_THRESHOLD_MINUTES);
