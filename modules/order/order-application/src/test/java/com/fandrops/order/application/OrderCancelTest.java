@@ -47,7 +47,7 @@ class OrderCancelTest {
     private Order orderWith(OrderStatus status) {
         List<OrderItem> items = List.of(new OrderItem(PRODUCT_ID, 2, BigDecimal.valueOf(5000)));
         return Order.reconstitute(ORDER_ID, FAN_ID, items, status,
-                BigDecimal.valueOf(10000), "opk_test", "idem_test");
+                BigDecimal.valueOf(10000), "opk_test", "idem_test", null);
     }
 
     @Nested
