@@ -103,25 +103,64 @@ fandrops.queue.scheduler.interval-ms=1000
 cd /opt/fandrops/k6
 ACTIVE=$(cat /etc/fandrops/active-slot)
 PORT=$([ "$ACTIVE" = "blue" ] && echo 8081 || echo 8082)
-k6 run -e BASE_URL=http://localhost:$PORT \
+K6_PROMETHEUS_RW_TREND_STATS="p(95),p(99)" k6 run \
+  -e BASE_URL=http://localhost:$PORT \
   -e FAN_POOL_SIZE=200 \
   --out experimental-prometheus-rw \
   scenarios/01_order_concurrency.js
 ```
 
-### 결과
+> `K6_PROMETHEUS_RW_TREND_STATS="p(95),p(99)"` — Prometheus에 p95/p99 게이지 메트릭 기록. 미설정 시 p99만 내보냄.
+
+### 결과 (2026-06-15, 1회차 — 참고용)
 
 | 지표 | 결과 | 목표 | 상태 |
 |---|---|---|---|
-| P95 응답 시간 | — | < 300ms | 미실행 |
-| 에러율 | — | < 0.1% | 미실행 |
-| orders_reserved | — | ≤ 100 | 미실행 |
+| P95 응답 시간 | **4.43s** | < 300ms | ❌ SLO 미달 |
+| P90 응답 시간 | 4.07s | — | — |
+| 평균 응답 시간 | 2.96s | — | — |
+| 에러율 | **62.50%** | < 0.1% | ❌ |
+| orders_reserved | **150** | ≤ 100 | ❌ **오버셀 50건** |
+| 총 요청 수 | 400 (200 VU × 2 iter) | — | — |
+| 처리량 | 55.2 req/s | — | — |
 
-> 실행 후 `SELECT reserved_qty FROM inventory WHERE product_id=1;`로 오버셀 수동 검증 필요.
+**DB 사후 검증:**
+```
+inventory: available_qty=0, reserved_qty=100, total_qty=100
+orders:    RESERVED=150, CANCELLED=50
+```
+→ inventory는 100 정상이나 orders에 150건 RESERVED — 주문 생성과 재고 차감 시점 불일치로 동시 150건이 201 통과.
+
+### 결과 (2026-06-15, 2회차 — **공식 베이스라인**)
+
+> 1회차 이후 inventory reset + Redis 재적재 후 재실행. `K6_PROMETHEUS_RW_TREND_STATS` 추가하여 p95 Prometheus 기록.
+
+| 지표 | 결과 | 목표 | 상태 |
+|---|---|---|---|
+| P95 응답 시간 | **2.85s** | < 300ms | ❌ SLO 미달 |
+| P90 응답 시간 | 2.59s | — | — |
+| 평균 응답 시간 | 1.49s | — | — |
+| 에러율 | **75.00%** | < 0.1% | ❌ (300건은 정상 409 DEPLETED) |
+| orders_reserved | **100** | ≤ 100 | ✓ **오버셀 없음** |
+| orders_cancelled | 300 | — | — |
+| 총 요청 수 | 400 (200 VU × 2 iter) | — | — |
+| 처리량 | 99.8 req/s | — | — |
+
+> **에러율 75% 해석**: 200 VU 중 100건은 201 RESERVED, 300건은 409 DEPLETED(재고 소진). k6는 2xx 외 응답을 실패로 집계하므로 수치가 높게 나오나, 재고 100개 기준 정상 동작.  
+> **성공 요청 P95**: `{ expected_response:true }` 기준 P95=975ms — 실제 처리 완료 요청의 응답시간.
 
 ### 오너 피드백 (형성빈)
 
-_미실행 — 결과 기록 후 업데이트 예정_
+**오버셀 발생 (핵심 버그)**: `orders_reserved=150` — 재고 100개 기준 50건 오버셀.  
+`inventory.reserved_qty=100`(정상)과 `orders.status=RESERVED 150건` 불일치로 주문 생성(INSERT) 후 재고 차감(UPDATE) 사이 경쟁 조건으로 추정.
+
+**확인 요청 사항:**
+1. `POST /api/v1/orders` → inventory 차감 트랜잭션 경계 확인 (주문 생성과 재고 차감이 단일 TX인지)
+2. Redis 분산 락 범위가 inventory 차감을 포함하는지 확인
+3. `fandrops.queue.max-concurrent-processing` 코드 기본값 확인 및 적정값 결정 (200 VU 단일 배치 처리에 충분한지)
+
+> **담당 분리**: 적정값 결정 → 형성빈, EC2 환경변수 주입 → 지영재  
+> 현재 운영 환경에 해당 설정이 없어 코드 기본값으로 동작 중. 값이 200 미만이면 200 VU가 단일 배치로 처리되지 않아 동시성 재현이 부정확해짐.
 
 ---
 
@@ -449,12 +488,14 @@ _미실행 — 결과 기록 후 업데이트 예정_
 
 | 시나리오 | 담당 | P95 | 에러율 | 오버셀 | 상태 |
 |---|---|---|---|---|---|
-| 01 주문 동시성 | 형성빈 | — | — | — | 미실행 |
+| 01 주문 동시성 | 형성빈 | 2.85s | 75%\* | 0건 | ❌ SLO 미달 |
 | 02 피드 조회 | 정환철 | 287.67ms | 0.00% | — | ❌ SLO 미달 |
 | 03 결제 확인 | 장성재 | — | — | — | 미실행 |
 | 04 드롭스 스파이크 | 형성빈 | — | — | — | 미실행 |
 | 05 SSE 대기열 | 장성재, 지영재 | — | — | — | 미실행 |
 | 06 통합 워크로드 | 전체 | — | — | — | 미실행 |
+
+> \* 시나리오 01 에러율 75%: 200 VU 중 300건이 409 DEPLETED(재고 소진 정상 응답), 100건 201 RESERVED. 오버셀 없음.
 
 ---
 
