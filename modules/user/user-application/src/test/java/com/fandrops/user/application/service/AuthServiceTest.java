@@ -439,7 +439,7 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("Admin Refresh Token Rotation — role=ADMIN 역할 보존")
+    @DisplayName("Admin Refresh Token Rotation — role=ADMIN 역할 보존 및 발급→삭제 순서 보장")
     void refreshAccessToken_admin_preservesAdminRole() {
         when(refreshTokenStore.find("admin-old-token")).thenReturn(Optional.of(new RefreshTokenEntry(100L, UserRole.ADMIN)));
         when(jwtProvider.generateAccessToken(100L, UserRole.ADMIN)).thenReturn("new-admin-access");
@@ -448,6 +448,10 @@ class AuthServiceTest {
 
         AuthTokenResult result = authService.refreshAccessToken("admin-old-token");
 
+        InOrder inOrder = inOrder(refreshTokenStore);
+        inOrder.verify(refreshTokenStore).find("admin-old-token");
+        inOrder.verify(refreshTokenStore).save("new-admin-refresh", 100L, UserRole.ADMIN);
+        inOrder.verify(refreshTokenStore).delete("admin-old-token");
         verify(jwtProvider).generateAccessToken(100L, UserRole.ADMIN);
         assertEquals("new-admin-access", result.accessToken());
     }
@@ -463,6 +467,21 @@ class AuthServiceTest {
         // 발급 실패 시 삭제 미실행 — 구 토큰 보존으로 재시도 가능
         verify(refreshTokenStore, never()).delete(anyString());
         verify(refreshTokenStore, never()).save(anyString(), anyLong(), any(UserRole.class));
+    }
+
+    @Test
+    @DisplayName("Refresh Token Rotation — delete 실패 시 예외 전파 (새 토큰은 저장됐으나 클라이언트 미수신, 구 토큰 TTL 만료로 자연 소멸)")
+    void refreshAccessToken_deleteFails_exceptionPropagates() {
+        when(refreshTokenStore.find("old-token")).thenReturn(Optional.of(new RefreshTokenEntry(5L, UserRole.FAN)));
+        when(jwtProvider.generateAccessToken(5L, UserRole.FAN)).thenReturn("new-access");
+        when(jwtProvider.generateRefreshToken(5L)).thenReturn("new-refresh");
+        when(jwtProvider.getAccessTokenExpiresIn()).thenReturn(1800L);
+        doThrow(new RuntimeException("Redis delete fail")).when(refreshTokenStore).delete("old-token");
+
+        assertThrows(RuntimeException.class, () -> authService.refreshAccessToken("old-token"));
+        // 새 토큰은 이미 Redis에 저장됨 — orphan으로 TTL(7일) 만료 대기
+        verify(refreshTokenStore).save("new-refresh", 5L, UserRole.FAN);
+        verify(refreshTokenStore).delete("old-token");
     }
 
     // ── confirmPasswordReset ────────────────────────────────────────────────

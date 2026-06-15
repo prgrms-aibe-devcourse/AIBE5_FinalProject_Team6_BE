@@ -160,7 +160,9 @@ public class AuthService {
     }
 
     // Access Token 재발급 (Refresh Token Rotation) — 발급 먼저, 삭제 나중
-    // 발급 실패 시 구 토큰이 Redis에 남아 있으므로 클라이언트가 동일 토큰으로 재시도 가능
+    // 발급 실패 시 구 토큰이 Redis에 남아 있으므로 클라이언트가 동일 토큰으로 재시도 가능.
+    // TOCTOU 허용: 동일 토큰 동시 요청 시 두 세션 모두 발급 가능한 짧은 창이 존재하나
+    // 발급 실패 시 구 토큰 보존(재시도 가능) > 동시성 공격 방어 — MVP 허용 트레이드오프.
     public AuthTokenResult refreshAccessToken(String refreshToken) {
         RefreshTokenEntry entry = refreshTokenStore.find(refreshToken)
                 .orElseThrow(() -> new InvalidTokenException("유효하지 않은 리프레시 토큰입니다."));
