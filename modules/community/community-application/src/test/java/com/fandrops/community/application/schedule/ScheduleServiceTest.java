@@ -269,6 +269,8 @@ class ScheduleServiceTest {
         void success() {
             ArtistSchedule saved = notice(1L, 10L, "팬미팅 공지", "내용입니다", NOW);
             when(scheduleRepository.save(any())).thenReturn(saved);
+            when(scheduleImagePort.findByScheduleId(eq(1L)))
+                    .thenReturn(List.of("https://cdn.example.com/img1.jpg"));
 
             NoticeResult result = scheduleService.createNotice(
                     new NoticeCreateCommand(10L, 5L, "팬미팅 공지", "내용입니다",
@@ -376,7 +378,7 @@ class ScheduleServiceTest {
             when(scheduleImagePort.findByScheduleId(eq(1L)))
                     .thenReturn(List.of("https://cdn.example.com/img.jpg"));
 
-            NoticeResult result = scheduleService.getNotice(1L);
+            NoticeResult result = scheduleService.getNotice(10L, 1L);
 
             assertEquals(1L, result.id());
             assertEquals("공지", result.title());
@@ -388,7 +390,7 @@ class ScheduleServiceTest {
         @DisplayName("존재하지 않는 noticeId → ScheduleNotFoundException")
         void notFound_throws() {
             when(scheduleRepository.findById(eq(999L))).thenReturn(Optional.empty());
-            assertThrows(ScheduleNotFoundException.class, () -> scheduleService.getNotice(999L));
+            assertThrows(ScheduleNotFoundException.class, () -> scheduleService.getNotice(10L, 999L));
         }
 
         @Test
@@ -396,7 +398,15 @@ class ScheduleServiceTest {
         void notNoticeType_throws() {
             ArtistSchedule live = schedule(1L, 10L, ArtistScheduleType.LIVE, "라이브", NOW);
             when(scheduleRepository.findById(eq(1L))).thenReturn(Optional.of(live));
-            assertThrows(ScheduleNotFoundException.class, () -> scheduleService.getNotice(1L));
+            assertThrows(ScheduleNotFoundException.class, () -> scheduleService.getNotice(10L, 1L));
+        }
+
+        @Test
+        @DisplayName("다른 아티스트 공지 접근 → ScheduleNotFoundException (IDOR)")
+        void wrongArtistId_throws() {
+            ArtistSchedule notice = notice(1L, 10L, "공지", null, NOW);
+            when(scheduleRepository.findById(eq(1L))).thenReturn(Optional.of(notice));
+            assertThrows(ScheduleNotFoundException.class, () -> scheduleService.getNotice(99L, 1L));
         }
     }
 
