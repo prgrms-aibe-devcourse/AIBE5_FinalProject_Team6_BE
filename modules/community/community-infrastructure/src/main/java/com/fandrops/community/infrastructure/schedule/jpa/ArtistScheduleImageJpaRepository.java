@@ -9,5 +9,5 @@ public interface ArtistScheduleImageJpaRepository
 
     List<ArtistScheduleImageJpaEntity> findByScheduleIdOrderBySortOrder(Long scheduleId);
 
-    List<ArtistScheduleImageJpaEntity> findByScheduleIdIn(List<Long> scheduleIds);
+    List<ArtistScheduleImageJpaEntity> findByScheduleIdInOrderBySortOrder(List<Long> scheduleIds);
 }

@@ -11,4 +11,8 @@ public record NoticeCreateRequest(
         String content,
         @Size(max = 10) List<String> imageUrls,
         OffsetDateTime scheduledAt
-) {}
+) {
+    public NoticeCreateRequest {
+        imageUrls = imageUrls != null ? imageUrls : List.of();
+    }
+}

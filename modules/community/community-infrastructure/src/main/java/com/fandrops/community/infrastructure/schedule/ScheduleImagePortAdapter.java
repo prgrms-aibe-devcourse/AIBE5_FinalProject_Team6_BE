@@ -32,7 +32,7 @@ public class ScheduleImagePortAdapter implements ScheduleImagePort {
         if (scheduleIds.isEmpty()) {
             return Map.of();
         }
-        return imageJpaRepository.findByScheduleIdIn(scheduleIds).stream()
+        return imageJpaRepository.findByScheduleIdInOrderBySortOrder(scheduleIds).stream()
                 .collect(Collectors.groupingBy(
                         ArtistScheduleImageJpaEntity::getScheduleId,
                         Collectors.mapping(ArtistScheduleImageJpaEntity::getImageUrl, Collectors.toList())

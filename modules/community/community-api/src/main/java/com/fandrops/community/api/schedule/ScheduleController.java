@@ -128,7 +128,7 @@ public class ScheduleController extends CommunityControllerSupport {
             @PathVariable Long artistId,
             @PathVariable Long noticeId) {
 
-        NoticeResult result = scheduleService.getNotice(noticeId);
+        NoticeResult result = scheduleService.getNotice(artistId, noticeId);
         return ResponseEntity.ok(ApiResponse.ok(result, traceId()));
     }
 

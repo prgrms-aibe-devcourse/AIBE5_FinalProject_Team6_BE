@@ -116,10 +116,12 @@ public class ScheduleService {
                 command.artistId(), command.title(), command.content(), scheduledAtUtc);
         ArtistSchedule saved = scheduleRepository.save(notice);
         List<String> imageUrls = command.imageUrls() != null ? command.imageUrls() : List.of();
+        List<String> resultImageUrls = List.of();
         if (!imageUrls.isEmpty()) {
             scheduleImagePort.saveAll(saved.getId(), imageUrls);
+            resultImageUrls = scheduleImagePort.findByScheduleId(saved.getId());
         }
-        return toNoticeResult(saved, imageUrls);
+        return toNoticeResult(saved, resultImageUrls);
     }
 
     @Transactional(readOnly = true)
@@ -149,10 +151,13 @@ public class ScheduleService {
     }
 
     @Transactional(readOnly = true)
-    public NoticeResult getNotice(Long noticeId) {
+    public NoticeResult getNotice(Long artistId, Long noticeId) {
         ArtistSchedule notice = scheduleRepository.findById(noticeId)
                 .filter(s -> s.getType() == ArtistScheduleType.NOTICE)
                 .orElseThrow(() -> new ScheduleNotFoundException("공지사항을 찾을 수 없습니다."));
+        if (!notice.getArtistId().equals(artistId)) {
+            throw new ScheduleNotFoundException("공지사항을 찾을 수 없습니다.");
+        }
         List<String> imageUrls = scheduleImagePort.findByScheduleId(noticeId);
         return toNoticeResult(notice, imageUrls);
     }
