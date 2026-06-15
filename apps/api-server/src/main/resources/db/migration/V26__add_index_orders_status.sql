@@ -1,1 +1,1 @@
-CREATE INDEX IF NOT EXISTS idx_orders_status ON orders (status);
+CREATE INDEX idx_orders_status ON orders (status);
