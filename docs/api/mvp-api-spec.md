@@ -278,7 +278,21 @@ PG  → POST .../webhook      → payload 내 키 → tossPaymentKey로 매핑 �
 
 - 최신순(id DESC) cursor-based pagination. `nextCursor`가 `null`이면 마지막 페이지.
 - 다음 페이지 요청: `?cursor={nextCursor}&size={size}`.
-- `idx_orders_fan_id` 인덱스(V23)로 fan_id 범위 스캔 최적화.
+- `idx_orders_fan_id` 인덱스(V25)로 fan_id 범위 스캔 최적화.
+
+### DELETE `/orders/{id}`
+
+| 항목 | 내용 |
+| --- | --- |
+| **인증** | Bearer JWT (또는 로컬 `X-Fan-Id` 헤더) |
+| **Response `204`** | 취소 성공, Body 없음 |
+| **Response `404`** | `ORDER_NOT_FOUND` — 존재하지 않거나 본인 소유가 아닌 주문 |
+| **Response `409`** | `ORDER_CANCELLATION_NOT_ALLOWED` — `RESERVED` 가 아닌 상태 (PAID·COMPLETED·CANCELLED·FAILED) |
+
+**취소 가능 상태**
+
+- `RESERVED` 만 취소 가능. `PAID` 이후 단계는 결제가 확정된 상태이므로 API 취소 불가 (환불은 별도 CS 프로세스).
+- 취소 처리 순서: 재고 복구(`inventoryRestorePort.restore`) → 상태 `CANCELLED` 업데이트 (원자적 트랜잭션).
 
 ### confirm / fail API 비노출
 
