@@ -4,8 +4,10 @@ import com.fandrops.user.application.dto.BannerResult;
 import com.fandrops.user.application.dto.CreateBannerCommand;
 import com.fandrops.user.application.dto.UpdateBannerCommand;
 import com.fandrops.user.application.exception.BannerNotFoundException;
+import com.fandrops.user.application.exception.S3ImageNotFoundException;
 import com.fandrops.user.application.port.AuditLogPort;
 import com.fandrops.user.application.port.BannerRepository;
+import com.fandrops.user.application.port.S3ImageValidationPort;
 import com.fandrops.user.domain.AuditLog;
 import com.fandrops.user.domain.Banner;
 import com.fandrops.user.domain.BannerType;
@@ -21,10 +23,13 @@ public class BannerService {
 
     private final BannerRepository bannerRepository;
     private final AuditLogPort auditLogPort;
+    private final S3ImageValidationPort s3ImageValidationPort;
 
-    public BannerService(BannerRepository bannerRepository, AuditLogPort auditLogPort) {
+    public BannerService(BannerRepository bannerRepository, AuditLogPort auditLogPort,
+                         S3ImageValidationPort s3ImageValidationPort) {
         this.bannerRepository = bannerRepository;
         this.auditLogPort = auditLogPort;
+        this.s3ImageValidationPort = s3ImageValidationPort;
     }
 
     /** GET /banners/main — 활성 배너 조회 (비인증) */
@@ -49,6 +54,9 @@ public class BannerService {
         if (command.startAt() != null && command.endAt() != null
                 && command.startAt().isAfter(command.endAt())) {
             throw new IllegalArgumentException("배너 종료 시각이 시작 시각보다 이를 수 없습니다.");
+        }
+        if (!s3ImageValidationPort.imageExists(command.imageUrl())) {
+            throw new S3ImageNotFoundException(command.imageUrl());
         }
         Banner banner = Banner.builder()
                 .bannerType(BannerType.MAIN)

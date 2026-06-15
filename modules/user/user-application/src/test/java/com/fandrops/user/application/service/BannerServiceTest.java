@@ -4,8 +4,10 @@ import com.fandrops.user.application.dto.BannerResult;
 import com.fandrops.user.application.dto.CreateBannerCommand;
 import com.fandrops.user.application.dto.UpdateBannerCommand;
 import com.fandrops.user.application.exception.BannerNotFoundException;
+import com.fandrops.user.application.exception.S3ImageNotFoundException;
 import com.fandrops.user.application.port.AuditLogPort;
 import com.fandrops.user.application.port.BannerRepository;
+import com.fandrops.user.application.port.S3ImageValidationPort;
 import com.fandrops.user.domain.AuditLog;
 import com.fandrops.user.domain.Banner;
 import com.fandrops.user.domain.BannerType;
@@ -31,6 +33,7 @@ class BannerServiceTest {
 
     @Mock BannerRepository bannerRepository;
     @Mock AuditLogPort auditLogPort;
+    @Mock S3ImageValidationPort s3ImageValidationPort;
 
     BannerService bannerService;
 
@@ -40,7 +43,7 @@ class BannerServiceTest {
 
     @BeforeEach
     void setUp() {
-        bannerService = new BannerService(bannerRepository, auditLogPort);
+        bannerService = new BannerService(bannerRepository, auditLogPort, s3ImageValidationPort);
     }
 
     private Banner sampleBanner(Long id) {
@@ -106,6 +109,7 @@ class BannerServiceTest {
         LocalDateTime same = LocalDateTime.of(2025, 6, 1, 12, 0);
         CreateBannerCommand command = new CreateBannerCommand(
                 "배너", "https://img.jpg", "https://landing.com", 1, same, same);
+        when(s3ImageValidationPort.imageExists(any())).thenReturn(true);
         when(bannerRepository.save(any(Banner.class))).thenReturn(sampleBanner(3L));
 
         assertDoesNotThrow(() -> bannerService.createBanner(command, ADMIN_ID, CLIENT_IP, TRACE_ID));
@@ -117,6 +121,7 @@ class BannerServiceTest {
     void createBanner_savesWithMainType() {
         CreateBannerCommand command = new CreateBannerCommand(
                 "신규 배너", "https://img.jpg", "https://landing.com", 0, null, null);
+        when(s3ImageValidationPort.imageExists(any())).thenReturn(true);
         Banner saved = sampleBanner(2L);
         when(bannerRepository.save(any(Banner.class))).thenReturn(saved);
 
@@ -299,6 +304,19 @@ class BannerServiceTest {
         when(bannerRepository.findById(999L)).thenReturn(Optional.empty());
         assertThrows(BannerNotFoundException.class,
                 () -> bannerService.deleteBanner(999L, ADMIN_ID, CLIENT_IP, TRACE_ID));
+    }
+
+    @Test
+    @DisplayName("배너 생성 — S3에 이미지가 없으면 S3ImageNotFoundException")
+    void createBanner_imageNotFound_throwsS3ImageNotFoundException() {
+        CreateBannerCommand command = new CreateBannerCommand(
+                "배너", "https://bucket.s3.ap-northeast-2.amazonaws.com/uploads/banners/missing.jpg",
+                "https://landing.com", 1, null, null);
+        when(s3ImageValidationPort.imageExists(command.imageUrl())).thenReturn(false);
+
+        assertThrows(S3ImageNotFoundException.class,
+                () -> bannerService.createBanner(command, ADMIN_ID, CLIENT_IP, TRACE_ID));
+        verify(bannerRepository, never()).save(any());
     }
 
     @Test
