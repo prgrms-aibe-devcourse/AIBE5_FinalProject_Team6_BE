@@ -83,6 +83,7 @@ public class ScheduleService {
         return toResult(scheduleRepository.save(schedule));
     }
 
+    @Transactional(readOnly = true)
     public List<ScheduleResult> getLives(Long artistId) {
         return scheduleRepository.findLivesByArtistId(artistId)
                 .stream()
