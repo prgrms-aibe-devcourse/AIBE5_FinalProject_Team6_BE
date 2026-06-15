@@ -2,7 +2,9 @@ package com.fandrops.order.application.dto;
 
 import com.fandrops.order.domain.StoreBanner;
 import java.time.LocalDateTime;
+import lombok.Getter;
 
+@Getter
 public class StoreBannerResponse {
 
     private final Long id;
@@ -36,13 +38,4 @@ public class StoreBannerResponse {
                 banner.getStartAt(), banner.getEndAt(), banner.getProductId());
     }
 
-    public Long getId() { return id; }
-    public String getTitle() { return title; }
-    public String getImageUrl() { return imageUrl; }
-    public String getLandingUrl() { return landingUrl; }
-    public int getExposureOrder() { return exposureOrder; }
-    public String getStatus() { return status; }
-    public LocalDateTime getStartAt() { return startAt; }
-    public LocalDateTime getEndAt() { return endAt; }
-    public Long getProductId() { return productId; }
 }
