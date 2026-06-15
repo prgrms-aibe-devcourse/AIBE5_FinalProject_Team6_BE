@@ -3,6 +3,7 @@ package com.fandrops.order.api;
 import com.fandrops.order.api.dto.ApiError;
 import com.fandrops.order.api.dto.ApiResponse;
 import com.fandrops.order.domain.exception.AccessTicketInvalidException;
+import com.fandrops.order.domain.exception.OrderCancellationNotAllowedException;
 import com.fandrops.order.domain.exception.CartAccessDeniedException;
 import com.fandrops.order.domain.exception.ProductNotFoundException;
 import com.fandrops.order.domain.exception.RestockAlertNotFoundException;
@@ -43,6 +44,14 @@ public class OrderExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ApiResponse.error(
                         new ApiError("RESERVE_FAILED", e.getMessage(), true),
+                        MDC.get("traceId") != null ? MDC.get("traceId") : UUID.randomUUID().toString()));
+    }
+
+    @ExceptionHandler(OrderCancellationNotAllowedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleOrderCancellationNotAllowed(OrderCancellationNotAllowedException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error(
+                        new ApiError("ORDER_CANCELLATION_NOT_ALLOWED", e.getMessage(), false),
                         MDC.get("traceId") != null ? MDC.get("traceId") : UUID.randomUUID().toString()));
     }
 

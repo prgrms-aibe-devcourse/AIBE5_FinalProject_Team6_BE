@@ -8,6 +8,7 @@ import com.fandrops.order.application.dto.OrderListResponse;
 import com.fandrops.order.domain.Order;
 import com.fandrops.order.domain.OrderItem;
 import com.fandrops.order.domain.OrderStatus;
+import com.fandrops.order.domain.exception.OrderCancellationNotAllowedException;
 import com.fandrops.order.domain.exception.OrderNotFoundException;
 import com.fandrops.order.domain.exception.OutOfStockException;
 import com.fandrops.order.domain.exception.ReserveConflictException;
@@ -143,5 +144,22 @@ public class OrderService {
             return;
         }
         orderRepository.updateStatus(orderId, OrderStatus.COMPLETED);
+    }
+
+    /** 사용자 취소: RESERVED 상태만 허용. 재고 복구 후 CANCELLED 전이. */
+    @Transactional
+    public void cancelOrder(Long orderId, Long fanId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new OrderNotFoundException(orderId));
+        if (!order.getFanId().equals(fanId)) {
+            throw new OrderNotFoundException(orderId);
+        }
+        if (order.getStatus() != OrderStatus.RESERVED) {
+            throw new OrderCancellationNotAllowedException(orderId, order.getStatus());
+        }
+        for (OrderItem item : order.getItems()) {
+            inventoryRestorePort.restore(item.getProductId(), item.getQuantity(), orderId);
+        }
+        orderRepository.updateStatus(orderId, OrderStatus.CANCELLED);
     }
 }
