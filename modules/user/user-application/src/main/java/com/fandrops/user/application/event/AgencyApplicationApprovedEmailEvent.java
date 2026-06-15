@@ -5,4 +5,9 @@ public record AgencyApplicationApprovedEmailEvent(
         String email,
         String loginId,
         String tempPassword
-) {}
+) {
+    @Override
+    public String toString() {
+        return "AgencyApplicationApprovedEmailEvent[email=" + email + ", loginId=" + loginId + ", tempPassword=***]";
+    }
+}

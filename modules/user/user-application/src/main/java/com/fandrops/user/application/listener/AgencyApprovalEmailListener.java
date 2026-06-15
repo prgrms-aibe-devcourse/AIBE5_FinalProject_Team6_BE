@@ -26,7 +26,7 @@ public class AgencyApprovalEmailListener {
         } catch (Exception e) {
             // DB 커밋 이후 실패 — 승인 자체는 유효. 계정·임시 비밀번호는 DB에 저장됨.
             // TODO: 관리자 임시 비밀번호 재발급 기능 구현 후 재시도 가능하도록 개선
-            log.error("입점 승인 이메일 발송 실패. email={}", event.email(), e);
+            log.error("입점 승인 이메일 발송 실패", e);
         }
     }
 
@@ -36,7 +36,7 @@ public class AgencyApprovalEmailListener {
         try {
             emailNotificationPort.sendApplicationRejectedEmail(event.email(), event.rejectReason());
         } catch (Exception e) {
-            log.error("입점 반려 이메일 발송 실패. email={}", event.email(), e);
+            log.error("입점 반려 이메일 발송 실패", e);
         }
     }
 }

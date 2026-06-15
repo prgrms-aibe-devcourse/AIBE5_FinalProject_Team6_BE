@@ -294,6 +294,32 @@ class AgencyApplicationServiceTest {
     }
 
     @Test
+    @DisplayName("승인 이메일 이벤트에 email·loginId가 contactEmail로, tempPassword가 비어있지 않게 담긴다")
+    void approveApplication_success_emailEventContainsCorrectFields() {
+        AgencyApplication application = buildPendingApplication(1L);
+        when(agencyApplicationRepository.findById(1L)).thenReturn(Optional.of(application));
+        when(agencyAccountRepository.existsByLoginId("contact@hybe.com")).thenReturn(false);
+        when(passwordEncoder.encode(anyString())).thenReturn("hashedTempPw");
+        when(agencyApplicationRepository.save(any())).thenReturn(application);
+        when(agencyAccountRepository.save(any())).thenReturn(buildSavedAccount(100L));
+        when(artistProfileRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.approveApplication(1L, ADMIN_ID, CLIENT_IP, TRACE_ID);
+
+        ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
+        verify(eventPublisher, times(2)).publishEvent(captor.capture());
+        AgencyApplicationApprovedEmailEvent emailEvent = captor.getAllValues().stream()
+                .filter(e -> e instanceof AgencyApplicationApprovedEmailEvent)
+                .map(e -> (AgencyApplicationApprovedEmailEvent) e)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("AgencyApplicationApprovedEmailEvent 미발행"));
+        assertEquals("contact@hybe.com", emailEvent.email());
+        assertEquals("contact@hybe.com", emailEvent.loginId());
+        assertNotNull(emailEvent.tempPassword());
+        assertFalse(emailEvent.tempPassword().isBlank());
+    }
+
+    @Test
     @DisplayName("ArtistProfile 저장 실패 시 예외가 전파된다 — DB 롤백 의도 확인")
     void approveApplication_artistProfileSaveFails_exceptionPropagates() {
         AgencyApplication application = buildPendingApplication(1L);
