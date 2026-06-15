@@ -416,14 +416,14 @@ class AuthServiceTest {
     @Test
     @DisplayName("유효하지 않은 리프레시 토큰 시 InvalidTokenException")
     void refreshAccessToken_invalidToken_throwsInvalidTokenException() {
-        when(refreshTokenStore.getAndDelete("bad-token")).thenReturn(Optional.empty());
+        when(refreshTokenStore.find("bad-token")).thenReturn(Optional.empty());
         assertThrows(InvalidTokenException.class, () -> authService.refreshAccessToken("bad-token"));
     }
 
     @Test
-    @DisplayName("Refresh Token Rotation — GETDEL 원자 처리 후 신규 토큰 발급")
-    void refreshAccessToken_rotation_deletesOldAndIssuesNew() {
-        when(refreshTokenStore.getAndDelete("old-token")).thenReturn(Optional.of(new RefreshTokenEntry(5L, UserRole.FAN)));
+    @DisplayName("Refresh Token Rotation — 신규 토큰 발급 후 구 토큰 삭제 (발급→삭제 순서 보장)")
+    void refreshAccessToken_rotation_issuesNewThenDeletesOld() {
+        when(refreshTokenStore.find("old-token")).thenReturn(Optional.of(new RefreshTokenEntry(5L, UserRole.FAN)));
         when(jwtProvider.generateAccessToken(5L, UserRole.FAN)).thenReturn("new-access");
         when(jwtProvider.generateRefreshToken(5L)).thenReturn("new-refresh");
         when(jwtProvider.getAccessTokenExpiresIn()).thenReturn(1800L);
@@ -431,8 +431,9 @@ class AuthServiceTest {
         AuthTokenResult result = authService.refreshAccessToken("old-token");
 
         InOrder inOrder = inOrder(refreshTokenStore);
-        inOrder.verify(refreshTokenStore).getAndDelete("old-token");
+        inOrder.verify(refreshTokenStore).find("old-token");
         inOrder.verify(refreshTokenStore).save("new-refresh", 5L, UserRole.FAN);
+        inOrder.verify(refreshTokenStore).delete("old-token");
         assertEquals("new-access", result.accessToken());
         assertEquals("new-refresh", result.refreshToken());
     }
@@ -440,7 +441,7 @@ class AuthServiceTest {
     @Test
     @DisplayName("Admin Refresh Token Rotation — role=ADMIN 역할 보존")
     void refreshAccessToken_admin_preservesAdminRole() {
-        when(refreshTokenStore.getAndDelete("admin-old-token")).thenReturn(Optional.of(new RefreshTokenEntry(100L, UserRole.ADMIN)));
+        when(refreshTokenStore.find("admin-old-token")).thenReturn(Optional.of(new RefreshTokenEntry(100L, UserRole.ADMIN)));
         when(jwtProvider.generateAccessToken(100L, UserRole.ADMIN)).thenReturn("new-admin-access");
         when(jwtProvider.generateRefreshToken(100L)).thenReturn("new-admin-refresh");
         when(jwtProvider.getAccessTokenExpiresIn()).thenReturn(1800L);
@@ -452,13 +453,15 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("Refresh Token Rotation — 토큰 생성 실패 시 InvalidTokenException (강제 재로그인)")
-    void refreshAccessToken_issueTokensFails_throwsInvalidTokenException() {
-        when(refreshTokenStore.getAndDelete("valid-token")).thenReturn(Optional.of(new RefreshTokenEntry(5L, UserRole.FAN)));
+    @DisplayName("Refresh Token Rotation — 발급 실패 시 구 토큰 보존 (재시도 가능)")
+    void refreshAccessToken_issueTokensFails_oldTokenPreserved() {
+        when(refreshTokenStore.find("valid-token")).thenReturn(Optional.of(new RefreshTokenEntry(5L, UserRole.FAN)));
         when(jwtProvider.generateAccessToken(5L, UserRole.FAN)).thenThrow(new RuntimeException("token generation failure"));
 
-        assertThrows(InvalidTokenException.class, () -> authService.refreshAccessToken("valid-token"));
-        verify(refreshTokenStore).getAndDelete("valid-token");
+        assertThrows(RuntimeException.class, () -> authService.refreshAccessToken("valid-token"));
+        verify(refreshTokenStore).find("valid-token");
+        // 발급 실패 시 삭제 미실행 — 구 토큰 보존으로 재시도 가능
+        verify(refreshTokenStore, never()).delete(anyString());
         verify(refreshTokenStore, never()).save(anyString(), anyLong(), any(UserRole.class));
     }
 

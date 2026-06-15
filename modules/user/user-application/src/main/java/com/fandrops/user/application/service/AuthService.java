@@ -159,17 +159,14 @@ public class AuthService {
         refreshTokenStore.delete(refreshToken);
     }
 
-    // Access Token 재발급 (Refresh Token Rotation) — GETDEL로 조회+삭제 원자 처리
+    // Access Token 재발급 (Refresh Token Rotation) — 발급 먼저, 삭제 나중
+    // 발급 실패 시 구 토큰이 Redis에 남아 있으므로 클라이언트가 동일 토큰으로 재시도 가능
     public AuthTokenResult refreshAccessToken(String refreshToken) {
-        RefreshTokenEntry entry = refreshTokenStore.getAndDelete(refreshToken)
+        RefreshTokenEntry entry = refreshTokenStore.find(refreshToken)
                 .orElseThrow(() -> new InvalidTokenException("유효하지 않은 리프레시 토큰입니다."));
-        try {
-            return issueTokens(entry.userId(), entry.role());
-        } catch (RuntimeException e) {
-            // issueTokens 실패 시 구 토큰 소실 → 재로그인 필요.
-            // Redis 장애 확률 < 토큰 재사용 방지를 우선한 의도적 선택.
-            throw new InvalidTokenException("토큰 재발급에 실패했습니다. 다시 로그인해 주세요.", e);
-        }
+        AuthTokenResult result = issueTokens(entry.userId(), entry.role());
+        refreshTokenStore.delete(refreshToken);
+        return result;
     }
 
     // 비밀번호 재설정 요청 — 이메일 발송 포함, 트랜잭션 없음 (커넥션 풀 고갈 방지)
