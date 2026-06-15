@@ -73,6 +73,11 @@ public abstract class CommunityControllerSupport {
                         || a.getAuthority().equals("AGENCY"));
     }
 
+    protected static boolean hasAgencyRole(Authentication authentication) {
+        return authentication.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("AGENCY"));
+    }
+
     protected static boolean hasFanRole(Authentication authentication) {
         return authentication.getAuthorities().stream()
                 .anyMatch(a -> a.getAuthority().equals("FAN"));

@@ -1,6 +1,7 @@
 package com.fandrops.community.infrastructure.schedule;
 
 import com.fandrops.community.domain.schedule.ArtistSchedule;
+import com.fandrops.community.domain.schedule.ArtistScheduleType;
 import com.fandrops.community.domain.schedule.repository.ArtistScheduleRepository;
 import com.fandrops.community.infrastructure.schedule.jpa.ArtistScheduleJpaEntity;
 import com.fandrops.community.infrastructure.schedule.jpa.ArtistScheduleJpaRepository;
@@ -40,6 +41,13 @@ public class ArtistScheduleRepositoryAdapter implements ArtistScheduleRepository
     }
 
     @Override
+    public List<ArtistSchedule> findLivesByArtistId(Long artistId) {
+        return jpaRepository
+                .findByArtistIdAndTypeOrderByScheduledAtAsc(artistId, ArtistScheduleType.LIVE)
+                .stream().map(this::toDomain).toList();
+    }
+
+    @Override
     public ArtistSchedule save(ArtistSchedule schedule) {
         return toDomain(jpaRepository.save(toJpa(schedule)));
     }
@@ -47,12 +55,12 @@ public class ArtistScheduleRepositoryAdapter implements ArtistScheduleRepository
     private ArtistScheduleJpaEntity toJpa(ArtistSchedule s) {
         return new ArtistScheduleJpaEntity(
                 s.getId(), s.getArtistId(), s.getNoticeId(),
-                s.getTitle(), s.getType(), s.getScheduledAt());
+                s.getTitle(), s.getType(), s.getScheduledAt(), s.getLiveUrl());
     }
 
     private ArtistSchedule toDomain(ArtistScheduleJpaEntity e) {
         return ArtistSchedule.reconstruct(
                 e.getId(), e.getArtistId(), e.getNoticeId(),
-                e.getTitle(), e.getType(), e.getScheduledAt());
+                e.getTitle(), e.getType(), e.getScheduledAt(), e.getLiveUrl());
     }
 }
