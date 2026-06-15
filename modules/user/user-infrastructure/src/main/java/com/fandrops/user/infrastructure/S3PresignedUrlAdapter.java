@@ -8,6 +8,7 @@ import com.fandrops.user.infrastructure.config.S3Properties;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 
@@ -46,8 +47,10 @@ public class S3PresignedUrlAdapter implements S3PresignedUrlPort {
         String presignedUrl;
         try {
             presignedUrl = presigner.presignPutObject(presignRequest).url().toString();
+        } catch (S3Exception e) {
+            throw new S3OperationException("S3 Presigned URL 생성 실패 (S3 응답 오류 " + e.statusCode() + ")", e);
         } catch (SdkClientException e) {
-            throw new S3OperationException("S3 Presigned URL 생성 실패", e);
+            throw new S3OperationException("S3 Presigned URL 생성 실패 (네트워크/자격증명 오류)", e);
         }
 
         String imageUrl = "https://%s.s3.%s.amazonaws.com/%s"
