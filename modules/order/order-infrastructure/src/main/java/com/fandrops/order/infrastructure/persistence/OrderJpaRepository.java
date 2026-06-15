@@ -19,4 +19,6 @@ public interface OrderJpaRepository extends JpaRepository<OrderEntity, Long> {
 
     @Query("SELECT o FROM OrderEntity o WHERE o.fanId = :fanId AND (:cursor IS NULL OR o.id < :cursor) ORDER BY o.id DESC LIMIT :size")
     List<OrderEntity> findByFanIdCursor(@Param("fanId") Long fanId, @Param("cursor") Long cursor, @Param("size") int size);
+
+    long countByStatus(OrderStatus status);
 }
