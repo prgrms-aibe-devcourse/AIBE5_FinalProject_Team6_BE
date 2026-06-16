@@ -9,6 +9,7 @@ import com.fandrops.inventory.domain.InventoryHistory;
 import com.fandrops.inventory.domain.InventoryRefType;
 import com.fandrops.inventory.domain.exception.InvalidInventoryStateException;
 import com.fandrops.inventory.domain.exception.OutOfStockException;
+import com.fandrops.inventory.domain.exception.ReserveFailedException;
 import com.fandrops.inventory.domain.port.InventoryHistoryRepository;
 import com.fandrops.inventory.domain.port.InventoryRepository;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -27,7 +28,7 @@ public class InventoryCommandService {
         this.inventoryHistoryRepository = inventoryHistoryRepository;
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = {OutOfStockException.class, ReserveFailedException.class, InventoryLockConflictException.class})
     public void reserve(Long orderId, Long productId, int qty) {
         int affected = inventoryRepository.reserveAtomic(productId, qty);
         if (affected == 0) {
