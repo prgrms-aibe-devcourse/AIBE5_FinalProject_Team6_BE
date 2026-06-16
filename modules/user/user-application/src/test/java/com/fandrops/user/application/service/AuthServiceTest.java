@@ -493,6 +493,41 @@ class AuthServiceTest {
         verify(counter).increment();
     }
 
+    @Test
+    @DisplayName("Agency SUSPENDED — Refresh Token 갱신 시 InvalidTokenException (보안 결함 #265)")
+    void refreshAccessToken_suspendedAgency_throwsInvalidTokenException() {
+        AgencyAccount suspended = AgencyAccount.builder()
+                .id(11L).loginId("agency@fandrops.com").passwordHash("hash")
+                .companyName("Corp").contactEmail("agency@fandrops.com")
+                .status(AgencyAccountStatus.SUSPENDED).build();
+        when(refreshTokenStore.find("agency-token")).thenReturn(Optional.of(new RefreshTokenEntry(11L, UserRole.AGENCY)));
+        when(agencyAccountRepository.findById(11L)).thenReturn(Optional.of(suspended));
+
+        assertThrows(InvalidTokenException.class, () -> authService.refreshAccessToken("agency-token"));
+        verify(agencyAccountRepository).findById(11L);
+        verify(jwtProvider, never()).generateAccessToken(anyLong(), any(UserRole.class));
+    }
+
+    @Test
+    @DisplayName("Agency ACTIVE — Refresh Token 갱신 정상 발급 및 DB status 확인")
+    void refreshAccessToken_activeAgency_issuesNewToken() {
+        AgencyAccount active = AgencyAccount.builder()
+                .id(12L).loginId("active@fandrops.com").passwordHash("hash")
+                .companyName("Corp").contactEmail("active@fandrops.com")
+                .status(AgencyAccountStatus.ACTIVE).build();
+        when(refreshTokenStore.find("agency-token")).thenReturn(Optional.of(new RefreshTokenEntry(12L, UserRole.AGENCY)));
+        when(agencyAccountRepository.findById(12L)).thenReturn(Optional.of(active));
+        when(jwtProvider.generateAccessToken(12L, UserRole.AGENCY)).thenReturn("new-agency-access");
+        when(jwtProvider.generateRefreshToken(12L)).thenReturn("new-agency-refresh");
+        when(jwtProvider.getAccessTokenExpiresIn()).thenReturn(1800L);
+
+        AuthTokenResult result = authService.refreshAccessToken("agency-token");
+
+        verify(agencyAccountRepository).findById(12L);
+        assertEquals("new-agency-access", result.accessToken());
+        assertEquals("new-agency-refresh", result.refreshToken());
+    }
+
     // ── confirmPasswordReset ────────────────────────────────────────────────
 
     @Test
