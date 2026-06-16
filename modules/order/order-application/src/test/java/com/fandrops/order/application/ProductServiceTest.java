@@ -69,9 +69,9 @@ class ProductServiceTest {
         @Test
         @DisplayName("상시 목록 반환 — size 미만이면 nextCursor null")
         void getProducts_regular_nextCursorNull() {
-            given(productRepository.findRegularProducts(null, 20)).willReturn(List.of(product()));
+            given(productRepository.findRegularProducts(null, null, 20)).willReturn(List.of(product()));
 
-            ProductListResponse result = sut.getProducts("regular", null, 20);
+            ProductListResponse result = sut.getProducts("regular", null, null, 20);
 
             assertEquals(1, result.getItems().size());
             assertNull(result.getNextCursor());
@@ -85,12 +85,23 @@ class ProductServiceTest {
                     Product.of(2L, ARTIST_ID, "상품2", BigDecimal.valueOf(10000), ProductStatus.ON_SALE, null, null, LocalDateTime.now()),
                     Product.of(1L, ARTIST_ID, "상품1", BigDecimal.valueOf(10000), ProductStatus.ON_SALE, null, null, LocalDateTime.now())
             );
-            given(productRepository.findRegularProducts(null, 3)).willReturn(products);
+            given(productRepository.findRegularProducts(null, null, 3)).willReturn(products);
 
-            ProductListResponse result = sut.getProducts("regular", null, 3);
+            ProductListResponse result = sut.getProducts("regular", null, null, 3);
 
             assertEquals(3, result.getItems().size());
             assertEquals(1L, result.getNextCursor());
+        }
+
+        @Test
+        @DisplayName("artistId 전달 시 해당 아티스트 상품만 반환")
+        void getProducts_withArtistId_filtersCorrectly() {
+            given(productRepository.findRegularProducts(ARTIST_ID, null, 20)).willReturn(List.of(product()));
+
+            ProductListResponse result = sut.getProducts("regular", ARTIST_ID, null, 20);
+
+            verify(productRepository).findRegularProducts(ARTIST_ID, null, 20);
+            assertEquals(1, result.getItems().size());
         }
     }
 
@@ -101,12 +112,12 @@ class ProductServiceTest {
         @Test
         @DisplayName("drops type 요청 시 findDropsProducts 호출")
         void getProducts_drops_callsDropsRepository() {
-            given(productRepository.findDropsProducts(null, 20)).willReturn(List.of(dropsProduct(1L)));
+            given(productRepository.findDropsProducts(null, null, 20)).willReturn(List.of(dropsProduct(1L)));
 
-            ProductListResponse result = sut.getProducts("drops", null, 20);
+            ProductListResponse result = sut.getProducts("drops", null, null, 20);
 
-            verify(productRepository).findDropsProducts(null, 20);
-            verify(productRepository, never()).findRegularProducts(any(), any(Integer.class));
+            verify(productRepository).findDropsProducts(null, null, 20);
+            verify(productRepository, never()).findRegularProducts(any(), any(), any(Integer.class));
             assertEquals(1, result.getItems().size());
         }
     }
