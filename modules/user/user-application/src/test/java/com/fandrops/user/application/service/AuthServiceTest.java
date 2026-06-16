@@ -10,6 +10,8 @@ import com.fandrops.user.domain.ArtistMember;
 import com.fandrops.user.domain.AuthProvider;
 import com.fandrops.user.domain.Fan;
 import com.fandrops.user.domain.UserRole;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -41,16 +43,20 @@ class AuthServiceTest {
     @Mock PasswordResetTokenStore passwordResetTokenStore;
     @Mock OAuthClient oAuthClient;
     @Mock EmailNotificationPort emailNotificationPort;
+    @Mock MeterRegistry meterRegistry;
+    @Mock Counter counter;
 
     AuthService authService;
 
     @BeforeEach
     void setUp() {
+        lenient().when(meterRegistry.counter(anyString())).thenReturn(counter);
         when(passwordEncoder.encode("dummy")).thenReturn("$2a$10$mockedDummyHash");
         authService = new AuthService(
                 userRepository, adminAccountRepository, agencyAccountRepository,
                 artistMemberRepository, passwordEncoder, jwtProvider,
-                refreshTokenStore, passwordResetTokenStore, oAuthClient, emailNotificationPort
+                refreshTokenStore, passwordResetTokenStore, oAuthClient, emailNotificationPort,
+                meterRegistry
         );
     }
 
@@ -482,6 +488,9 @@ class AuthServiceTest {
         // 새 토큰은 이미 Redis에 저장됨 — orphan으로 TTL(7일) 만료 대기
         verify(refreshTokenStore).save("new-refresh", 5L, UserRole.FAN);
         verify(refreshTokenStore).delete("old-token");
+        // delete 실패 시 Prometheus 카운터 증가로 orphan 발생 추적 가능
+        verify(meterRegistry).counter("fandrops_token_rotation_delete_errors_total");
+        verify(counter).increment();
     }
 
     // ── confirmPasswordReset ────────────────────────────────────────────────

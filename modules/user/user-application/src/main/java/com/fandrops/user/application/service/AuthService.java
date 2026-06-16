@@ -10,12 +10,15 @@ import com.fandrops.user.domain.ArtistMember;
 import com.fandrops.user.domain.AuthProvider;
 import com.fandrops.user.domain.Fan;
 import com.fandrops.user.domain.UserRole;
+import io.micrometer.core.instrument.MeterRegistry;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
 
+@Slf4j
 @Service
 public class AuthService {
 
@@ -29,6 +32,7 @@ public class AuthService {
     private final PasswordResetTokenStore passwordResetTokenStore;
     private final OAuthClient oAuthClient;
     private final EmailNotificationPort emailNotificationPort;
+    private final MeterRegistry meterRegistry;
     private final String dummyPasswordHash;
 
     public AuthService(
@@ -41,7 +45,8 @@ public class AuthService {
             RefreshTokenStore refreshTokenStore,
             PasswordResetTokenStore passwordResetTokenStore,
             OAuthClient oAuthClient,
-            EmailNotificationPort emailNotificationPort) {
+            EmailNotificationPort emailNotificationPort,
+            MeterRegistry meterRegistry) {
         this.userRepository = userRepository;
         this.adminAccountRepository = adminAccountRepository;
         this.agencyAccountRepository = agencyAccountRepository;
@@ -52,6 +57,7 @@ public class AuthService {
         this.passwordResetTokenStore = passwordResetTokenStore;
         this.oAuthClient = oAuthClient;
         this.emailNotificationPort = emailNotificationPort;
+        this.meterRegistry = meterRegistry;
         this.dummyPasswordHash = passwordEncoder.encode("dummy");
     }
 
@@ -167,7 +173,13 @@ public class AuthService {
         RefreshTokenEntry entry = refreshTokenStore.find(refreshToken)
                 .orElseThrow(() -> new InvalidTokenException("유효하지 않은 리프레시 토큰입니다."));
         AuthTokenResult result = issueTokens(entry.userId(), entry.role());
-        refreshTokenStore.delete(refreshToken);
+        try {
+            refreshTokenStore.delete(refreshToken);
+        } catch (Exception e) {
+            meterRegistry.counter("fandrops_token_rotation_delete_errors_total").increment();
+            log.error("[Rotation] 구 토큰 삭제 실패 — orphan 생성, TTL 만료로 자연 소멸", e);
+            throw e;
+        }
         return result;
     }
 
