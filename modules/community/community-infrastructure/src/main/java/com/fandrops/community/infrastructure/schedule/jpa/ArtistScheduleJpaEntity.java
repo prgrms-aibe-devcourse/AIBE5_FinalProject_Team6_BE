@@ -38,4 +38,7 @@ public class ArtistScheduleJpaEntity {
 
     @Column(name = "live_url", length = 2048)
     private String liveUrl;
+
+    @Column(name = "content", columnDefinition = "TEXT")
+    private String content;
 }
