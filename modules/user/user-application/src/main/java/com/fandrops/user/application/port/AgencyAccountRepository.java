@@ -6,6 +6,7 @@ import java.util.Optional;
 
 public interface AgencyAccountRepository {
     AgencyAccount save(AgencyAccount account);
+    Optional<AgencyAccount> findById(Long id);
     Optional<AgencyAccount> findByLoginId(String loginId);
     boolean existsByLoginId(String loginId);
 }
