@@ -2,6 +2,9 @@ package com.fandrops.user.application.service;
 
 import com.fandrops.user.application.dto.AgencyApplicationResult;
 import com.fandrops.user.application.dto.CreateAgencyApplicationCommand;
+import com.fandrops.user.application.event.AgencyApplicationApprovedEmailEvent;
+import com.fandrops.user.application.event.AgencyApplicationRejectedEmailEvent;
+import com.fandrops.user.application.event.AgencyApprovedEvent;
 import com.fandrops.user.application.exception.AgencyApplicationNotFoundException;
 import com.fandrops.user.application.exception.DuplicateAgencyAccountException;
 import com.fandrops.user.application.exception.DuplicateApplicationException;
@@ -9,7 +12,6 @@ import com.fandrops.user.application.port.AgencyAccountRepository;
 import com.fandrops.user.application.port.AgencyApplicationRepository;
 import com.fandrops.user.application.port.ArtistProfileRepository;
 import com.fandrops.user.application.port.AuditLogPort;
-import com.fandrops.user.application.port.EmailNotificationPort;
 import com.fandrops.user.domain.AgencyAccount;
 import com.fandrops.user.domain.AgencyAccountStatus;
 import com.fandrops.user.domain.AgencyApplication;
@@ -18,7 +20,6 @@ import com.fandrops.user.domain.AgencyApplicationStatus;
 import com.fandrops.user.domain.ArtistProfile;
 import com.fandrops.user.domain.AuditLog;
 import com.fandrops.user.domain.UserRole;
-import com.fandrops.user.application.event.AgencyApprovedEvent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -30,7 +31,6 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 
@@ -44,7 +44,6 @@ class AgencyApplicationServiceTest {
     @Mock AgencyApplicationRepository agencyApplicationRepository;
     @Mock AgencyAccountRepository agencyAccountRepository;
     @Mock ArtistProfileRepository artistProfileRepository;
-    @Mock EmailNotificationPort emailNotificationPort;
     @Mock PasswordEncoder passwordEncoder;
     @Mock ApplicationEventPublisher eventPublisher;
     @Mock AuditLogPort auditLogPort;
@@ -59,7 +58,7 @@ class AgencyApplicationServiceTest {
     void setUp() {
         service = new AgencyApplicationService(
                 agencyApplicationRepository, agencyAccountRepository,
-                artistProfileRepository, emailNotificationPort, passwordEncoder,
+                artistProfileRepository, passwordEncoder,
                 eventPublisher, auditLogPort);
     }
 
@@ -159,7 +158,7 @@ class AgencyApplicationServiceTest {
     // ── approveApplication ───────────────────────────────────────────────────
 
     @Test
-    @DisplayName("정상 승인 시 APPROVED 저장 + AgencyAccount 생성 + ArtistProfile 생성 + 이메일 발송")
+    @DisplayName("정상 승인 시 APPROVED 저장 + AgencyAccount 생성 + ArtistProfile 생성 + 이메일 이벤트 발행")
     void approveApplication_success() {
         AgencyApplication application = buildPendingApplication(1L);
         when(agencyApplicationRepository.findById(1L)).thenReturn(Optional.of(application));
@@ -174,8 +173,7 @@ class AgencyApplicationServiceTest {
         verify(agencyApplicationRepository).save(any());
         verify(agencyAccountRepository).save(any());
         verify(artistProfileRepository).save(any());
-        verify(emailNotificationPort).sendApplicationApprovedEmail(
-                eq("contact@hybe.com"), eq("contact@hybe.com"), anyString());
+        verify(eventPublisher).publishEvent(any(AgencyApplicationApprovedEmailEvent.class));
         verify(auditLogPort).save(any(AuditLog.class));
     }
 
@@ -187,7 +185,7 @@ class AgencyApplicationServiceTest {
         assertThrows(AgencyApplicationNotFoundException.class,
                 () -> service.approveApplication(99L, ADMIN_ID, CLIENT_IP, TRACE_ID));
         verify(agencyAccountRepository, never()).save(any());
-        verify(emailNotificationPort, never()).sendApplicationApprovedEmail(any(), any(), any());
+        verify(eventPublisher, never()).publishEvent(any(AgencyApplicationApprovedEmailEvent.class));
     }
 
     @Test
@@ -202,7 +200,7 @@ class AgencyApplicationServiceTest {
 
         // 중복 체크 후 approve()가 호출되지 않았으므로 save도 없어야 함
         verify(agencyApplicationRepository, never()).save(any());
-        verify(emailNotificationPort, never()).sendApplicationApprovedEmail(any(), any(), any());
+        verify(eventPublisher, never()).publishEvent(any(AgencyApplicationApprovedEmailEvent.class));
     }
 
     @Test
@@ -283,12 +281,42 @@ class AgencyApplicationServiceTest {
 
         service.approveApplication(1L, ADMIN_ID, CLIENT_IP, TRACE_ID);
 
-        ArgumentCaptor<AgencyApprovedEvent> captor = ArgumentCaptor.forClass(AgencyApprovedEvent.class);
-        verify(eventPublisher).publishEvent(captor.capture());
-        AgencyApprovedEvent event = captor.getValue();
+        ArgumentCaptor<Object> allEventsCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(eventPublisher, times(2)).publishEvent(allEventsCaptor.capture());
+        AgencyApprovedEvent event = allEventsCaptor.getAllValues().stream()
+                .filter(e -> e instanceof AgencyApprovedEvent)
+                .map(e -> (AgencyApprovedEvent) e)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("AgencyApprovedEvent 미발행"));
         assertEquals(42L, event.getArtistId());
         assertEquals(100L, event.getAgencyId());
         assertEquals("BTS", event.getArtistName());
+    }
+
+    @Test
+    @DisplayName("승인 이메일 이벤트에 email·loginId가 contactEmail로, tempPassword가 비어있지 않게 담긴다")
+    void approveApplication_success_emailEventContainsCorrectFields() {
+        AgencyApplication application = buildPendingApplication(1L);
+        when(agencyApplicationRepository.findById(1L)).thenReturn(Optional.of(application));
+        when(agencyAccountRepository.existsByLoginId("contact@hybe.com")).thenReturn(false);
+        when(passwordEncoder.encode(anyString())).thenReturn("hashedTempPw");
+        when(agencyApplicationRepository.save(any())).thenReturn(application);
+        when(agencyAccountRepository.save(any())).thenReturn(buildSavedAccount(100L));
+        when(artistProfileRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.approveApplication(1L, ADMIN_ID, CLIENT_IP, TRACE_ID);
+
+        ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
+        verify(eventPublisher, times(2)).publishEvent(captor.capture());
+        AgencyApplicationApprovedEmailEvent emailEvent = captor.getAllValues().stream()
+                .filter(e -> e instanceof AgencyApplicationApprovedEmailEvent)
+                .map(e -> (AgencyApplicationApprovedEmailEvent) e)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("AgencyApplicationApprovedEmailEvent 미발행"));
+        assertEquals("contact@hybe.com", emailEvent.email());
+        assertEquals("contact@hybe.com", emailEvent.loginId());
+        assertNotNull(emailEvent.tempPassword());
+        assertFalse(emailEvent.tempPassword().isBlank());
     }
 
     @Test
@@ -305,30 +333,14 @@ class AgencyApplicationServiceTest {
 
         assertThrows(RuntimeException.class,
                 () -> service.approveApplication(1L, ADMIN_ID, CLIENT_IP, TRACE_ID));
-        verify(emailNotificationPort, never()).sendApplicationApprovedEmail(any(), any(), any());
-    }
-
-    @Test
-    @DisplayName("이메일 발송 실패 시 예외가 전파된다 — DB 롤백 의도 확인")
-    void approveApplication_emailFails_exceptionPropagates() {
-        AgencyApplication application = buildPendingApplication(1L);
-        when(agencyApplicationRepository.findById(1L)).thenReturn(Optional.of(application));
-        when(agencyAccountRepository.existsByLoginId("contact@hybe.com")).thenReturn(false);
-        when(passwordEncoder.encode(anyString())).thenReturn("hashedTempPw");
-        when(agencyApplicationRepository.save(any())).thenReturn(application);
-        when(agencyAccountRepository.save(any())).thenReturn(buildSavedAccount(100L));
-        when(artistProfileRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        doThrow(new RuntimeException("메일 서버 연결 실패"))
-                .when(emailNotificationPort).sendApplicationApprovedEmail(any(), any(), any());
-
-        assertThrows(RuntimeException.class,
-                () -> service.approveApplication(1L, ADMIN_ID, CLIENT_IP, TRACE_ID));
+        verify(eventPublisher, never()).publishEvent(any(AgencyApprovedEvent.class));
+        verify(eventPublisher, never()).publishEvent(any(AgencyApplicationApprovedEmailEvent.class));
     }
 
     // ── rejectApplication ────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("정상 반려 시 REJECTED 저장 + 이메일 발송")
+    @DisplayName("정상 반려 시 REJECTED 저장 + 이메일 이벤트 발행")
     void rejectApplication_success() {
         AgencyApplication application = buildPendingApplication(1L);
         when(agencyApplicationRepository.findById(1L)).thenReturn(Optional.of(application));
@@ -337,8 +349,24 @@ class AgencyApplicationServiceTest {
         service.rejectApplication(1L, "서류 미비", ADMIN_ID, CLIENT_IP, TRACE_ID);
 
         verify(agencyApplicationRepository).save(any());
-        verify(emailNotificationPort).sendApplicationRejectedEmail("contact@hybe.com", "서류 미비");
+        verify(eventPublisher).publishEvent(any(AgencyApplicationRejectedEmailEvent.class));
         verify(auditLogPort).save(any(AuditLog.class));
+    }
+
+    @Test
+    @DisplayName("반려 이벤트에 email과 rejectReason이 정확히 담긴다")
+    void rejectApplication_success_eventContainsCorrectFields() {
+        AgencyApplication application = buildPendingApplication(1L);
+        when(agencyApplicationRepository.findById(1L)).thenReturn(Optional.of(application));
+        when(agencyApplicationRepository.save(any())).thenReturn(application);
+
+        service.rejectApplication(1L, "서류 미비", ADMIN_ID, CLIENT_IP, TRACE_ID);
+
+        ArgumentCaptor<AgencyApplicationRejectedEmailEvent> captor =
+                ArgumentCaptor.forClass(AgencyApplicationRejectedEmailEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        assertEquals("contact@hybe.com", captor.getValue().email());
+        assertEquals("서류 미비", captor.getValue().rejectReason());
     }
 
     @Test
@@ -348,7 +376,7 @@ class AgencyApplicationServiceTest {
 
         assertThrows(AgencyApplicationNotFoundException.class,
                 () -> service.rejectApplication(99L, "서류 미비", ADMIN_ID, CLIENT_IP, TRACE_ID));
-        verify(emailNotificationPort, never()).sendApplicationRejectedEmail(any(), any());
+        verify(eventPublisher, never()).publishEvent(any(AgencyApplicationRejectedEmailEvent.class));
     }
 
     @Test
@@ -360,20 +388,7 @@ class AgencyApplicationServiceTest {
         assertThrows(AgencyApplicationAlreadyReviewedException.class,
                 () -> service.rejectApplication(1L, "추가 사유", ADMIN_ID, CLIENT_IP, TRACE_ID));
         verify(agencyApplicationRepository, never()).save(any());
-        verify(emailNotificationPort, never()).sendApplicationRejectedEmail(any(), any());
-    }
-
-    @Test
-    @DisplayName("반려 이메일 발송 실패 시 예외가 전파된다 — DB 롤백 의도 확인")
-    void rejectApplication_emailFails_exceptionPropagates() {
-        AgencyApplication application = buildPendingApplication(1L);
-        when(agencyApplicationRepository.findById(1L)).thenReturn(Optional.of(application));
-        when(agencyApplicationRepository.save(any())).thenReturn(application);
-        doThrow(new RuntimeException("메일 서버 연결 실패"))
-                .when(emailNotificationPort).sendApplicationRejectedEmail(any(), any());
-
-        assertThrows(RuntimeException.class,
-                () -> service.rejectApplication(1L, "서류 미비", ADMIN_ID, CLIENT_IP, TRACE_ID));
+        verify(eventPublisher, never()).publishEvent(any(AgencyApplicationRejectedEmailEvent.class));
     }
 
     @Test
