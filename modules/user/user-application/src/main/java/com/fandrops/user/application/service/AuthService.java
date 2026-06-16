@@ -175,9 +175,11 @@ public class AuthService {
 
         // Redis는 status를 저장하지 않으므로 AGENCY는 DB에서 ACTIVE 여부를 재확인
         if (entry.role() == UserRole.AGENCY) {
-            agencyAccountRepository.findById(entry.userId())
-                    .filter(a -> a.getStatus() == AgencyAccountStatus.ACTIVE)
-                    .orElseThrow(() -> new InvalidTokenException("정지된 계정은 토큰을 갱신할 수 없습니다."));
+            AgencyAccount agency = agencyAccountRepository.findById(entry.userId())
+                    .orElseThrow(() -> new InvalidTokenException("유효하지 않은 리프레시 토큰입니다."));
+            if (agency.getStatus() != AgencyAccountStatus.ACTIVE) {
+                throw new InvalidTokenException("정지된 계정은 토큰을 갱신할 수 없습니다.");
+            }
         }
 
         AuthTokenResult result = issueTokens(entry.userId(), entry.role());

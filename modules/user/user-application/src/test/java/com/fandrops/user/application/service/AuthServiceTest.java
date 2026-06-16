@@ -440,6 +440,7 @@ class AuthServiceTest {
         inOrder.verify(refreshTokenStore).find("old-token");
         inOrder.verify(refreshTokenStore).save("new-refresh", 5L, UserRole.FAN);
         inOrder.verify(refreshTokenStore).delete("old-token");
+        verify(agencyAccountRepository, never()).findById(anyLong());
         assertEquals("new-access", result.accessToken());
         assertEquals("new-refresh", result.refreshToken());
     }
@@ -458,6 +459,7 @@ class AuthServiceTest {
         inOrder.verify(refreshTokenStore).find("admin-old-token");
         inOrder.verify(refreshTokenStore).save("new-admin-refresh", 100L, UserRole.ADMIN);
         inOrder.verify(refreshTokenStore).delete("admin-old-token");
+        verify(agencyAccountRepository, never()).findById(anyLong());
         verify(jwtProvider).generateAccessToken(100L, UserRole.ADMIN);
         assertEquals("new-admin-access", result.accessToken());
     }
