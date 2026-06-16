@@ -10,6 +10,7 @@ import com.fandrops.user.application.exception.DuplicateAgencyAccountException;
 import com.fandrops.user.application.exception.DuplicateApplicationException;
 import com.fandrops.user.application.port.AgencyAccountRepository;
 import com.fandrops.user.application.port.AgencyApplicationRepository;
+import com.fandrops.user.application.port.ArtistMemberRepository;
 import com.fandrops.user.application.port.ArtistProfileRepository;
 import com.fandrops.user.application.port.AuditLogPort;
 import com.fandrops.user.domain.AgencyAccount;
@@ -35,6 +36,7 @@ public class AgencyApplicationService {
 
     private final AgencyApplicationRepository agencyApplicationRepository;
     private final AgencyAccountRepository agencyAccountRepository;
+    private final ArtistMemberRepository artistMemberRepository;
     private final ArtistProfileRepository artistProfileRepository;
     private final PasswordEncoder passwordEncoder;
     private final ApplicationEventPublisher eventPublisher;
@@ -43,12 +45,14 @@ public class AgencyApplicationService {
     public AgencyApplicationService(
             AgencyApplicationRepository agencyApplicationRepository,
             AgencyAccountRepository agencyAccountRepository,
+            ArtistMemberRepository artistMemberRepository,
             ArtistProfileRepository artistProfileRepository,
             PasswordEncoder passwordEncoder,
             ApplicationEventPublisher eventPublisher,
             AuditLogPort auditLogPort) {
         this.agencyApplicationRepository = agencyApplicationRepository;
         this.agencyAccountRepository = agencyAccountRepository;
+        this.artistMemberRepository = artistMemberRepository;
         this.artistProfileRepository = artistProfileRepository;
         this.passwordEncoder = passwordEncoder;
         this.eventPublisher = eventPublisher;
@@ -103,6 +107,10 @@ public class AgencyApplicationService {
         String loginId = application.getContactEmail();
         if (agencyAccountRepository.existsByLoginId(loginId)) {
             throw new DuplicateAgencyAccountException("이미 해당 이메일로 운영자 계정이 존재합니다: " + loginId);
+        }
+        // ArtistMember와 loginId 충돌 방지 — 동일 loginId 존재 시 ArtistMember 영구 로그인 불가 (#267)
+        if (artistMemberRepository.existsByLoginId(loginId)) {
+            throw new DuplicateAgencyAccountException("이미 ArtistMember 계정에서 사용 중인 loginId입니다: " + loginId);
         }
 
         application.approve(LocalDateTime.now(ZoneOffset.UTC));

@@ -10,6 +10,7 @@ import com.fandrops.user.application.exception.DuplicateAgencyAccountException;
 import com.fandrops.user.application.exception.DuplicateApplicationException;
 import com.fandrops.user.application.port.AgencyAccountRepository;
 import com.fandrops.user.application.port.AgencyApplicationRepository;
+import com.fandrops.user.application.port.ArtistMemberRepository;
 import com.fandrops.user.application.port.ArtistProfileRepository;
 import com.fandrops.user.application.port.AuditLogPort;
 import com.fandrops.user.domain.AgencyAccount;
@@ -43,6 +44,7 @@ class AgencyApplicationServiceTest {
 
     @Mock AgencyApplicationRepository agencyApplicationRepository;
     @Mock AgencyAccountRepository agencyAccountRepository;
+    @Mock ArtistMemberRepository artistMemberRepository;
     @Mock ArtistProfileRepository artistProfileRepository;
     @Mock PasswordEncoder passwordEncoder;
     @Mock ApplicationEventPublisher eventPublisher;
@@ -58,8 +60,8 @@ class AgencyApplicationServiceTest {
     void setUp() {
         service = new AgencyApplicationService(
                 agencyApplicationRepository, agencyAccountRepository,
-                artistProfileRepository, passwordEncoder,
-                eventPublisher, auditLogPort);
+                artistMemberRepository, artistProfileRepository,
+                passwordEncoder, eventPublisher, auditLogPort);
     }
 
     // ── submitApplication ────────────────────────────────────────────────────
@@ -185,6 +187,22 @@ class AgencyApplicationServiceTest {
 
         assertThrows(AgencyApplicationNotFoundException.class,
                 () -> service.approveApplication(99L, ADMIN_ID, CLIENT_IP, TRACE_ID));
+        verify(agencyAccountRepository, never()).save(any());
+        verify(eventPublisher, never()).publishEvent(any(AgencyApplicationApprovedEmailEvent.class));
+    }
+
+    @Test
+    @DisplayName("동일 loginId를 가진 ArtistMember 존재 시 승인 불가 — symmetric 체크 (#267)")
+    void approveApplication_loginIdConflictsWithArtistMember_throwsDuplicateAgencyAccountException() {
+        AgencyApplication application = buildPendingApplication(1L);
+        when(agencyApplicationRepository.findById(1L)).thenReturn(Optional.of(application));
+        when(agencyAccountRepository.existsByLoginId("contact@hybe.com")).thenReturn(false);
+        when(artistMemberRepository.existsByLoginId("contact@hybe.com")).thenReturn(true);
+
+        assertThrows(DuplicateAgencyAccountException.class,
+                () -> service.approveApplication(1L, ADMIN_ID, CLIENT_IP, TRACE_ID));
+
+        verify(agencyApplicationRepository, never()).save(any());
         verify(agencyAccountRepository, never()).save(any());
         verify(eventPublisher, never()).publishEvent(any(AgencyApplicationApprovedEmailEvent.class));
     }
