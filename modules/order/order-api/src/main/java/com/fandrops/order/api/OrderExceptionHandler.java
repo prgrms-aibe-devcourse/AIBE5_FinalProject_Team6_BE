@@ -4,6 +4,7 @@ import com.fandrops.order.api.dto.ApiError;
 import com.fandrops.order.api.dto.ApiResponse;
 import com.fandrops.order.domain.exception.AccessTicketInvalidException;
 import com.fandrops.order.domain.exception.OrderCancellationNotAllowedException;
+import com.fandrops.order.domain.exception.StoreBannerNotFoundException;
 import com.fandrops.order.domain.exception.CartAccessDeniedException;
 import com.fandrops.order.domain.exception.ProductNotFoundException;
 import com.fandrops.order.domain.exception.RestockAlertNotFoundException;
@@ -116,6 +117,14 @@ public class OrderExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(ApiResponse.error(
                         new ApiError("CART_ITEM_NOT_FOUND", e.getMessage(), false),
+                        MDC.get("traceId") != null ? MDC.get("traceId") : UUID.randomUUID().toString()));
+    }
+
+    @ExceptionHandler(StoreBannerNotFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> handleStoreBannerNotFound(StoreBannerNotFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.error(
+                        new ApiError("STORE_BANNER_NOT_FOUND", e.getMessage(), false),
                         MDC.get("traceId") != null ? MDC.get("traceId") : UUID.randomUUID().toString()));
     }
 }
