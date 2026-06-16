@@ -1,7 +1,5 @@
 package com.fandrops.user.application.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fandrops.user.application.dto.CreateArtistMemberCommand;
 import com.fandrops.user.application.exception.ArtistNotFoundException;
 import com.fandrops.user.application.exception.DuplicateLoginIdException;
@@ -17,12 +15,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.Map;
 
 @Service
 public class ArtistMemberService {
-
-    private static final ObjectMapper JSON = new ObjectMapper();
 
     private final ArtistMemberRepository artistMemberRepository;
     private final AgencyAccountRepository agencyAccountRepository;
@@ -75,13 +70,8 @@ public class ArtistMemberService {
             throw new DuplicateLoginIdException("이미 사용 중인 loginId입니다.");
         }
 
-        String afterJson;
-        try {
-            afterJson = JSON.writeValueAsString(
-                    Map.of("loginId", saved.getLoginId(), "artistId", saved.getArtistId()));
-        } catch (JsonProcessingException e) {
-            afterJson = "{\"error\":\"serialization failed\"}";
-        }
+        String afterJson = "{\"loginId\":" + escapeJson(saved.getLoginId())
+                + ",\"artistId\":" + saved.getArtistId() + "}";
 
         auditLogPort.save(AuditLog.builder()
                 .occurredAt(Instant.now())
@@ -96,5 +86,16 @@ public class ArtistMemberService {
                 .build());
 
         return saved;
+    }
+
+    private static String escapeJson(String value) {
+        if (value == null) return "null";
+        return "\"" + value
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t")
+                + "\"";
     }
 }
