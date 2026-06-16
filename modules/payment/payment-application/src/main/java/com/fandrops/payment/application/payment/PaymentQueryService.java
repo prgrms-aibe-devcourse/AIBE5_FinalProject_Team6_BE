@@ -30,4 +30,19 @@ public class PaymentQueryService {
 
         return PaymentDetailResult.from(payment);
     }
+
+    @Transactional(readOnly = true)
+    public PaymentDetailResult getDetailByOrderId(Long orderId, Long fanId) {
+        Long ownerFanId = orderFanQueryPort.findFanIdByOrderId(orderId)
+                .orElseThrow(() -> new PaymentNotFoundException(orderId));
+
+        if (!ownerFanId.equals(fanId)) {
+            throw new PaymentNotFoundException(orderId);
+        }
+
+        Payment payment = paymentRepository.findByOrderId(orderId)
+                .orElseThrow(() -> new PaymentNotFoundException(orderId));
+
+        return PaymentDetailResult.from(payment);
+    }
 }
