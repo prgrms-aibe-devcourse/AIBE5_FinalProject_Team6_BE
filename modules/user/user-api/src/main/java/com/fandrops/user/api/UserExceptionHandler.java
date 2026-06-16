@@ -6,6 +6,7 @@ import com.fandrops.user.application.exception.BannerNotFoundException;
 import com.fandrops.user.application.exception.DuplicateAgencyAccountException;
 import com.fandrops.user.application.exception.DuplicateApplicationException;
 import com.fandrops.user.application.exception.DuplicateEmailException;
+import com.fandrops.user.application.exception.DuplicateLoginIdException;
 import com.fandrops.user.application.exception.DuplicateSocialAccountException;
 import com.fandrops.user.application.exception.FanNotFoundException;
 import com.fandrops.user.application.exception.InvalidContentTypeException;
@@ -93,6 +94,12 @@ public class UserExceptionHandler {
     @ResponseStatus(HttpStatus.CONFLICT)
     public ApiResponse<Void> handleDuplicateAgencyAccount(DuplicateAgencyAccountException e) {
         return ApiResponse.fail("DUPLICATE_AGENCY_ACCOUNT", e.getMessage(), false, traceId());
+    }
+
+    @ExceptionHandler(DuplicateLoginIdException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public ApiResponse<Void> handleDuplicateLoginId(DuplicateLoginIdException e) {
+        return ApiResponse.fail("DUPLICATE_LOGIN_ID", e.getMessage(), false, traceId());
     }
 
     @ExceptionHandler(AgencyApplicationAlreadyReviewedException.class)
