@@ -2,14 +2,11 @@ package com.fandrops.user.infrastructure.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import java.util.concurrent.Executor;
-import java.util.concurrent.ThreadPoolExecutor;
 
 @Configuration
-@EnableAsync
 public class AsyncConfig {
 
     @Bean(name = "emailExecutor")
@@ -19,8 +16,9 @@ public class AsyncConfig {
         executor.setMaxPoolSize(5);
         executor.setQueueCapacity(100);
         executor.setThreadNamePrefix("email-");
-        // 큐 포화 시 호출 스레드가 직접 처리 — sagaExecutor 정책과 동일
-        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        // 배포 시 SMTP 전송 중인 작업이 강제 종료되지 않도록 대기 (SMTP timeout 10s보다 여유 있게)
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(20);
         executor.initialize();
         return executor;
     }
