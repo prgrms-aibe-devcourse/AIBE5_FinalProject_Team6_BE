@@ -4,6 +4,7 @@ import com.fandrops.user.application.service.AgencyAccountService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.core.env.Environment;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -21,6 +22,7 @@ public class AgencyAccountAdminController extends UserControllerSupport {
     }
 
     // F02-03: 관리자 Agency 임시 비밀번호 재발급
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/api/v1/admin/agency-accounts/{id}/reset-password")
     public ResponseEntity<Void> resetTempPassword(
             @PathVariable Long id,
