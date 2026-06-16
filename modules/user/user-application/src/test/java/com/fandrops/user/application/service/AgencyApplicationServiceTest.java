@@ -173,6 +173,7 @@ class AgencyApplicationServiceTest {
         verify(agencyApplicationRepository).save(any());
         verify(agencyAccountRepository).save(any());
         verify(artistProfileRepository).save(any());
+        verify(eventPublisher).publishEvent(any(AgencyApprovedEvent.class));
         verify(eventPublisher).publishEvent(any(AgencyApplicationApprovedEmailEvent.class));
         verify(auditLogPort).save(any(AuditLog.class));
     }

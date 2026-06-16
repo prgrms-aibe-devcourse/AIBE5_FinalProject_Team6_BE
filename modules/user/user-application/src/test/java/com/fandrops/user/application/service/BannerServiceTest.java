@@ -154,6 +154,7 @@ class BannerServiceTest {
 
         assertEquals("변경된 제목", banner.getTitle());
         assertEquals("https://cdn.fandrops.com/banner.jpg", banner.getImageUrl()); // 유지
+        verify(auditLogPort).save(any(AuditLog.class));
     }
 
     @Test
@@ -169,6 +170,7 @@ class BannerServiceTest {
         verify(bannerRepository).save(banner);
         assertEquals("테스트 배너", banner.getTitle());
         assertEquals("https://cdn.fandrops.com/banner.jpg", banner.getImageUrl());
+        verify(auditLogPort).save(any(AuditLog.class));
     }
 
     @Test
@@ -189,6 +191,7 @@ class BannerServiceTest {
 
         assertEquals(newStart, banner.getStartAt());
         assertEquals(LocalDateTime.of(2025, 12, 31, 0, 0), banner.getEndAt()); // endAt 유지
+        verify(auditLogPort).save(any(AuditLog.class));
     }
 
     @Test
@@ -244,6 +247,7 @@ class BannerServiceTest {
 
         assertNull(banner.getStartAt());
         assertEquals(LocalDateTime.of(2025, 12, 31, 0, 0), banner.getEndAt()); // endAt 유지
+        verify(auditLogPort).save(any(AuditLog.class));
     }
 
     @Test
@@ -263,6 +267,7 @@ class BannerServiceTest {
 
         assertEquals(LocalDateTime.of(2025, 6, 1, 0, 0), banner.getStartAt()); // startAt 유지
         assertNull(banner.getEndAt());
+        verify(auditLogPort).save(any(AuditLog.class));
     }
 
     @Test
@@ -282,6 +287,7 @@ class BannerServiceTest {
 
         assertNull(banner.getStartAt());
         assertNull(banner.getEndAt());
+        verify(auditLogPort).save(any(AuditLog.class));
     }
 
     @Test
