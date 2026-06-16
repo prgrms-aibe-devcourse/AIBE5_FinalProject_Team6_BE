@@ -10,12 +10,15 @@ import com.fandrops.user.domain.ArtistMember;
 import com.fandrops.user.domain.AuthProvider;
 import com.fandrops.user.domain.Fan;
 import com.fandrops.user.domain.UserRole;
+import io.micrometer.core.instrument.MeterRegistry;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
 
+@Slf4j
 @Service
 public class AuthService {
 
@@ -29,6 +32,7 @@ public class AuthService {
     private final PasswordResetTokenStore passwordResetTokenStore;
     private final OAuthClient oAuthClient;
     private final EmailNotificationPort emailNotificationPort;
+    private final MeterRegistry meterRegistry;
     private final String dummyPasswordHash;
 
     public AuthService(
@@ -41,7 +45,8 @@ public class AuthService {
             RefreshTokenStore refreshTokenStore,
             PasswordResetTokenStore passwordResetTokenStore,
             OAuthClient oAuthClient,
-            EmailNotificationPort emailNotificationPort) {
+            EmailNotificationPort emailNotificationPort,
+            MeterRegistry meterRegistry) {
         this.userRepository = userRepository;
         this.adminAccountRepository = adminAccountRepository;
         this.agencyAccountRepository = agencyAccountRepository;
@@ -52,6 +57,7 @@ public class AuthService {
         this.passwordResetTokenStore = passwordResetTokenStore;
         this.oAuthClient = oAuthClient;
         this.emailNotificationPort = emailNotificationPort;
+        this.meterRegistry = meterRegistry;
         this.dummyPasswordHash = passwordEncoder.encode("dummy");
     }
 
@@ -159,17 +165,32 @@ public class AuthService {
         refreshTokenStore.delete(refreshToken);
     }
 
-    // Access Token 재발급 (Refresh Token Rotation) — GETDEL로 조회+삭제 원자 처리
+    // Access Token 재발급 (Refresh Token Rotation) — 발급 먼저, 삭제 나중
+    // 발급 실패 시 구 토큰이 Redis에 남아 있으므로 클라이언트가 동일 토큰으로 재시도 가능.
+    // TOCTOU 허용: 동일 토큰 동시 요청 시 두 세션 모두 발급 가능한 짧은 창이 존재하나
+    // 발급 실패 시 구 토큰 보존(재시도 가능) > 동시성 공격 방어 — MVP 허용 트레이드오프.
     public AuthTokenResult refreshAccessToken(String refreshToken) {
-        RefreshTokenEntry entry = refreshTokenStore.getAndDelete(refreshToken)
+        RefreshTokenEntry entry = refreshTokenStore.find(refreshToken)
                 .orElseThrow(() -> new InvalidTokenException("유효하지 않은 리프레시 토큰입니다."));
-        try {
-            return issueTokens(entry.userId(), entry.role());
-        } catch (RuntimeException e) {
-            // issueTokens 실패 시 구 토큰 소실 → 재로그인 필요.
-            // Redis 장애 확률 < 토큰 재사용 방지를 우선한 의도적 선택.
-            throw new InvalidTokenException("토큰 재발급에 실패했습니다. 다시 로그인해 주세요.", e);
+
+        // Redis는 status를 저장하지 않으므로 AGENCY는 DB에서 ACTIVE 여부를 재확인
+        if (entry.role() == UserRole.AGENCY) {
+            AgencyAccount agency = agencyAccountRepository.findById(entry.userId())
+                    .orElseThrow(() -> new InvalidTokenException("유효하지 않은 리프레시 토큰입니다."));
+            if (agency.getStatus() != AgencyAccountStatus.ACTIVE) {
+                throw new InvalidTokenException("정지된 계정은 토큰을 갱신할 수 없습니다.");
+            }
         }
+
+        AuthTokenResult result = issueTokens(entry.userId(), entry.role());
+        try {
+            refreshTokenStore.delete(refreshToken);
+        } catch (Exception e) {
+            meterRegistry.counter("fandrops_token_rotation_delete_errors_total").increment();
+            log.error("[Rotation] 구 토큰 삭제 실패 — orphan 생성, TTL 만료로 자연 소멸", e);
+            throw e;
+        }
+        return result;
     }
 
     // 비밀번호 재설정 요청 — 이메일 발송 포함, 트랜잭션 없음 (커넥션 풀 고갈 방지)

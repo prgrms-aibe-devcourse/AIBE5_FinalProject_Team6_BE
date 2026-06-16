@@ -5,6 +5,7 @@ import com.fandrops.order.application.CartService;
 import com.fandrops.order.application.OrderService;
 import com.fandrops.order.application.ProductService;
 import com.fandrops.order.application.RestockAlertService;
+import com.fandrops.order.application.StoreBannerService;
 import com.fandrops.order.domain.port.AccessTicketValidatePort;
 import com.fandrops.order.domain.port.CartItemRepository;
 import com.fandrops.order.domain.port.CartRepository;
@@ -18,6 +19,7 @@ import com.fandrops.order.domain.port.OrderRepository;
 import com.fandrops.order.domain.port.ProductPricePort;
 import com.fandrops.order.domain.port.ProductRepository;
 import com.fandrops.order.domain.port.RestockAlertRepository;
+import com.fandrops.order.domain.port.StoreBannerRepository;
 import com.fandrops.order.infrastructure.adapter.CartItemRepositoryAdapter;
 import com.fandrops.order.infrastructure.adapter.CartRepositoryAdapter;
 import com.fandrops.order.infrastructure.adapter.InventoryConfirmAdapter;
@@ -26,12 +28,14 @@ import com.fandrops.order.infrastructure.adapter.InventoryRestoreAdapter;
 import com.fandrops.order.infrastructure.adapter.ProductPriceAdapter;
 import com.fandrops.order.infrastructure.adapter.ProductRepositoryAdapter;
 import com.fandrops.order.infrastructure.adapter.RestockAlertRepositoryAdapter;
+import com.fandrops.order.infrastructure.adapter.StoreBannerRepositoryAdapter;
 import com.fandrops.order.infrastructure.persistence.CartItemJpaRepository;
 import com.fandrops.order.infrastructure.persistence.CartJpaRepository;
 import com.fandrops.order.infrastructure.persistence.OrderJpaRepository;
 import com.fandrops.order.infrastructure.persistence.OrderRepositoryAdapter;
 import com.fandrops.order.infrastructure.persistence.ProductJpaRepository;
 import com.fandrops.order.infrastructure.persistence.RestockAlertJpaRepository;
+import com.fandrops.order.infrastructure.persistence.StoreBannerJpaRepository;
 import org.springframework.context.ApplicationEventPublisher;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -137,6 +141,16 @@ public class OrderConfig implements AsyncConfigurer {
                                                    ApplicationEventPublisher eventPublisher) {
         return new RestockAlertService(restockAlertRepository, productRepository,
                 inventoryIncreasePort, inventoryReadPort, eventPublisher);
+    }
+
+    @Bean
+    public StoreBannerRepository storeBannerRepository(StoreBannerJpaRepository jpaRepository) {
+        return new StoreBannerRepositoryAdapter(jpaRepository);
+    }
+
+    @Bean
+    public StoreBannerService storeBannerService(StoreBannerRepository storeBannerRepository) {
+        return new StoreBannerService(storeBannerRepository);
     }
 
     @Bean(name = "sagaExecutor")
