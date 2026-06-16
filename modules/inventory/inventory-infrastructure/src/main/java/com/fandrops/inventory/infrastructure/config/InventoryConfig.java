@@ -55,8 +55,11 @@ public class InventoryConfig {
             @Value("${spring.data.redis.ssl.enabled:false}") boolean sslEnabled) {
         Config config = new Config();
         String scheme = sslEnabled ? "rediss://" : "redis://";
+        // ElastiCache 연결 한도 초과 방지: 기본값(pool=64, idle=24)을 EC2 인스턴스 수를 감안해 명시적으로 제한
         SingleServerConfig serverConfig = config.useSingleServer()
-                .setAddress(scheme + redisHost + ":" + redisPort);
+                .setAddress(scheme + redisHost + ":" + redisPort)
+                .setConnectionPoolSize(10)
+                .setConnectionMinimumIdleSize(2);
         if (!redisPassword.isEmpty()) {
             serverConfig.setPassword(redisPassword);
         }
