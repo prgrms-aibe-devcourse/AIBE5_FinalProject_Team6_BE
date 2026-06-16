@@ -4,13 +4,12 @@ import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import java.util.concurrent.Executor;
 
+// @EnableAsync는 OrderConfig(order 모듈)에서 이미 선언 — 중복 제거
 @Slf4j
-@EnableAsync
 @Configuration
 public class AsyncConfig {
 
