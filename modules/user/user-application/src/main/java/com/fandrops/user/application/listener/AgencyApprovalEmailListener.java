@@ -27,8 +27,7 @@ public class AgencyApprovalEmailListener {
             emailNotificationPort.sendApplicationApprovedEmail(
                     event.email(), event.loginId(), event.tempPassword());
         } catch (Exception e) {
-            // DB 커밋 이후 실패 — 승인 자체는 유효. 계정·임시 비밀번호는 DB에 저장됨.
-            // TODO: 관리자 임시 비밀번호 재발급 기능 구현 후 재시도 가능하도록 개선
+            // DB 커밋 이후 실패 — 승인 자체는 유효. 관리자 재발급: POST /api/v1/admin/agency-accounts/{id}/reset-password
             meterRegistry.counter("fandrops_email_send_errors_total", "type", "agency_approval").increment();
             log.error("입점 승인 이메일 발송 실패", e);
         }

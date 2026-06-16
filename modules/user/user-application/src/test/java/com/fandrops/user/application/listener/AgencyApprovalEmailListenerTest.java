@@ -2,6 +2,7 @@ package com.fandrops.user.application.listener;
 
 import com.fandrops.user.application.event.AgencyApplicationApprovedEmailEvent;
 import com.fandrops.user.application.event.AgencyApplicationRejectedEmailEvent;
+import com.fandrops.user.application.event.AgencyTempPasswordResetEmailEvent;
 import com.fandrops.user.application.port.EmailNotificationPort;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -110,5 +111,47 @@ class AgencyApprovalEmailListenerTest {
     void rejectedEvent_toString_masksRejectReason() {
         var event = new AgencyApplicationRejectedEmailEvent("a@b.com", "내부 사유: 박○○ 불합격");
         assertFalse(event.toString().contains("내부 사유"));
+    }
+
+    // ── handleTempPasswordReset ───────────────────────────────────────────────
+
+    @Test
+    @DisplayName("임시 비밀번호 재발급 이벤트 수신 시 sendTempPasswordResetEmail 올바른 인자로 호출된다")
+    void handleTempPasswordReset_success_callsEmailPort() {
+        var event = new AgencyTempPasswordResetEmailEvent("agency@test.com", "agency@test.com", "newTmp123");
+
+        listener.handleTempPasswordReset(event);
+
+        verify(emailNotificationPort).sendTempPasswordResetEmail("agency@test.com", "agency@test.com", "newTmp123");
+    }
+
+    @Test
+    @DisplayName("재발급 이메일 발송 실패 시 예외를 삼키고 정상 반환된다 (fire & forget)")
+    void handleTempPasswordReset_emailFails_doesNotThrow() {
+        doThrow(new RuntimeException("SMTP 연결 실패"))
+                .when(emailNotificationPort).sendTempPasswordResetEmail(any(), any(), any());
+        var event = new AgencyTempPasswordResetEmailEvent("agency@test.com", "agency@test.com", "newTmp123");
+
+        assertDoesNotThrow(() -> listener.handleTempPasswordReset(event));
+    }
+
+    @Test
+    @DisplayName("재발급 이메일 발송 실패 시 fandrops_email_send_errors_total 카운터가 증가한다")
+    void handleTempPasswordReset_emailFails_incrementsErrorCounter() {
+        doThrow(new RuntimeException("SMTP 연결 실패"))
+                .when(emailNotificationPort).sendTempPasswordResetEmail(any(), any(), any());
+        var event = new AgencyTempPasswordResetEmailEvent("agency@test.com", "agency@test.com", "newTmp123");
+
+        listener.handleTempPasswordReset(event);
+
+        verify(meterRegistry).counter("fandrops_email_send_errors_total", "type", "temp_password_reset");
+        verify(counter).increment();
+    }
+
+    @Test
+    @DisplayName("재발급 이벤트 toString()은 tempPassword를 마스킹한다")
+    void resetEvent_toString_masksTempPassword() {
+        var event = new AgencyTempPasswordResetEmailEvent("a@b.com", "a@b.com", "s3cr3t");
+        assertFalse(event.toString().contains("s3cr3t"));
     }
 }
