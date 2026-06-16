@@ -120,6 +120,17 @@ class ProductServiceTest {
             verify(productRepository, never()).findRegularProducts(any(), any(), any(Integer.class));
             assertEquals(1, result.getItems().size());
         }
+
+        @Test
+        @DisplayName("drops 타입 + artistId 전달 시 findDropsProducts에 artistId 전달")
+        void getProducts_drops_withArtistId() {
+            given(productRepository.findDropsProducts(ARTIST_ID, null, 20)).willReturn(List.of(dropsProduct(1L)));
+
+            sut.getProducts("drops", ARTIST_ID, null, 20);
+
+            verify(productRepository).findDropsProducts(ARTIST_ID, null, 20);
+            verify(productRepository, never()).findRegularProducts(any(), any(), any(Integer.class));
+        }
     }
 
     @Nested
