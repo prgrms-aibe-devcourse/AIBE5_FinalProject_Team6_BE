@@ -333,6 +333,7 @@ class AgencyApplicationServiceTest {
 
         assertThrows(RuntimeException.class,
                 () -> service.approveApplication(1L, ADMIN_ID, CLIENT_IP, TRACE_ID));
+        verify(eventPublisher, never()).publishEvent(any(AgencyApprovedEvent.class));
         verify(eventPublisher, never()).publishEvent(any(AgencyApplicationApprovedEmailEvent.class));
     }
 

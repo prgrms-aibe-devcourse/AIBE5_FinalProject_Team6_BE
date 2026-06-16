@@ -96,4 +96,18 @@ class AgencyApprovalEmailListenerTest {
         verify(meterRegistry).counter("fandrops_email_send_errors_total", "type", "agency_rejection");
         verify(counter).increment();
     }
+
+    @Test
+    @DisplayName("승인 이벤트 toString()은 tempPassword를 마스킹한다")
+    void approvedEvent_toString_masksTempPassword() {
+        var event = new AgencyApplicationApprovedEmailEvent("a@b.com", "a@b.com", "s3cr3t");
+        assertFalse(event.toString().contains("s3cr3t"));
+    }
+
+    @Test
+    @DisplayName("반려 이벤트 toString()은 rejectReason을 마스킹한다")
+    void rejectedEvent_toString_masksRejectReason() {
+        var event = new AgencyApplicationRejectedEmailEvent("a@b.com", "내부 사유: 박○○ 불합격");
+        assertFalse(event.toString().contains("내부 사유"));
+    }
 }

@@ -4,4 +4,9 @@ package com.fandrops.user.application.event;
 public record AgencyApplicationRejectedEmailEvent(
         String email,
         String rejectReason
-) {}
+) {
+    @Override
+    public String toString() {
+        return "AgencyApplicationRejectedEmailEvent[email=" + email + ", rejectReason=***]";
+    }
+}
