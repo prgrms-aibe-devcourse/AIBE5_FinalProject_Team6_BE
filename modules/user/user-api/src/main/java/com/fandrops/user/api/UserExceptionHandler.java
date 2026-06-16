@@ -1,6 +1,7 @@
 package com.fandrops.user.api;
 
 import com.fandrops.common.ApiResponse;
+import com.fandrops.user.application.exception.AgencyAccountNotFoundException;
 import com.fandrops.user.application.exception.AgencyApplicationNotFoundException;
 import com.fandrops.user.application.exception.BannerNotFoundException;
 import com.fandrops.user.application.exception.DuplicateAgencyAccountException;
@@ -69,6 +70,12 @@ public class UserExceptionHandler {
     @ResponseStatus(HttpStatus.NOT_FOUND)
     public ApiResponse<Void> handleFanNotFound(FanNotFoundException e) {
         return ApiResponse.fail("FAN_NOT_FOUND", e.getMessage(), false, traceId());
+    }
+
+    @ExceptionHandler(AgencyAccountNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public ApiResponse<Void> handleAgencyAccountNotFound(AgencyAccountNotFoundException e) {
+        return ApiResponse.fail("AGENCY_ACCOUNT_NOT_FOUND", e.getMessage(), false, traceId());
     }
 
     @ExceptionHandler(AgencyApplicationNotFoundException.class)
