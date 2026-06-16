@@ -2,6 +2,7 @@ package com.fandrops.order.application.dto;
 
 import com.fandrops.order.domain.StoreBanner;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import lombok.Getter;
 
 @Getter
@@ -34,7 +35,7 @@ public class StoreBannerResponse {
     public static StoreBannerResponse from(StoreBanner banner) {
         return new StoreBannerResponse(
                 banner.getId(), banner.getTitle(), banner.getImageUrl(), banner.getLandingUrl(),
-                banner.getExposureOrder(), banner.computeStatus(LocalDateTime.now()).name(),
+                banner.getExposureOrder(), banner.computeStatus(LocalDateTime.now(ZoneOffset.UTC)).name(),
                 banner.getStartAt(), banner.getEndAt(), banner.getProductId());
     }
 
