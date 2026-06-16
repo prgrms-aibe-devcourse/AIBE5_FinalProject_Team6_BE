@@ -3,10 +3,12 @@ package com.fandrops.user.api;
 import com.fandrops.common.ApiResponse;
 import com.fandrops.user.application.exception.AgencyAccountNotFoundException;
 import com.fandrops.user.application.exception.AgencyApplicationNotFoundException;
+import com.fandrops.user.application.exception.ArtistNotFoundException;
 import com.fandrops.user.application.exception.BannerNotFoundException;
 import com.fandrops.user.application.exception.DuplicateAgencyAccountException;
 import com.fandrops.user.application.exception.DuplicateApplicationException;
 import com.fandrops.user.application.exception.DuplicateEmailException;
+import com.fandrops.user.application.exception.DuplicateLoginIdException;
 import com.fandrops.user.application.exception.DuplicateSocialAccountException;
 import com.fandrops.user.application.exception.FanNotFoundException;
 import com.fandrops.user.application.exception.InvalidContentTypeException;
@@ -100,6 +102,18 @@ public class UserExceptionHandler {
     @ResponseStatus(HttpStatus.CONFLICT)
     public ApiResponse<Void> handleDuplicateAgencyAccount(DuplicateAgencyAccountException e) {
         return ApiResponse.fail("DUPLICATE_AGENCY_ACCOUNT", e.getMessage(), false, traceId());
+    }
+
+    @ExceptionHandler(DuplicateLoginIdException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public ApiResponse<Void> handleDuplicateLoginId(DuplicateLoginIdException e) {
+        return ApiResponse.fail("DUPLICATE_LOGIN_ID", e.getMessage(), false, traceId());
+    }
+
+    @ExceptionHandler(ArtistNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public ApiResponse<Void> handleArtistNotFound(ArtistNotFoundException e) {
+        return ApiResponse.fail("ARTIST_NOT_FOUND", e.getMessage(), false, traceId());
     }
 
     @ExceptionHandler(AgencyApplicationAlreadyReviewedException.class)

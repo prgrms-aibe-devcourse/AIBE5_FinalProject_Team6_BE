@@ -26,4 +26,9 @@ public class ArtistMemberRepositoryImpl implements ArtistMemberRepository {
     public Optional<ArtistMember> findByLoginId(String loginId) {
         return jpaRepository.findByLoginId(loginId).map(ArtistMemberJpaEntity::toDomain);
     }
+
+    @Override
+    public boolean existsByLoginId(String loginId) {
+        return jpaRepository.existsByLoginId(loginId);
+    }
 }
