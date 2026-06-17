@@ -125,6 +125,38 @@ class ArtistProfileServiceTest {
         assertNull(result.nextCursor());
     }
 
+    @Test
+    @DisplayName("cursor가 숫자가 아닐 때 — NumberFormatException")
+    void listArtistProfiles_invalidCursor_throwsNumberFormatException() {
+        assertThrows(NumberFormatException.class,
+                () -> artistProfileService.listArtistProfiles("invalid", 20));
+    }
+
+    @Test
+    @DisplayName("size=1 최솟값 경계 — size+1=2 요청, hasMore=true 이면 nextCursor 정상 반환")
+    void listArtistProfiles_sizeOne_hasMoreTrue() {
+        when(artistProfileRepository.findAllOrderByFanCountDesc(null, 2))
+                .thenReturn(List.of(dummyProfile(1L, 500L), dummyProfile(2L, 300L)));
+
+        ArtistProfileListResult result = artistProfileService.listArtistProfiles(null, 1);
+
+        assertEquals(1, result.items().size());
+        assertTrue(result.hasMore());
+        assertEquals("1", result.nextCursor());
+        verify(artistProfileRepository).findAllOrderByFanCountDesc(null, 2);
+    }
+
+    @Test
+    @DisplayName("size=100 최댓값 경계 — repository에 101개 요청")
+    void listArtistProfiles_maxSize_requestsSizePlusOne() {
+        when(artistProfileRepository.findAllOrderByFanCountDesc(null, 101))
+                .thenReturn(List.of());
+
+        artistProfileService.listArtistProfiles(null, 100);
+
+        verify(artistProfileRepository).findAllOrderByFanCountDesc(null, 101);
+    }
+
     // ── 헬퍼 ─────────────────────────────────────────────────────────────────
 
     private ArtistProfile dummyProfile(Long id, long fanCount) {

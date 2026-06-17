@@ -39,7 +39,7 @@ public class ArtistProfileController extends UserControllerSupport {
     public ResponseEntity<ApiResponse<ArtistProfileListResponse>> listArtistProfiles(
             @RequestParam(required = false) String cursor,
             @RequestParam(defaultValue = "20") int size) {
-        int safeSize = Math.min(size, MAX_PAGE_SIZE);
+        int safeSize = Math.max(1, Math.min(size, MAX_PAGE_SIZE));
         ArtistProfileListResult result = artistProfileService.listArtistProfiles(cursor, safeSize);
         return ResponseEntity.ok(ApiResponse.ok(ArtistProfileListResponse.from(result), traceId()));
     }
