@@ -4,6 +4,8 @@ import com.fandrops.user.domain.ArtistMember;
 import com.fandrops.user.domain.UserRole;
 import jakarta.persistence.*;
 
+import java.time.LocalDateTime;
+
 @Entity
 @Table(name = "artist_member")
 public class ArtistMemberJpaEntity {
@@ -31,6 +33,9 @@ public class ArtistMemberJpaEntity {
     @Column(name = "profile_image_url")
     private String profileImageUrl;
 
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
+
     protected ArtistMemberJpaEntity() {}
 
     public static ArtistMemberJpaEntity from(ArtistMember domain) {
@@ -42,6 +47,7 @@ public class ArtistMemberJpaEntity {
         e.memberName = domain.getMemberName();
         e.role = domain.getRole();
         e.profileImageUrl = domain.getProfileImageUrl();
+        e.deletedAt = domain.getDeletedAt();
         return e;
     }
 
@@ -54,6 +60,7 @@ public class ArtistMemberJpaEntity {
                 .memberName(memberName)
                 .role(role)
                 .profileImageUrl(profileImageUrl)
+                .deletedAt(deletedAt)
                 .build();
     }
 }
