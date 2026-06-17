@@ -71,7 +71,7 @@ Baseline 없이 튜닝하면 "얼마나 개선됐는가"를 증명할 수 없다
 
 | 항목 | 확인 내용 |
 | --- | --- |
-| k6 설치 | EC2에 k6 설치 여부 확인 (`k6 version`) |
+| k6 설치 | ~~EC2 직접 설치~~ → **Actions runner에서 자동 설치** (`k6-actions-runner.md` 참고) |
 | DB seed | 각 시나리오 주석의 seed 조건 확인 |
 | 01·04 시나리오 | `product id=1 (inventory.total_qty=100)`, fan id 1~2100 (seed.sql) |
 | 02 시나리오 | `artist_profile id=1`, `artist_feed` 20개, `user_follow` fan_id 1~N & artist_id=1 |
@@ -146,54 +146,52 @@ redis-cli -h <REDIS_ENDPOINT> get "access:ticket:1:2100" # → "test-ticket-toke
 
 ### 3-4. 시나리오별 실행
 
+> **2026-06-17 변경:** k6를 EC2에서 직접 실행하면 t3.small CPU 경합으로 측정값이 왜곡된다.  
+> (시나리오 05 OOM 크래시, 시나리오 06 피드 0% 실패 실제 발생)  
+> **현재는 GitHub Actions runner에서 k6를 실행한다.** 상세: [`k6-actions-runner.md`](./k6-actions-runner.md)
+
+**실행 절차 요약:**
+
+1. GitHub → Actions → **Run k6 Load Test** → **Run workflow**
+2. `scenario` 선택 (02 → 01 → 04 → 03 → 05 → 06 권장 순서)
+3. `confirm` 입력란에 `yes` 입력
+4. Actions 로그에서 k6 터미널 출력 확인
+
+**시나리오별 EC2 사전 준비 (Actions 실행 전 수동):**
+
 ```bash
-cd /opt/fandrops/k6
+# 01·04: inventory 리셋 + Redis 티켓 재적재
+mysql -u fandrops_admin -p<PW> -h <RDS> fandrops \
+  -e "UPDATE inventory SET available_qty=100, reserved_qty=0, total_qty=100, version=0 WHERE product_id=1;"
 
-# 활성 슬롯 자동 감지 (Blue/Green 공통 패턴)
-ACTIVE=$(cat /etc/fandrops/active-slot)
-PORT=$([ "$ACTIVE" = "blue" ] && echo 8081 || echo 8082)
-
-# 02. 피드 Read P95 (가장 단순 — 먼저 서버 정상 확인)
-k6 run -e BASE_URL=http://localhost:$PORT --out experimental-prometheus-rw \
-  scenarios/02_feed_read.js
-
-# 01. 주문 동시성 (오버셀 0건 핵심)
-k6 run -e BASE_URL=http://localhost:$PORT --out experimental-prometheus-rw \
-  scenarios/01_order_concurrency.js
-
-# 01 완료 후 Redis 재적재 (04 실행 전 — 01에서 성공한 fanId 티켓 복원)
+REDIS_HOST="master.fandrops-prod-redis.q7gdno.apn2.cache.amazonaws.com"
 for i in {1..2100}; do
-  redis-cli -h <REDIS_ENDPOINT> setex "access:ticket:1:$i" 86400 "test-ticket-token"
+  valkey-cli -h $REDIS_HOST --tls setex "access:ticket:1:$i" 86400 "test-ticket-token"
 done
 
-# 04. 드롭스 스파이크 (1,000 VU 급상승)
-k6 run -e BASE_URL=http://localhost:$PORT --out experimental-prometheus-rw \
-  scenarios/04_drop_spike.js
+# 03·06: Wiremock Docker 기동 확인
+docker ps --filter name=wiremock  # Up 상태인지 확인
+# 미실행 시: docker start wiremock
 
-# 03. 결제 확인 (Wiremock 기동 후 실행)
-k6 run -e BASE_URL=http://localhost:$PORT --out experimental-prometheus-rw \
-  -e ORDERS_JSON="$(cat seed/orders.json)" \
-  scenarios/03_payment_confirm.js
-
-# 05. SSE 대기열 연결 안정성
-k6 run -e BASE_URL=http://localhost:$PORT --out experimental-prometheus-rw \
-  scenarios/05_sse_queue.js
-
-# 06. 통합 워크로드 모델 (혼합 부하 — 마지막 실행)
-k6 run -e BASE_URL=http://localhost:$PORT --out experimental-prometheus-rw \
-  -e ORDERS_JSON="$(cat seed/orders.json)" \
-  scenarios/06_workload_model.js
+# 06: inventory 200으로 리셋 (01·04와 다름)
+mysql -u fandrops_admin -p<PW> -h <RDS> fandrops \
+  -e "UPDATE inventory SET available_qty=200, reserved_qty=0, total_qty=200, version=0 WHERE product_id=1;"
 ```
+
+> **주의:** `inventory` 리셋 시 `total_qty`를 반드시 포함할 것.  
+> `available_qty > total_qty` 상태가 되면 주문 서비스 invariant 위반으로 50건 이후 모두 실패.
 
 **테스트 완료 후 정리:**
 
 ```bash
-# S3 tokens.csv 삭제 (유효한 JWT 2100개 — 테스트 완료 후 즉시 삭제)
+# S3 seed 파일 삭제 (JWT·주문 정보 노출 방지)
 aws s3 rm s3://<버킷명>/k6/tokens.csv
+aws s3 rm s3://<버킷명>/k6/orders.json
 
 # Redis AccessTicket 테스트용 키 삭제
+REDIS_HOST="master.fandrops-prod-redis.q7gdno.apn2.cache.amazonaws.com"
 for i in {1..2100}; do
-  redis-cli -h <REDIS_ENDPOINT> del "access:ticket:1:$i"
+  valkey-cli -h $REDIS_HOST --tls del "access:ticket:1:$i"
 done
 ```
 
@@ -469,19 +467,31 @@ PR 머지 + 배포 완료 후:
 
 ## 8. 트러블슈팅 기록
 
-*(Phase 4 진행 중 발생한 이슈를 여기에 추가)*
-
-| # | 증상 | 원인 | 해결 |
-| --- | --- | --- | --- |
-| — | — | — | — |
+| # | 날짜 | 증상 | 원인 | 해결 |
+| --- | --- | --- | --- | --- |
+| 1 | 2026-06-15 | Flyway V25 FAILED → CD 배포 중단 | `CREATE INDEX IF NOT EXISTS` MySQL 8.0.46 미지원 | PR #279 머지 후 flyway_schema_history FAILED 레코드 SSM으로 수동 삭제 → CD 재실행 |
+| 2 | 2026-06-17 | EC2 재기동 후 Spring Boot 크래시 | RDS도 중지 상태 — EC2만 시작하면 HikariPool 커넥션 실패 | AWS 콘솔에서 RDS 별도 시작 후 앱 재기동 |
+| 3 | 2026-06-17 | curl 요청 400 HTML 응답 | TOKEN 변수에 `\r\n` 포함 → `Authorization` 헤더 두 줄로 분리 | `tr -d '\r\n'` 추가: `TOKEN=$(... \| tr -d '\r\n')` |
+| 4 | 2026-06-17 | 시나리오 04 전체 403 | 시나리오 05를 04보다 먼저 실행 → `RedisAccessTicketRepository.issue()`가 티켓 UUID로 덮어씀 | 04 실행 전 Redis 재적재 필수. 실행 순서: 04 → 05 (절대 역순 금지) |
+| 5 | 2026-06-17 | 시나리오 03 전체 99% 실패 | `TossConfirmBody` inner private record Jackson 직렬화 불가 → Wiremock 빈 body 수신 → 404 → payment FAILED → 이후 전부 409 DUPLICATE_PAYMENT | 이슈 [#318](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/issues/318) 수정(담당: 장성재) 후 재측정 |
+| 6 | 2026-06-17 | DB reset 후 k6 실행해도 전부 409 | `updated_at` 미갱신 → OrderRecoveryScheduler(60초 주기, 30분 타임아웃)가 즉시 CANCEL | `UPDATE orders SET status='RESERVED', updated_at=NOW() WHERE ...` |
+| 7 | 2026-06-17 | 시나리오 05 OOM 크래시, 시나리오 06 피드 0% | k6와 앱 서버가 같은 t3.small에서 실행 → CPU/메모리 경합 | k6를 GitHub Actions runner로 이관 ([k6-actions-runner.md](./k6-actions-runner.md)) |
+| 8 | 2026-06-17 | inventory 리셋 후 50건 초과 시 주문 전부 실패 | `available_qty=200`으로 리셋했으나 `total_qty=50` 그대로 → invariant 위반 | 리셋 SQL에 `total_qty`도 포함: `SET available_qty=200, reserved_qty=0, total_qty=200` |
 
 ---
 
 ## 9. 최종 DoD
 
 - [x] Blue/Green EC2 적용 완료 확인 (Phase 3 §8 DoD 참고) — 2026-06-11 완료, PR #221·#222
-- [x] k6 Baseline 수치 기록 — 시나리오 02 완료 (P95=231ms, 2026-06-12) / 01·04·05 미실행
-- [ ] D 단기 실험 완료 — 오버셀 0건 확인 + SSE 한계 기록
+- [x] k6 Baseline 수치 기록 — 시나리오 01~06 전체 완료 (2026-06-15~17)
+  - 01 주문 동시성: P95=2.85s, 오버셀 0건 ✅
+  - 02 피드 조회: P95=231ms, 에러율 0%
+  - 03 결제 확인: TossConfirmBody 버그([#318](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/issues/318)) — 재측정 필요
+  - 04 드롭스 스파이크: P95(성공)=508ms, 오버셀 0건 ✅
+  - 05 SSE 대기열: OOM 크래시 — k6 runner 이관 후 재측정 필요
+  - 06 통합 워크로드: t3.small 과부하 + 버그 — 재측정 필요
+- [x] k6 GitHub Actions runner 이관 완료 — EC2 CPU 경합 제거 (`k6-actions-runner.md`)
+- [ ] 재측정 완료 — 시나리오 03(#318 수정 후), 05·06(runner 실행 후)
 - [ ] SLO 목표 달성 확인 (Write P95 < 300ms, Read P95 < 120ms, 5xx < 0.1%)
 - [ ] Grafana 커스텀 메트릭 알람 활성화 (#191)
 - [ ] 최종 SLO 수치 Grafana 스크린샷 보관
@@ -492,6 +502,7 @@ PR 머지 + 배포 완료 후:
 
 | 문서 | 설명 |
 | --- | --- |
+| [k6-actions-runner.md](./k6-actions-runner.md) | k6 GitHub Actions runner 실행 가이드 — 전환 이유, 아키텍처, Secrets, S3 업로드, EC2 사전 준비 |
 | [aws-phase3-runbook.md](./aws-phase3-runbook.md) | Redis 관측 · AUTH · S3 CORS · k6 스크립트 · Blue/Green 설계 |
 | [aws-phase5-runbook.md](./aws-phase5-runbook.md) | STAR 리포트 · 발표 자료 · 최종 SLO 수치 기록 |
 | [nginx-bluegreen-strategy.md](./nginx-bluegreen-strategy.md) | Blue/Green 아키텍처 의사결정 · 배포 스크립트 · 롤백 시나리오 · 분산 설계 검증 |
