@@ -30,15 +30,15 @@ public class ProductRepositoryAdapter implements ProductRepository {
     }
 
     @Override
-    public List<Product> findRegularProducts(Long cursor, int size) {
-        return jpaRepository.findRegular(cursor, PageRequest.of(0, size)).stream()
+    public List<Product> findRegularProducts(Long artistId, Long cursor, int size) {
+        return jpaRepository.findRegular(artistId, cursor, PageRequest.of(0, size)).stream()
                 .map(ProductJpaEntity::toDomain)
                 .toList();
     }
 
     @Override
-    public List<Product> findDropsProducts(Long cursor, int size) {
-        return jpaRepository.findDrops(LocalDateTime.now(ZoneOffset.UTC), cursor, PageRequest.of(0, size)).stream()
+    public List<Product> findDropsProducts(Long artistId, Long cursor, int size) {
+        return jpaRepository.findDrops(LocalDateTime.now(ZoneOffset.UTC), artistId, cursor, PageRequest.of(0, size)).stream()
                 .map(ProductJpaEntity::toDomain)
                 .toList();
     }
