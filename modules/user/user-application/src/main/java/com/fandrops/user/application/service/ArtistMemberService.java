@@ -1,6 +1,7 @@
 package com.fandrops.user.application.service;
 
 import com.fandrops.user.application.dto.CreateArtistMemberCommand;
+import com.fandrops.user.application.exception.ArtistMemberNotFoundException;
 import com.fandrops.user.application.exception.ArtistNotFoundException;
 import com.fandrops.user.application.exception.DuplicateLoginIdException;
 import com.fandrops.user.application.port.AgencyAccountRepository;
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
 
 @Service
 public class ArtistMemberService {
@@ -94,6 +96,63 @@ public class ArtistMemberService {
                 .build());
 
         return saved;
+    }
+
+    @Transactional(readOnly = true)
+    public ArtistMember getArtistMember(Long memberId, Long actorId, String clientIp, String traceId) {
+        return findMemberWithOwnership(memberId, actorId);
+    }
+
+    @Transactional
+    public ArtistMember updateArtistMemberName(Long memberId, String memberName,
+                                               Long actorId, String clientIp, String traceId) {
+        ArtistMember member = findMemberWithOwnership(memberId, actorId);
+        ArtistMember updated = artistMemberRepository.save(member.withMemberName(memberName));
+
+        auditLogPort.save(AuditLog.builder()
+                .occurredAt(Instant.now())
+                .actorType("AGENCY")
+                .actorId(actorId)
+                .action("ARTIST_MEMBER_UPDATE")
+                .resourceType("ARTIST_MEMBER")
+                .resourceId(memberId)
+                .traceId(traceId)
+                .afterJson("{\"memberName\":" + escapeJson(memberName) + "}")
+                .clientIp(clientIp)
+                .build());
+
+        return updated;
+    }
+
+    @Transactional
+    public void deleteArtistMember(Long memberId, Long actorId, String clientIp, String traceId) {
+        ArtistMember member = findMemberWithOwnership(memberId, actorId);
+        artistMemberRepository.save(member.withDeletedAt(LocalDateTime.now()));
+
+        auditLogPort.save(AuditLog.builder()
+                .occurredAt(Instant.now())
+                .actorType("AGENCY")
+                .actorId(actorId)
+                .action("ARTIST_MEMBER_DELETE")
+                .resourceType("ARTIST_MEMBER")
+                .resourceId(memberId)
+                .traceId(traceId)
+                .clientIp(clientIp)
+                .build());
+    }
+
+    private ArtistMember findMemberWithOwnership(Long memberId, Long actorId) {
+        ArtistMember member = artistMemberRepository.findById(memberId)
+                .orElseThrow(() -> new ArtistMemberNotFoundException(
+                        "존재하지 않는 아티스트 멤버입니다. memberId=" + memberId));
+        ArtistProfile profile = artistProfileRepository.findById(member.getArtistId())
+                .orElseThrow(() -> new ArtistMemberNotFoundException(
+                        "존재하지 않는 아티스트 멤버입니다. memberId=" + memberId));
+        if (!profile.getAgencyId().equals(actorId)) {
+            throw new ArtistMemberNotFoundException(
+                    "존재하지 않는 아티스트 멤버입니다. memberId=" + memberId);
+        }
+        return member;
     }
 
     private static String escapeJson(String value) {

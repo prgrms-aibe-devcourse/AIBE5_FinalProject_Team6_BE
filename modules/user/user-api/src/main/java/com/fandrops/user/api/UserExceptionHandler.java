@@ -3,6 +3,7 @@ package com.fandrops.user.api;
 import com.fandrops.common.ApiResponse;
 import com.fandrops.user.application.exception.AgencyAccountNotFoundException;
 import com.fandrops.user.application.exception.AgencyApplicationNotFoundException;
+import com.fandrops.user.application.exception.ArtistMemberNotFoundException;
 import com.fandrops.user.application.exception.ArtistNotFoundException;
 import com.fandrops.user.application.exception.BannerNotFoundException;
 import com.fandrops.user.application.exception.DuplicateAgencyAccountException;
@@ -114,6 +115,12 @@ public class UserExceptionHandler {
     @ResponseStatus(HttpStatus.NOT_FOUND)
     public ApiResponse<Void> handleArtistNotFound(ArtistNotFoundException e) {
         return ApiResponse.fail("ARTIST_NOT_FOUND", e.getMessage(), false, traceId());
+    }
+
+    @ExceptionHandler(ArtistMemberNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public ApiResponse<Void> handleArtistMemberNotFound(ArtistMemberNotFoundException e) {
+        return ApiResponse.fail("ARTIST_MEMBER_NOT_FOUND", e.getMessage(), false, traceId());
     }
 
     @ExceptionHandler(AgencyApplicationAlreadyReviewedException.class)

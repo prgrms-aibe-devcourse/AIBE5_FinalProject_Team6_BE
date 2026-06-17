@@ -23,6 +23,11 @@ public class ArtistMemberRepositoryImpl implements ArtistMemberRepository {
     }
 
     @Override
+    public Optional<ArtistMember> findById(Long id) {
+        return jpaRepository.findByIdAndDeletedAtIsNull(id).map(ArtistMemberJpaEntity::toDomain);
+    }
+
+    @Override
     public Optional<ArtistMember> findByLoginId(String loginId) {
         return jpaRepository.findByLoginId(loginId).map(ArtistMemberJpaEntity::toDomain);
     }
