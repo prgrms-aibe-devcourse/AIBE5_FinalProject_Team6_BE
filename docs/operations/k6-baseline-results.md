@@ -538,20 +538,51 @@ k6 run -e BASE_URL=http://localhost:$PORT \
   scenarios/06_workload_model.js
 ```
 
-### 결과
+### 결과 (2026-06-17, 1회차 — **t3.small 과부하 + 코드 버그로 재측정 필요**)
 
 | 지표 | 결과 | 목표 | 상태 |
 |---|---|---|---|
-| P95 응답 시간 (혼합 전체) | — | < 300ms | 미실행 |
-| 에러율 | — | < 0.1% | 미실행 |
-| wl_feed 요청 수 | — | > 0 | 미실행 |
-| wl_queue 요청 수 | — | > 0 | 미실행 |
-| wl_order 요청 수 | — | > 0 | 미실행 |
-| wl_payment 요청 수 | — | > 0 | 미실행 |
+| P95 응답시간 (전체) | **143.82ms** | < 300ms | ✅ (해석 주의 — 빠른 오류 응답 포함) |
+| P95 응답시간 (성공 요청) | **2.48s** | < 300ms | ❌ SLO 미달 |
+| P90 응답시간 | 119.6ms | — | — |
+| 평균 응답시간 | 89.77ms | — | — |
+| 에러율 | **99.43%** | < 0.1% | ❌ |
+| checks_succeeded | 0.56% (773 / 137,264) | — | — |
+| [feed] status 200 | **0%** (0 / 96,859) | — | ❌ |
+| [queue] join 성공 | **2%** (773 / 31,523) | — | ❌ |
+| [payment] confirm 성공 | **0%** (0 / 8,109) | — | ❌ |
+| 처리량 | 382 req/s | — | — |
+| 총 요청 수 | 137,305 | — | — |
+
+**워크로드 분포 실측:**
+
+| 워크로드 | 요청 수 | 설계 비율 | 실측 비율 |
+|---|---|---|---|
+| wl_feed | 96,912 | 60% | 70.6% |
+| wl_queue | 32,315 | 20% | 23.5% |
+| wl_order | 24,130 | 15% | 17.6% |
+| wl_payment | 8,115 | 5% | 5.9% |
+
+> **P95 143.82ms 해석 주의**: k6 threshold `p(95)<300` 은 통과했으나, 이는 빠른 오류 응답(timeout 이전 즉시 반환된 4xx/5xx)이 대다수이기 때문. 실제 성공한 요청의 P95는 **2.48s**로 SLO 초과.
+>
+> **에러율 99.43% 원인 두 가지:**
+> 1. **결제 0%** — TossConfirmBody 직렬화 버그([#318](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/issues/318)), 시나리오 03과 동일
+> 2. **피드 0% / 대기열 2%** — 혼합 150 VU에서 t3.small CPU 포화 → 전면 타임아웃. 시나리오 02(피드 50 VU 단독)는 231ms 통과했으나 혼합 부하에서 무너짐
 
 ### 오너 피드백 (전체)
 
-_미실행 — 결과 기록 후 업데이트 예정_
+**재측정 조건:**
+1. k6를 EC2 외부(GitHub Actions runner)에서 실행하여 CPU 경합 제거
+2. TossConfirmBody 버그([#318](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/issues/318)) 수정 후 실행
+
+**도메인별 개선 방향:**
+
+| 담당 | 문제 | 개선 방향 |
+|---|---|---|
+| 정환철 | 피드 0% — 혼합 부하에서 전면 실패 | N+1 쿼리 제거, `artist_feed.artist_id` 인덱스 확인, Redis TTL 캐싱 (시나리오 02 피드백 참고) |
+| 장성재 | 결제 0% — TossConfirmBody 직렬화 버그 | [#318](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/issues/318) `Map.of()` 교체 후 재측정 |
+| 형성빈 | 주문 처리량 낮음 (17.6% 비율인데 오버셀 측정 불가) | 트랜잭션 경계·분산 락 범위 확인 (시나리오 01 피드백 참고) |
+| 지영재 | k6 동일 EC2 실행으로 인한 인프라 병목 | `.github/workflows/run-k6.yml` Actions runner 실행 방식으로 전환 |
 
 ---
 
@@ -564,17 +595,110 @@ _미실행 — 결과 기록 후 업데이트 예정_
 | 03 결제 확인 | 장성재 | 119.32ms (성공 기준) | 99.62%\*\*\*\* | — | ❌ 코드 버그([#318](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/issues/318)) 재측정 필요 |
 | 04 드롭스 스파이크 | 형성빈 | 12.34s (성공 508ms) | 99.16%\*\* | 0건 | ❌ SLO 미달 |
 | 05 SSE 대기열 | 장성재, 지영재 | — | —\*\*\* | — | ❌ OOM 크래시 |
-| 06 통합 워크로드 | 전체 | — | — | — | 미실행 |
+| 06 통합 워크로드 | 전체 | 2.48s (성공 기준) | 99.43%\*\*\*\*\* | — | ❌ t3.small 과부하 + 코드 버그, 재측정 필요 |
 
 > \* 시나리오 01 에러율 75%: 200 VU 중 300건이 409 DEPLETED(재고 소진 정상 응답), 100건 201 RESERVED. 오버셀 없음.  
 > \*\* 시나리오 04 에러율 99.16%: 1,000 VU 중 100건 201 RESERVED + 8,433건 409 DEPLETED(정상) + 3,375건 기타. k6는 2xx 외 응답을 전부 실패로 집계. 오버셀 없음.  
 > \*\*\* 시나리오 05: 2,100 VU SSE 동시 연결로 t3.small OOM 크래시 — k6 터미널 출력 및 Prometheus 메트릭 전부 유실. normal_load(1,000 VU)만 완료 확인. 재실행 전 k6를 별도 머신에서 실행하거나 Spring WebFlux 전환 필요.  
-> \*\*\*\* 시나리오 03 에러율 99.62%: `TossConfirmBody` inner private record Jackson 직렬화 불가 → Toss API 요청 body 비어있음 → Wiremock 404 → payment FAILED → 이후 전부 409 DUPLICATE_PAYMENT 연쇄. 이슈 [#318](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/issues/318) 수정 후 재측정 필요.
+> \*\*\*\* 시나리오 03 에러율 99.62%: `TossConfirmBody` inner private record Jackson 직렬화 불가 → Toss API 요청 body 비어있음 → Wiremock 404 → payment FAILED → 이후 전부 409 DUPLICATE_PAYMENT 연쇄. 이슈 [#318](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/issues/318) 수정 후 재측정 필요.  
+> \*\*\*\*\* 시나리오 06 에러율 99.43%: 혼합 150 VU에서 t3.small CPU 포화로 피드/대기열 전면 타임아웃 + TossConfirmBody 버그(#318)로 결제 0% 성공. P95 143.82ms는 빠른 오류 응답이 대부분이므로 misleading — 성공 요청 P95 2.48s가 실질 지표.
 
 ---
 
-## 최적화 우선순위 (실행 완료 후 업데이트 예정)
+## 최적화 우선순위
 
-| 우선순위 | 시나리오 | 도메인 | 개선 방향 |
-|---|---|---|---|
-| P0 | 02 피드 조회 | community | N+1 쿼리 제거, 인덱스 확인, Redis 캐싱 |
+| 우선순위 | 담당 | 시나리오 | 개선 방향 | 기대 효과 |
+|---|---|---|---|---|
+| P0 | 장성재 | 03·06 결제 | `TossConfirmBody` → `Map.of()` 교체 ([#318](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/issues/318)) | 결제 0% → 정상 측정 가능 |
+| P0 | 정환철 | 02·06 피드 | N+1 쿼리 제거, `artist_feed.artist_id` 인덱스, Redis TTL 캐싱 | P95 231ms → 120ms 목표 |
+| P0 | 지영재 | 전체 | k6를 GitHub Actions runner에서 실행 (EC2 분리) | CPU 경합 제거, 05·06 정확한 재측정 가능 |
+| P1 | 형성빈 | 01·04·06 주문 | 트랜잭션 경계 확인, 분산 락 범위 재검토 | P95 2.85s → 300ms 목표 |
+| P2 | 장성재, 지영재 | 05·06 SSE | Spring WebFlux 전환 검토 (연결당 스레드 → 코루틴) | 2,100 VU t3.small 수용 가능 |
+
+---
+
+## 트러블슈팅 이력 (2026-06-17)
+
+### 1. EC2 재기동 시 RDS도 중지 상태
+
+**현상**: EC2 시작 후 Spring Boot 앱이 `HikariPool` 커넥션 획득 실패로 크래시.  
+**원인**: EC2와 RDS를 각각 수동으로 중지했다가 EC2만 재시작. RDS는 별도로 중지 상태 유지.  
+**해결**: AWS 콘솔에서 RDS 인스턴스 별도 시작 → 앱 재기동.  
+**교훈**: EC2 재기동 시 RDS·ElastiCache 상태를 함께 확인해야 함.
+
+---
+
+### 2. TOKEN 변수 newline 포함 → HTTP 헤더 파싱 실패
+
+**현상**: `curl` 요청 시 400 HTML 응답(Tomcat 기본 에러 페이지).  
+**원인**: `TOKEN=$(aws secretsmanager ...)` 출력에 `\r\n` 포함 → `Authorization: Bearer <token>\r\n` 헤더가 두 줄로 분리되어 파싱 실패.  
+**해결**:
+```bash
+TOKEN=$(aws secretsmanager get-secret-value ... | jq -r '.token' | tr -d '\r\n')
+```
+**교훈**: 환경변수로 토큰을 다룰 때 항상 `tr -d '\r\n'` 적용.
+
+---
+
+### 3. orders.json 생성 시 awk → Python3 교체
+
+**현상**: awk로 생성한 JSON을 `python3 -m json.tool`로 검증하면 `Expecting value: line 2 column 1` 오류.  
+**원인**: awk의 printf에서 탭·개행 이스케이프 처리 불안정.  
+**해결**: Python3 원라이너로 교체.
+```bash
+mysql ... | python3 -c "
+import sys, json
+rows = [l.split('\t') for l in sys.stdin.read().strip().split('\n')]
+print(json.dumps([{'orderId':int(r[0]),'fanId':int(r[1]),'amount':float(r[2]),'orderPaymentKey':r[3]} for r in rows]))
+"
+```
+
+---
+
+### 4. Wiremock 위치 혼동 (JAR vs Docker)
+
+**현상**: `/opt/fandrops/wiremock/` 디렉터리 없음, JAR 파일도 없음.  
+**원인**: Wiremock이 Docker 컨테이너로 실행 중이었음. `docker ps`로 확인 가능.  
+**해결**: 추가 설치 불필요. Docker 컨테이너가 이미 포트 8090을 점유 중.
+```bash
+docker ps  # wiremock 컨테이너 확인
+curl -s http://localhost:8090/__admin/mappings | python3 -m json.tool
+```
+**교훈**: Wiremock 실행 확인은 `docker ps` 먼저.
+
+---
+
+### 5. DB reset 후 OrderRecoveryScheduler가 주문 즉시 취소
+
+**현상**: DB를 RESERVED로 리셋한 직후 k6 실행하면 전부 409 DUPLICATE\_PAYMENT 또는 404.  
+**원인**: `UPDATE orders SET status='RESERVED' WHERE ...` 시 `updated_at` 미업데이트 → 기존 `updated_at`(수십 분 전)이 유지됨 → `OrderRecoveryScheduler`(60초 주기, 30분 타임아웃)가 즉시 CANCEL 처리.  
+**해결**: reset SQL에 `updated_at=NOW()` 추가.
+```sql
+UPDATE orders SET status='RESERVED', updated_at=NOW() WHERE id BETWEEN 51 AND 100;
+```
+
+---
+
+### 6. TossConfirmBody inner private record Jackson 직렬화 불가
+
+**현상**: 시나리오 03 전체 99.62% 실패. Wiremock 요청 로그에서 body가 빈 문자열.  
+**원인**: `TossPaymentGatewayAdapter` 내부에 `record TossConfirmBody(...)` 를 package-private으로 선언. Jackson 기본 설정은 public 클래스만 직렬화 가능 → body `{}` 또는 빈 문자열 전송 → Wiremock `bodyPatterns` 불일치 → 404 → `payment.status=FAILED` → 이후 동일 orderId 전부 409 DUPLICATE\_PAYMENT 연쇄.  
+**임시 해결**: Wiremock에 `bodyPatterns` 없는 priority:1 매핑 추가.
+```bash
+curl -s -X POST http://localhost:8090/__admin/mappings \
+  -H 'Content-Type: application/json' \
+  -d '{"priority":1,"request":{"method":"POST","url":"/v1/payments/confirm"},"response":{"status":200,"headers":{"Content-Type":"application/json"},"body":"{\"paymentKey\":\"success-mock\",\"orderId\":\"mock\",\"totalAmount\":15000,\"status\":\"DONE\"}"}}'
+```
+**근본 해결**: 이슈 [#318](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/issues/318) — `TossConfirmBody`를 `Map.of()`로 교체 (담당: 장성재).
+
+---
+
+### 7. inventory total_qty invariant 위반
+
+**현상**: `UPDATE inventory SET available_qty=200, reserved_qty=0 WHERE product_id=1` 실행 후 `total_qty=50` 그대로 → `available_qty(200) > total_qty(50)`.  
+**원인**: reset SQL에 `total_qty` 미포함.  
+**해결**: reset 시 `total_qty`도 함께 업데이트.
+```sql
+UPDATE inventory SET available_qty=200, reserved_qty=0, total_qty=200, version=0 WHERE product_id=1;
+```
+**교훈**: inventory reset SQL은 항상 `available_qty + reserved_qty = total_qty` 불변식을 유지해야 함.
