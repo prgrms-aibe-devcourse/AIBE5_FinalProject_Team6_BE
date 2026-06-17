@@ -42,4 +42,11 @@ public class ProductRepositoryAdapter implements ProductRepository {
                 .map(ProductJpaEntity::toDomain)
                 .toList();
     }
+
+    @Override
+    public List<Product> findExpiredDrops(LocalDateTime now) {
+        return jpaRepository.findExpiredDrops(now).stream()
+                .map(ProductJpaEntity::toDomain)
+                .toList();
+    }
 }
