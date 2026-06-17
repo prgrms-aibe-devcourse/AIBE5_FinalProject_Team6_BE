@@ -28,7 +28,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -76,6 +75,19 @@ class ArtistMemberControllerTest {
         assertEquals(HttpStatus.CREATED, response.getStatusCode());
     }
 
+    @Test
+    @DisplayName("소유권 불일치 아티스트로 멤버 생성 → ArtistNotFoundException 전파")
+    void create_ownershipMismatch_propagatesArtistNotFoundException() {
+        givenAuthenticated();
+        when(artistMemberService.createArtistMember(any(), anyLong(), anyString(), anyString()))
+                .thenThrow(new com.fandrops.user.application.exception.ArtistNotFoundException("존재하지 않는 아티스트 그룹입니다."));
+
+        assertThrows(com.fandrops.user.application.exception.ArtistNotFoundException.class,
+                () -> controller.create(
+                        new CreateArtistMemberRequest(99L, "hani", "pass", "하니"),
+                        authentication, httpRequest));
+    }
+
     // ── Read ─────────────────────────────────────────────────────────────────
 
     @Test
@@ -116,6 +128,17 @@ class ArtistMemberControllerTest {
         assertEquals(HttpStatus.OK, response.getStatusCode());
     }
 
+    @Test
+    @DisplayName("소유권 불일치 멤버 이름 수정 → ArtistMemberNotFoundException 전파")
+    void update_ownershipMismatch_propagatesNotFoundException() {
+        givenAuthenticated();
+        when(artistMemberService.updateArtistMemberName(eq(99L), anyString(), anyLong(), anyString(), anyString()))
+                .thenThrow(new ArtistMemberNotFoundException("존재하지 않는 아티스트 멤버입니다."));
+
+        assertThrows(ArtistMemberNotFoundException.class,
+                () -> controller.update(99L, new UpdateArtistMemberRequest("다니"), authentication, httpRequest));
+    }
+
     // ── Delete ───────────────────────────────────────────────────────────────
 
     @Test
@@ -126,6 +149,17 @@ class ArtistMemberControllerTest {
 
         assertEquals(HttpStatus.NO_CONTENT, response.getStatusCode());
         verify(artistMemberService).deleteArtistMember(eq(1L), anyLong(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("소유권 불일치 멤버 삭제 → ArtistMemberNotFoundException 전파")
+    void delete_ownershipMismatch_propagatesNotFoundException() {
+        givenAuthenticated();
+        org.mockito.Mockito.doThrow(new ArtistMemberNotFoundException("존재하지 않는 아티스트 멤버입니다."))
+                .when(artistMemberService).deleteArtistMember(eq(99L), anyLong(), anyString(), anyString());
+
+        assertThrows(ArtistMemberNotFoundException.class,
+                () -> controller.delete(99L, authentication, httpRequest));
     }
 
     // ── Profile Image Presigned URL ──────────────────────────────────────────

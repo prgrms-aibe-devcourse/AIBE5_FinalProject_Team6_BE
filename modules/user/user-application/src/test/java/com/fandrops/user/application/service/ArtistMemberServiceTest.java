@@ -5,6 +5,7 @@ import com.fandrops.user.application.dto.PresignedUploadResult;
 import com.fandrops.user.application.exception.ArtistMemberNotFoundException;
 import com.fandrops.user.application.exception.ArtistNotFoundException;
 import com.fandrops.user.application.exception.DuplicateLoginIdException;
+import com.fandrops.user.application.exception.InvalidContentTypeException;
 import com.fandrops.user.application.port.AgencyAccountRepository;
 import com.fandrops.user.application.port.ArtistMemberRepository;
 import com.fandrops.user.application.port.ArtistProfileRepository;
@@ -303,7 +304,19 @@ class ArtistMemberServiceTest {
 
         assertEquals(expected.presignedUrl(), result.presignedUrl());
         verify(s3PresignedUrlPort).generate("image/jpeg", 1024L);
-        verify(auditLogPort).save(any());
+        verify(auditLogPort).save(argThat(log ->
+                "ARTIST_MEMBER_PROFILE_IMAGE_UPDATE".equals(log.getAction())));
+    }
+
+    @Test
+    @DisplayName("허용되지 않은 contentType — InvalidContentTypeException (소유권 검증 전 차단)")
+    void generateProfileImagePresignedUrl_invalidContentType_throwsInvalidContentTypeException() {
+        assertThrows(InvalidContentTypeException.class,
+                () -> artistMemberService.generateProfileImagePresignedUrl(
+                        1L, ACTOR_ID, "application/javascript", 1024L, CLIENT_IP, TRACE_ID));
+
+        verify(artistMemberRepository, never()).findById(anyLong());
+        verify(s3PresignedUrlPort, never()).generate(anyString(), anyLong());
     }
 
     @Test
@@ -352,7 +365,8 @@ class ArtistMemberServiceTest {
         assertEquals("https://cdn.fandrops.com/img.jpg", result.getProfileImageUrl());
         verify(artistMemberRepository).save(argThat(m ->
                 "https://cdn.fandrops.com/img.jpg".equals(m.getProfileImageUrl())));
-        verify(auditLogPort).save(any());
+        verify(auditLogPort).save(argThat(log ->
+                "ARTIST_MEMBER_PROFILE_IMAGE_UPDATE".equals(log.getAction())));
     }
 
     @Test

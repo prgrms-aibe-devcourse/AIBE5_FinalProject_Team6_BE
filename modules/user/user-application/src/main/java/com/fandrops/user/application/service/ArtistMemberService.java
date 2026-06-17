@@ -1,10 +1,12 @@
 package com.fandrops.user.application.service;
 
+import com.fandrops.user.application.constant.AllowedImageContentType;
 import com.fandrops.user.application.dto.CreateArtistMemberCommand;
 import com.fandrops.user.application.dto.PresignedUploadResult;
 import com.fandrops.user.application.exception.ArtistMemberNotFoundException;
 import com.fandrops.user.application.exception.ArtistNotFoundException;
 import com.fandrops.user.application.exception.DuplicateLoginIdException;
+import com.fandrops.user.application.exception.InvalidContentTypeException;
 import com.fandrops.user.application.port.AgencyAccountRepository;
 import com.fandrops.user.application.port.ArtistMemberRepository;
 import com.fandrops.user.application.port.ArtistProfileRepository;
@@ -150,10 +152,13 @@ public class ArtistMemberService {
                 .build());
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public PresignedUploadResult generateProfileImagePresignedUrl(
             Long memberId, Long agencyId, String contentType, long contentLength,
             String clientIp, String traceId) {
+        if (!AllowedImageContentType.isAllowed(contentType)) {
+            throw new InvalidContentTypeException(contentType);
+        }
         findMemberWithOwnership(memberId, agencyId);
         PresignedUploadResult result = s3PresignedUrlPort.generate(contentType, contentLength);
         try {
