@@ -64,6 +64,24 @@ class ArtistMemberServiceTest {
         verify(artistMemberRepository, never()).save(any());
     }
 
+    // ── 소유권 검증 ──────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("다른 Agency 소속 artistId — ArtistNotFoundException (소유권 불일치)")
+    void createArtistMember_artistBelongsToOtherAgency_throwsArtistNotFoundException() {
+        ArtistProfile otherAgencyProfile = ArtistProfile.builder()
+                .id(1L).agencyId(99L).name("타 소속 아티스트").build(); // ACTOR_ID=10, agencyId=99 → 불일치
+        when(artistProfileRepository.findById(1L)).thenReturn(Optional.of(otherAgencyProfile));
+
+        assertThrows(ArtistNotFoundException.class,
+                () -> artistMemberService.createArtistMember(
+                        new CreateArtistMemberCommand(1L, "hani", "pass", "하니"),
+                        ACTOR_ID, CLIENT_IP, TRACE_ID));
+
+        verify(agencyAccountRepository, never()).existsByLoginId(anyString());
+        verify(artistMemberRepository, never()).save(any());
+    }
+
     // ── loginId 중복 체크 ─────────────────────────────────────────────────────
 
     @Test

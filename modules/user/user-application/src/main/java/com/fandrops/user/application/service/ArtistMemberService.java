@@ -8,6 +8,7 @@ import com.fandrops.user.application.port.ArtistMemberRepository;
 import com.fandrops.user.application.port.ArtistProfileRepository;
 import com.fandrops.user.application.port.AuditLogPort;
 import com.fandrops.user.domain.ArtistMember;
+import com.fandrops.user.domain.ArtistProfile;
 import com.fandrops.user.domain.AuditLog;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -44,9 +45,16 @@ public class ArtistMemberService {
     @Transactional
     public ArtistMember createArtistMember(CreateArtistMemberCommand command,
                                             Long actorId, String clientIp, String traceId) {
-        artistProfileRepository.findById(command.artistId())
+        ArtistProfile profile = artistProfileRepository.findById(command.artistId())
                 .orElseThrow(() -> new ArtistNotFoundException(
                         "존재하지 않는 아티스트 그룹입니다. artistId=" + command.artistId()));
+        // 소유권 검증: 요청한 Agency가 이 아티스트의 소속사인지 확인
+        // 다른 Agency 소속 아티스트에 멤버를 생성하지 못하도록 막음.
+        // 존재하지 않는 것과 동일한 메시지로 응답해 ID 노출 방지
+        if (!profile.getAgencyId().equals(actorId)) {
+            throw new ArtistNotFoundException(
+                    "존재하지 않는 아티스트 그룹입니다. artistId=" + command.artistId());
+        }
 
         if (agencyAccountRepository.existsByLoginId(command.loginId())) {
             throw new DuplicateLoginIdException("이미 Agency 계정에서 사용 중인 loginId입니다.");
