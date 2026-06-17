@@ -222,6 +222,23 @@ class ArtistMemberServiceTest {
         verify(artistMemberRepository, never()).save(any());
     }
 
+    @Test
+    @DisplayName("타 Agency 소속 멤버 이름 수정 — ArtistMemberNotFoundException (소유권 불일치)")
+    void updateArtistMemberName_wrongAgency_throwsArtistMemberNotFoundException() {
+        ArtistMember otherMember = ArtistMember.builder()
+                .id(1L).artistId(2L).loginId("hani").passwordHash("hash").memberName("하니").build();
+        ArtistProfile otherProfile = ArtistProfile.builder()
+                .id(2L).agencyId(99L).name("타 소속").build();
+        when(artistMemberRepository.findById(1L)).thenReturn(Optional.of(otherMember));
+        when(artistProfileRepository.findById(2L)).thenReturn(Optional.of(otherProfile));
+
+        assertThrows(ArtistMemberNotFoundException.class,
+                () -> artistMemberService.updateArtistMemberName(
+                        1L, "다니", ACTOR_ID, CLIENT_IP, TRACE_ID));
+
+        verify(artistMemberRepository, never()).save(any());
+    }
+
     // ── Delete ───────────────────────────────────────────────────────────────
 
     @Test
@@ -244,6 +261,22 @@ class ArtistMemberServiceTest {
 
         assertThrows(ArtistMemberNotFoundException.class,
                 () -> artistMemberService.deleteArtistMember(99L, ACTOR_ID, CLIENT_IP, TRACE_ID));
+
+        verify(artistMemberRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("타 Agency 소속 멤버 삭제 — ArtistMemberNotFoundException (소유권 불일치)")
+    void deleteArtistMember_wrongAgency_throwsArtistMemberNotFoundException() {
+        ArtistMember otherMember = ArtistMember.builder()
+                .id(1L).artistId(2L).loginId("hani").passwordHash("hash").memberName("하니").build();
+        ArtistProfile otherProfile = ArtistProfile.builder()
+                .id(2L).agencyId(99L).name("타 소속").build();
+        when(artistMemberRepository.findById(1L)).thenReturn(Optional.of(otherMember));
+        when(artistProfileRepository.findById(2L)).thenReturn(Optional.of(otherProfile));
+
+        assertThrows(ArtistMemberNotFoundException.class,
+                () -> artistMemberService.deleteArtistMember(1L, ACTOR_ID, CLIENT_IP, TRACE_ID));
 
         verify(artistMemberRepository, never()).save(any());
     }
