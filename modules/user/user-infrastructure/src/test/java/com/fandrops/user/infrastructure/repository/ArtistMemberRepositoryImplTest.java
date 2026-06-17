@@ -60,7 +60,7 @@ class ArtistMemberRepositoryImplTest {
     @DisplayName("findByLoginId — 존재하는 loginId → domain 반환")
     void findByLoginId_found_returnsDomain() {
         ArtistMemberJpaEntity entity = ArtistMemberJpaEntity.from(buildDomain(5L));
-        when(jpaRepository.findByLoginId("hani")).thenReturn(Optional.of(entity));
+        when(jpaRepository.findByLoginIdAndDeletedAtIsNull("hani")).thenReturn(Optional.of(entity));
 
         Optional<ArtistMember> result = repository.findByLoginId("hani");
 
@@ -73,7 +73,7 @@ class ArtistMemberRepositoryImplTest {
     @Test
     @DisplayName("findByLoginId — 존재하지 않는 loginId → empty")
     void findByLoginId_notFound_returnsEmpty() {
-        when(jpaRepository.findByLoginId("unknown")).thenReturn(Optional.empty());
+        when(jpaRepository.findByLoginIdAndDeletedAtIsNull("unknown")).thenReturn(Optional.empty());
 
         assertTrue(repository.findByLoginId("unknown").isEmpty());
     }
@@ -86,7 +86,7 @@ class ArtistMemberRepositoryImplTest {
                 .passwordHash("hash2").memberName("민지")
                 .role(UserRole.ARTIST).build();
         ArtistMemberJpaEntity entity = ArtistMemberJpaEntity.from(domainNoImg);
-        when(jpaRepository.findByLoginId("minji")).thenReturn(Optional.of(entity));
+        when(jpaRepository.findByLoginIdAndDeletedAtIsNull("minji")).thenReturn(Optional.of(entity));
 
         Optional<ArtistMember> result = repository.findByLoginId("minji");
 

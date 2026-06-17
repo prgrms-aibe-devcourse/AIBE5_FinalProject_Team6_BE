@@ -58,4 +58,12 @@ public abstract class UserControllerSupport {
         }
         throw new InvalidCredentialsException("인증이 필요합니다.");
     }
+
+    protected Long resolveAgencyId(Authentication authentication) {
+        if (authentication != null && authentication.isAuthenticated()
+                && authentication.getPrincipal() instanceof Long agencyId) {
+            return agencyId;
+        }
+        throw new InvalidCredentialsException("인증이 필요합니다.");
+    }
 }
