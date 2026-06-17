@@ -126,9 +126,9 @@ class ArtistProfileServiceTest {
     }
 
     @Test
-    @DisplayName("cursor가 숫자가 아닐 때 — NumberFormatException")
-    void listArtistProfiles_invalidCursor_throwsNumberFormatException() {
-        assertThrows(NumberFormatException.class,
+    @DisplayName("cursor가 숫자가 아닐 때 — IllegalArgumentException (400으로 처리됨)")
+    void listArtistProfiles_invalidCursor_throwsIllegalArgumentException() {
+        assertThrows(IllegalArgumentException.class,
                 () -> artistProfileService.listArtistProfiles("invalid", 20));
     }
 

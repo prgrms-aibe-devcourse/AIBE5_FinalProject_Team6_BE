@@ -25,7 +25,14 @@ public class ArtistProfileService {
     }
 
     public ArtistProfileListResult listArtistProfiles(String cursor, int size) {
-        Long cursorId = cursor != null ? Long.valueOf(cursor) : null;
+        Long cursorId = null;
+        if (cursor != null) {
+            try {
+                cursorId = Long.valueOf(cursor);
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("cursor 형식이 올바르지 않습니다: " + cursor);
+            }
+        }
         List<ArtistProfile> raw = artistProfileRepository.findAllOrderByFanCountDesc(cursorId, size + 1);
         boolean hasMore = raw.size() > size;
         List<ArtistProfile> page = hasMore ? raw.subList(0, size) : raw;
