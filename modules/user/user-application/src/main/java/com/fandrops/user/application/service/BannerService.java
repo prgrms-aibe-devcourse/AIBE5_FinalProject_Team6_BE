@@ -195,6 +195,7 @@ public class BannerService {
     public void deleteAgencyBanner(Long id, Long agencyId, String clientIp, String traceId) {
         Banner banner = bannerRepository.findByIdAndAgencyId(id, agencyId)
                 .orElseThrow(() -> new BannerNotFoundException("존재하지 않는 배너입니다. id=" + id));
+        String beforeJson = "{\"isActive\":" + banner.isActive() + "}";
         banner.deactivate();
         bannerRepository.save(banner);
         auditLogPort.save(AuditLog.builder()
@@ -205,7 +206,7 @@ public class BannerService {
                 .resourceType("BANNER")
                 .resourceId(id)
                 .traceId(traceId)
-                .beforeJson("{\"isActive\":true}")
+                .beforeJson(beforeJson)
                 .afterJson("{\"isActive\":false}")
                 .clientIp(clientIp)
                 .build());

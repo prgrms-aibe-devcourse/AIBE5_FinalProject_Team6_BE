@@ -34,7 +34,7 @@ class BannerControllerTest {
     @Test
     @DisplayName("활성 메인 배너 조회 → 200 OK, 목록 반환")
     void getMainBanners_success_returns200WithActiveList() {
-        BannerResult stub = new BannerResult(1L, "이벤트 배너", "img.jpg", "https://fandrops.com", 1, true, null, null);
+        BannerResult stub = new BannerResult(1L, null, "이벤트 배너", "img.jpg", "https://fandrops.com", 1, true, null, null);
         when(bannerService.getActiveMainBanners()).thenReturn(List.of(stub));
 
         ResponseEntity<?> response = controller.getMainBanners();

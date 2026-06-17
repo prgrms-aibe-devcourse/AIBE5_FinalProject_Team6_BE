@@ -24,6 +24,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -340,7 +341,7 @@ class BannerServiceTest {
     }
 
     @Test
-    @DisplayName("Agency 배너 생성 — agencyId 세팅 + audit 기록")
+    @DisplayName("Agency 배너 생성 — agencyId 세팅 검증 + audit 기록")
     void createAgencyBanner_savesWithAgencyIdAndAudit() {
         CreateBannerCommand command = new CreateBannerCommand(
                 "에이전시 배너", "https://cdn.fandrops.com/img.jpg", "https://fandrops.com", 0, null, null);
@@ -350,7 +351,7 @@ class BannerServiceTest {
         BannerResult result = bannerService.createAgencyBanner(command, AGENCY_ID, CLIENT_IP, TRACE_ID);
 
         assertNotNull(result);
-        verify(bannerRepository).save(any(Banner.class));
+        verify(bannerRepository).save(argThat(b -> AGENCY_ID.equals(b.getAgencyId())));
         verify(auditLogPort).save(any(AuditLog.class));
     }
 
@@ -406,6 +407,27 @@ class BannerServiceTest {
     }
 
     @Test
+    @DisplayName("Agency 배너 수정 — 종료 시각이 시작 시각보다 이르면 IllegalArgumentException")
+    void updateAgencyBanner_endBeforeStart_throwsIllegalArgumentException() {
+        Banner banner = Banner.builder()
+                .id(1L).bannerType(BannerType.MAIN).agencyId(AGENCY_ID)
+                .title("배너").imageUrl("https://img.jpg").landingUrl("https://landing.com")
+                .exposureOrder(1).isActive(true)
+                .startAt(LocalDateTime.of(2025, 6, 1, 0, 0))
+                .endAt(LocalDateTime.of(2025, 12, 31, 0, 0)).build();
+        when(bannerRepository.findByIdAndAgencyId(1L, AGENCY_ID)).thenReturn(Optional.of(banner));
+
+        UpdateBannerCommand command = new UpdateBannerCommand(
+                null, null, null, null, null,
+                Optional.of(LocalDateTime.of(2025, 12, 31, 0, 0)),
+                Optional.of(LocalDateTime.of(2025, 1, 1, 0, 0))); // end < start
+
+        assertThrows(IllegalArgumentException.class,
+                () -> bannerService.updateAgencyBanner(1L, command, AGENCY_ID, CLIENT_IP, TRACE_ID));
+        verify(bannerRepository, never()).save(any());
+    }
+
+    @Test
     @DisplayName("Agency 배너 삭제 — 소유권 불일치 시 BannerNotFoundException")
     void deleteAgencyBanner_ownershipMismatch_throwsBannerNotFoundException() {
         when(bannerRepository.findByIdAndAgencyId(99L, AGENCY_ID)).thenReturn(Optional.empty());
@@ -416,8 +438,8 @@ class BannerServiceTest {
     }
 
     @Test
-    @DisplayName("Agency 배너 삭제 — soft delete (is_active=false) + audit 기록")
-    void deleteAgencyBanner_success_setsIsActiveFalse() {
+    @DisplayName("Agency 배너 삭제 — soft delete (is_active=false) + audit beforeJson이 실제 상태 반영")
+    void deleteAgencyBanner_success_setsIsActiveFalseAndAuditsCorrectBeforeJson() {
         Banner banner = sampleAgencyBanner(1L);
         when(bannerRepository.findByIdAndAgencyId(1L, AGENCY_ID)).thenReturn(Optional.of(banner));
         when(bannerRepository.save(any(Banner.class))).thenReturn(banner);
@@ -426,7 +448,25 @@ class BannerServiceTest {
 
         assertFalse(banner.isActive());
         verify(bannerRepository).save(banner);
-        verify(auditLogPort).save(any(AuditLog.class));
+        verify(auditLogPort).save(argThat(log ->
+                log.getBeforeJson().contains("\"isActive\":true") &&
+                log.getAfterJson().contains("\"isActive\":false")));
+    }
+
+    @Test
+    @DisplayName("Agency 배너 삭제 — 이미 비활성인 배너 삭제 시 beforeJson이 false로 기록됨")
+    void deleteAgencyBanner_alreadyInactive_beforeJsonReflectsActualState() {
+        Banner inactiveBanner = Banner.builder()
+                .id(1L).bannerType(BannerType.MAIN).agencyId(AGENCY_ID)
+                .title("배너").imageUrl("https://img.jpg").landingUrl("https://landing.com")
+                .exposureOrder(1).isActive(false).build();
+        when(bannerRepository.findByIdAndAgencyId(1L, AGENCY_ID)).thenReturn(Optional.of(inactiveBanner));
+        when(bannerRepository.save(any(Banner.class))).thenReturn(inactiveBanner);
+
+        bannerService.deleteAgencyBanner(1L, AGENCY_ID, CLIENT_IP, TRACE_ID);
+
+        verify(auditLogPort).save(argThat(log ->
+                log.getBeforeJson().contains("\"isActive\":false")));
     }
 
     @Test
