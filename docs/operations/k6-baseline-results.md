@@ -393,8 +393,10 @@ Nginx worker_connections 및 JVM FD 한계 내에서 안정적으로 동작하�
 ### 사전 준비
 
 ```bash
-# Nginx worker_connections 확인
-grep worker_connections /etc/nginx/nginx.conf  # ≥ 2048 필요
+# Nginx worker_connections 확인 및 수정 (기본값 1024 → 4096)
+grep worker_connections /etc/nginx/nginx.conf
+sudo sed -i 's/worker_connections 1024/worker_connections 4096/' /etc/nginx/nginx.conf
+sudo nginx -t && sudo nginx -s reload
 
 # JVM FD 한계 확인
 ulimit -n  # ≥ 8192 필요
@@ -406,23 +408,51 @@ ulimit -n  # ≥ 8192 필요
 cd /opt/fandrops/k6
 ACTIVE=$(cat /etc/fandrops/active-slot)
 PORT=$([ "$ACTIVE" = "blue" ] && echo 8081 || echo 8082)
-k6 run -e BASE_URL=http://localhost:$PORT \
-  --out experimental-prometheus-rw \
-  scenarios/05_sse_queue.js
+K6_PROMETHEUS_RW_TREND_STATS="p(95),p(99)" k6 run -e BASE_URL=http://localhost:$PORT --out experimental-prometheus-rw scenarios/05_sse_queue.js
 ```
 
-### 결과
+### 결과 (2026-06-17, 1회차 — **공식 베이스라인**)
 
 | 지표 | 결과 | 목표 | 상태 |
 |---|---|---|---|
-| 정상 구간 에러율 | — | < 0.1% | 미실행 |
-| 경계 구간 에러율 | — | < 1% | 미실행 |
-| 초과 구간 429 발생 | — | count > 0 | 미실행 |
-| 429 retryable:true | — | 필수 | 미실행 |
+| 정상 구간 에러율 (1,000 VU) | — | < 0.1% | ⚠️ 데이터 없음 |
+| 경계 구간 에러율 (1,800 VU) | — | < 1% | ⚠️ 데이터 없음 |
+| 초과 구간 429 발생 (2,100 VU) | — | count > 0 | ❌ 크래시로 미확인 |
+| 429 retryable:true | — | 필수 | ❌ 크래시로 미확인 |
+
+**실행 결과 요약:**
+
+- `normal_load` (0→1,000 VU, 1m45s): **완료** ✓ — 1,000 complete iterations
+- `boundary` (0→1,800 VU, 1m45s): **부분 실행** — 약 0m19s 진행 후 크래시
+- `overflow` (0→2,100 VU, 1m15s): **미실행** — 크래시로 시작 못함
+
+**크래시 원인 분석:**
+
+t3.small(2GB RAM)에서 Spring Boot 2개 인스턴스 + k6 2,100 VU + Prometheus/Grafana 모니터링 스택을 동시 실행하여 OOM 발생. EC2 전체 다운, SSM 세션 단절, k6 터미널 결과 및 Prometheus 메트릭 전부 유실.
+
+> **Grafana/Prometheus 데이터 없음**: EC2 OOM 크래시로 k6 remote write 전송 불가. 공식 수치로 사용할 터미널 출력도 유실됨.
 
 ### 오너 피드백 (장성재, 지영재)
 
-_미실행 — 결과 기록 후 업데이트 예정_
+**현상**: 2,100 VU SSE 동시 연결 시도 → t3.small OOM 크래시
+
+**근본 원인 1 — k6와 앱 서버 동일 EC2 실행**
+
+k6 2,100 VU 자체가 수백 MB 메모리를 점유. Spring Boot × 2 + k6 + 모니터링 스택의 메모리 합산이 2GB를 초과하여 OOM 발생.
+
+**근본 원인 2 — Spring MVC blocking SSE**
+
+Spring MVC SSE는 연결 1개당 Tomcat 스레드 1개를 점유. 2,100 연결 = 2,100 스레드 = 메모리 폭발 구조.
+
+**개선 방향 (우선순위순):**
+
+| 방법 | 효과 | 난이도 | 비용 |
+|---|---|---|---|
+| k6를 별도 머신에서 실행 (GitHub Actions runner 활용) | 테스트 환경 분리 → OOM 제거 | 낮음 | 0 |
+| t3.medium 업그레이드 | RAM 2GB → 4GB | 낮음 | 비용 발생 |
+| SSE 엔드포인트 Spring WebFlux 전환 | 연결당 메모리 ~1MB → ~50KB (20배↓), t3.small에서 2,100 VU 수용 가능 | 높음 | 0 |
+
+> **재실행 전 필수 조치**: k6를 앱 서버와 분리하지 않으면 동일 크래시 재발. GitHub Actions `.github/workflows/run-k6.yml`을 활용하여 runner에서 실행하는 방식 권장.
 
 ---
 
@@ -510,11 +540,12 @@ _미실행 — 결과 기록 후 업데이트 예정_
 | 02 피드 조회 | 정환철 | 287.67ms | 0.00% | — | ❌ SLO 미달 |
 | 03 결제 확인 | 장성재 | — | — | — | 미실행 |
 | 04 드롭스 스파이크 | 형성빈 | 12.34s (성공 508ms) | 99.16%\*\* | 0건 | ❌ SLO 미달 |
-| 05 SSE 대기열 | 장성재, 지영재 | — | — | — | 미실행 |
+| 05 SSE 대기열 | 장성재, 지영재 | — | —\*\*\* | — | ❌ OOM 크래시 |
 | 06 통합 워크로드 | 전체 | — | — | — | 미실행 |
 
 > \* 시나리오 01 에러율 75%: 200 VU 중 300건이 409 DEPLETED(재고 소진 정상 응답), 100건 201 RESERVED. 오버셀 없음.  
-> \*\* 시나리오 04 에러율 99.16%: 1,000 VU 중 100건 201 RESERVED + 8,433건 409 DEPLETED(정상) + 3,375건 기타. k6는 2xx 외 응답을 전부 실패로 집계. 오버셀 없음.
+> \*\* 시나리오 04 에러율 99.16%: 1,000 VU 중 100건 201 RESERVED + 8,433건 409 DEPLETED(정상) + 3,375건 기타. k6는 2xx 외 응답을 전부 실패로 집계. 오버셀 없음.  
+> \*\*\* 시나리오 05: 2,100 VU SSE 동시 연결로 t3.small OOM 크래시 — k6 터미널 출력 및 Prometheus 메트릭 전부 유실. normal_load(1,000 VU)만 완료 확인. 재실행 전 k6를 별도 머신에서 실행하거나 Spring WebFlux 전환 필요.
 
 ---
 
