@@ -1,8 +1,8 @@
-# k6 부하 테스트 — 시나리오별 설명 및 베이스라인 결과
+ 과# k6 부하 테스트 — 시나리오별 설명 및 베이스라인 결과
 
-> **목적**: 튜닝 전 SLO 기준선 수치 확정 및 도메인 오너별 최적화 피드백 전달  
-> **실행 환경**: EC2 t3.small (단일 인스턴스) — Spring Boot + Prometheus + Grafana + k6 동시 실행  
-> **실행일**: 2026-06-12  
+> **목적**: 튜닝 전 SLO 기준선 수치 확정 및 도메인 오너별 최적화 피드백 전달
+> **실행 환경**: EC2 t3.small (단일 인스턴스) — Spring Boot + Prometheus + Grafana + k6 동시 실행
+> **실행일**: 2026-06-12
 > **기준 SLO**: `docs/observability-metrics.md` 참고
 
 ---
@@ -18,8 +18,8 @@
 | 모니터링 | Prometheus + Grafana (동일 EC2) |
 | 토큰 | `infra/k6/seed/tokens.csv` — fan_id 1~2100 JWT |
 
-> **주의**: k6가 Spring Boot + 모니터링 스택과 같은 EC2에서 실행되므로 CPU/메모리 경합이 발생합니다.  
-> tail latency(P90~P95)가 실제 서비스 환경보다 높게 측정될 수 있습니다.  
+> **주의**: k6가 Spring Boot + 모니터링 스택과 같은 EC2에서 실행되므로 CPU/메모리 경합이 발생합니다.
+> tail latency(P90~P95)가 실제 서비스 환경보다 높게 측정될 수 있습니다.
 > **절대 수치보다 최적화 전/후 동일 환경 비교값이 중요합니다.** 최적화 후 반드시 동일 조건에서 재측정하여 개선폭을 확인하세요.
 
 ---
@@ -66,13 +66,13 @@ k6 run -e BASE_URL=http://localhost:$PORT --out experimental-prometheus-rw scena
 
 ## 시나리오 01: 주문 동시성 (Order Concurrency)
 
-**파일**: `infra/k6/scenarios/01_order_concurrency.js`  
-**담당 오너**: 형성빈  
+**파일**: `infra/k6/scenarios/01_order_concurrency.js`
+**담당 오너**: 형성빈
 **SLO**: `orders_reserved ≤ 100` (오버셀 0건), P95 < 300ms, 에러율 < 0.1%
 
 ### 목적
 
-200 VU가 동시에 `POST /api/v1/orders`를 호출할 때 재고 100개에 대해 오버셀이 발생하지 않는지 검증한다.  
+200 VU가 동시에 `POST /api/v1/orders`를 호출할 때 재고 100개에 대해 오버셀이 발생하지 않는지 검증한다.
 Redis 기반 분산 락 + 대기열 처리의 동시성 정확성을 확인하는 핵심 시나리오.
 
 ### 실행 흐름
@@ -112,6 +112,17 @@ K6_PROMETHEUS_RW_TREND_STATS="p(95),p(99)" k6 run \
 
 > `K6_PROMETHEUS_RW_TREND_STATS="p(95),p(99)"` — Prometheus에 p95/p99 게이지 메트릭 기록. 미설정 시 p99만 내보냄.
 
+### 사후 처리 (04 실행 전 필수)
+
+주문 성공 시 `access:ticket:1:{fanId}` 키가 삭제되므로, **04 실행 전에 반드시 Redis 재적재** 필요.
+
+```bash
+REDIS_HOST="master.fandrops-prod-redis.q7gdno.apn2.cache.amazonaws.com"
+for i in {1..2100}; do
+  valkey-cli -h $REDIS_HOST --tls setex "access:ticket:1:$i" 86400 "test-ticket-token"
+done
+```
+
 ### 결과 (2026-06-15, 1회차 — 참고용)
 
 | 지표 | 결과 | 목표 | 상태 |
@@ -146,12 +157,12 @@ orders:    RESERVED=150, CANCELLED=50
 | 총 요청 수 | 400 (200 VU × 2 iter) | — | — |
 | 처리량 | 99.8 req/s | — | — |
 
-> **에러율 75% 해석**: 200 VU 중 100건은 201 RESERVED, 300건은 409 DEPLETED(재고 소진). k6는 2xx 외 응답을 실패로 집계하므로 수치가 높게 나오나, 재고 100개 기준 정상 동작.  
+> **에러율 75% 해석**: 200 VU 중 100건은 201 RESERVED, 300건은 409 DEPLETED(재고 소진). k6는 2xx 외 응답을 실패로 집계하므로 수치가 높게 나오나, 재고 100개 기준 정상 동작.
 > **성공 요청 P95**: `{ expected_response:true }` 기준 P95=975ms — 실제 처리 완료 요청의 응답시간.
 
 ### 오너 피드백 (형성빈)
 
-**오버셀 발생 (핵심 버그)**: `orders_reserved=150` — 재고 100개 기준 50건 오버셀.  
+**오버셀 발생 (핵심 버그)**: `orders_reserved=150` — 재고 100개 기준 50건 오버셀.
 `inventory.reserved_qty=100`(정상)과 `orders.status=RESERVED 150건` 불일치로 주문 생성(INSERT) 후 재고 차감(UPDATE) 사이 경쟁 조건으로 추정.
 
 **확인 요청 사항:**
@@ -159,20 +170,20 @@ orders:    RESERVED=150, CANCELLED=50
 2. Redis 분산 락 범위가 inventory 차감을 포함하는지 확인
 3. `fandrops.queue.max-concurrent-processing` 코드 기본값 확인 및 적정값 결정 (200 VU 단일 배치 처리에 충분한지)
 
-> **담당 분리**: 적정값 결정 → 형성빈, EC2 환경변수 주입 → 지영재  
+> **담당 분리**: 적정값 결정 → 형성빈, EC2 환경변수 주입 → 지영재
 > 현재 운영 환경에 해당 설정이 없어 코드 기본값으로 동작 중. 값이 200 미만이면 200 VU가 단일 배치로 처리되지 않아 동시성 재현이 부정확해짐.
 
 ---
 
 ## 시나리오 02: 피드 조회 Read P95 기준선
 
-**파일**: `infra/k6/scenarios/02_feed_read.js`  
-**담당 오너**: 정환철  
+**파일**: `infra/k6/scenarios/02_feed_read.js`
+**담당 오너**: 정환철
 **SLO**: P95 < 120ms, 에러율 < 0.1%
 
 ### 목적
 
-`GET /api/v1/artists/{id}/feeds` 엔드포인트의 읽기 성능 기준선을 측정한다.  
+`GET /api/v1/artists/{id}/feeds` 엔드포인트의 읽기 성능 기준선을 측정한다.
 50 VU 2분 constant-vus 부하에서 P95 응답 시간이 120ms 이내인지 확인한다.
 
 ### 실행 흐름
@@ -191,6 +202,10 @@ k6 run -e BASE_URL=http://localhost:$PORT \
   --out experimental-prometheus-rw \
   scenarios/02_feed_read.js
 ```
+
+### 사후 처리
+
+DB·Redis 상태를 변경하지 않으므로 별도 정리 불필요. 다음 시나리오 바로 실행 가능.
 
 ### 결과 (2026-06-12, 4회차 — 공식 기록)
 
@@ -219,7 +234,7 @@ k6 run -e BASE_URL=http://localhost:$PORT \
 
 ### 오너 피드백 (정환철)
 
-**현상**: P95 287ms로 목표(120ms) 대비 **2.4배 초과**.  
+**현상**: P95 287ms로 목표(120ms) 대비 **2.4배 초과**.
 min=5.52ms이므로 엔드포인트 자체는 빠르게 응답 가능. 50 VU 부하 하에서 tail latency가 급격히 올라가는 패턴은 일반적으로 **DB 쿼리 비효율** 또는 **커넥션 풀 대기**에서 기인한다.
 
 **확인 요청 사항:**
@@ -235,8 +250,8 @@ min=5.52ms이므로 엔드포인트 자체는 빠르게 응답 가능. 50 VU 부
 
 ## 시나리오 03: 결제 확인 (Payment Confirm)
 
-**파일**: `infra/k6/scenarios/03_payment_confirm.js`  
-**담당 오너**: 장성재  
+**파일**: `infra/k6/scenarios/03_payment_confirm.js`
+**담당 오너**: 장성재
 **SLO**: P95 < 3,000ms, 에러율 < 1%
 
 ### 목적
@@ -283,6 +298,22 @@ k6 run -e BASE_URL=http://localhost:$PORT \
   scenarios/03_payment_confirm.js
 ```
 
+### 사후 처리 (재실행 시 필수)
+
+결제 실패 레코드와 취소된 주문이 남아 있으면 재실행 시 전부 409. 반드시 초기화 후 재실행.
+
+```bash
+MYSQL="mysql -u fandrops_admin -p<PW> -h fandrops-prod-mysql.coqwxjz7zumt.ap-northeast-2.rds.amazonaws.com fandrops"
+
+# payment 삭제 + orders RESERVED 복원 (updated_at=NOW() 필수 — 누락 시 OrderRecoveryScheduler가 즉시 취소)
+$MYSQL -e "DELETE FROM payment WHERE order_id BETWEEN 51 AND 100;"
+$MYSQL -e "UPDATE orders SET status='RESERVED', updated_at=NOW() WHERE id BETWEEN 51 AND 100;"
+
+# 확인
+$MYSQL -e "SELECT COUNT(*) FROM payment WHERE order_id BETWEEN 51 AND 100;"         # → 0
+$MYSQL -e "SELECT COUNT(*) FROM orders WHERE status='RESERVED' AND id BETWEEN 51 AND 100;" # → 50
+```
+
 ### 결과 (2026-06-17, 1회차 — **코드 버그로 재측정 필요**)
 
 | 지표 | 결과 | 목표 | 상태 |
@@ -321,8 +352,8 @@ Map<String, Object> body = Map.of(
 
 ## 시나리오 04: 드롭스 스파이크 (Drop Spike)
 
-**파일**: `infra/k6/scenarios/04_drop_spike.js`  
-**담당 오너**: 형성빈  
+**파일**: `infra/k6/scenarios/04_drop_spike.js`
+**담당 오너**: 형성빈
 **SLO**: `spike_orders_reserved ≤ 100` (오버셀 0건), P95 < 300ms, 에러율 < 0.1%
 
 ### 목적
@@ -365,6 +396,23 @@ K6_PROMETHEUS_RW_TREND_STATS="p(95),p(99)" k6 run -e BASE_URL=http://localhost:$
 
 > `K6_PROMETHEUS_RW_TREND_STATS="p(95),p(99)"` — Prometheus에 p95/p99 게이지 메트릭 기록. 미설정 시 p99만 내보냄.
 
+### 사후 처리 (06 실행 전 필수)
+
+04 완료 후 inventory와 Redis가 소진 상태. 06 실행 전 반드시 초기화.
+
+```bash
+MYSQL="mysql -u fandrops_admin -p<PW> -h fandrops-prod-mysql.coqwxjz7zumt.ap-northeast-2.rds.amazonaws.com fandrops"
+
+# 06용 inventory 리셋 (200개)
+$MYSQL -e "UPDATE inventory SET available_qty=200, reserved_qty=0, total_qty=200, version=0 WHERE product_id=1;"
+
+# Redis 티켓 재적재
+REDIS_HOST="master.fandrops-prod-redis.q7gdno.apn2.cache.amazonaws.com"
+for i in {1..2100}; do
+  valkey-cli -h $REDIS_HOST --tls setex "access:ticket:1:$i" 86400 "test-ticket-token"
+done
+```
+
 ### 결과 (2026-06-17, 1회차 — **공식 베이스라인**)
 
 | 지표 | 결과 | 목표 | 상태 |
@@ -384,8 +432,8 @@ orders:    RESERVED=100, CANCELLED=8,433  (최근 30분 기준)
 ```
 → inventory reserved_qty=100 과 spike_orders_reserved=100 일치 — **오버셀 없음 확정**
 
-> **에러율 99.16% 해석**: k6는 2xx 외 응답을 전부 실패로 집계. 실제 구성: 201 RESERVED 100건 + 409 DEPLETED 8,433건(재고 소진 정상 응답) + 기타(403/429/5xx) 3,375건. `checks_succeeded 71.65%`(8,533건)가 정상 처리 비율.  
-> **Grafana 그래프 끊김**: 1,000 VU 스파이크 구간에서 t3.small CPU 포화로 Prometheus remote write 드롭 발생 — 공식 수치는 k6 터미널 기준 사용.  
+> **에러율 99.16% 해석**: k6는 2xx 외 응답을 전부 실패로 집계. 실제 구성: 201 RESERVED 100건 + 409 DEPLETED 8,433건(재고 소진 정상 응답) + 기타(403/429/5xx) 3,375건. `checks_succeeded 71.65%`(8,533건)가 정상 처리 비율.
+> **Grafana 그래프 끊김**: 1,000 VU 스파이크 구간에서 t3.small CPU 포화로 Prometheus remote write 드롭 발생 — 공식 수치는 k6 터미널 기준 사용.
 > **성공 요청 P95 508ms**: `{ expected_response:true }` 기준 — 실제 처리 완료된 요청의 응답시간.
 
 ### 오너 피드백 (형성빈)
@@ -396,13 +444,13 @@ _결과 기록 완료 — 최적화 방향 업데이트 예정_
 
 ## 시나리오 05: SSE 대기열 연결 안정성 (SSE Queue)
 
-**파일**: `infra/k6/scenarios/05_sse_queue.js`  
-**담당 오너**: 장성재, 지영재  
+**파일**: `infra/k6/scenarios/05_sse_queue.js`
+**담당 오너**: 장성재, 지영재
 **SLO**: 정상 구간 에러율 < 0.1%, 경계 구간 에러율 < 1%, 2,100 VU 초과 시 429 응답 필수
 
 ### 목적
 
-SSE 대기열 엔드포인트(`GET /api/v1/queue/stream/{productId}`)의 연결 수 한계를 검증한다.  
+SSE 대기열 엔드포인트(`GET /api/v1/queue/stream/{productId}`)의 연결 수 한계를 검증한다.
 Nginx worker_connections 및 JVM FD 한계 내에서 안정적으로 동작하는지 확인하고, 2,100 VU 초과 시 429(`retryable:true`) 응답 계약을 검증한다.
 
 ### 실행 흐름
@@ -481,8 +529,8 @@ Spring MVC SSE는 연결 1개당 Tomcat 스레드 1개를 점유. 2,100 연결 =
 
 ## 시나리오 06: 통합 워크로드 모델 (Workload Model)
 
-**파일**: `infra/k6/scenarios/06_workload_model.js`  
-**담당 오너**: 전체  
+**파일**: `infra/k6/scenarios/06_workload_model.js`
+**담당 오너**: 전체
 **SLO**: P95 < 300ms (혼합 전체 기준), 에러율 < 0.1%
 
 ### 목적
@@ -536,6 +584,22 @@ k6 run -e BASE_URL=http://localhost:$PORT \
   -e ORDERS_JSON="$(cat seed/orders.json)" \
   --out experimental-prometheus-rw \
   scenarios/06_workload_model.js
+```
+
+### 사후 처리 (전체 테스트 완료 후)
+
+06이 마지막 시나리오. 완료 후 S3 seed 파일과 Redis 테스트 키를 삭제.
+
+```bash
+# S3 seed 파일 삭제 (유효한 JWT·주문 정보 — 테스트 완료 후 즉시 삭제)
+aws s3 rm s3://<BUCKET>/k6/tokens.csv
+aws s3 rm s3://<BUCKET>/k6/orders.json
+
+# Redis AccessTicket 테스트용 키 삭제
+REDIS_HOST="master.fandrops-prod-redis.q7gdno.apn2.cache.amazonaws.com"
+for i in {1..2100}; do
+  valkey-cli -h $REDIS_HOST --tls del "access:ticket:1:$i"
+done
 ```
 
 ### 결과 (2026-06-17, 1회차 — **t3.small 과부하 + 코드 버그로 재측정 필요**)
@@ -597,10 +661,10 @@ k6 run -e BASE_URL=http://localhost:$PORT \
 | 05 SSE 대기열 | 장성재, 지영재 | — | —\*\*\* | — | ❌ OOM 크래시 |
 | 06 통합 워크로드 | 전체 | 2.48s (성공 기준) | 99.43%\*\*\*\*\* | — | ❌ t3.small 과부하 + 코드 버그, 재측정 필요 |
 
-> \* 시나리오 01 에러율 75%: 200 VU 중 300건이 409 DEPLETED(재고 소진 정상 응답), 100건 201 RESERVED. 오버셀 없음.  
-> \*\* 시나리오 04 에러율 99.16%: 1,000 VU 중 100건 201 RESERVED + 8,433건 409 DEPLETED(정상) + 3,375건 기타. k6는 2xx 외 응답을 전부 실패로 집계. 오버셀 없음.  
-> \*\*\* 시나리오 05: 2,100 VU SSE 동시 연결로 t3.small OOM 크래시 — k6 터미널 출력 및 Prometheus 메트릭 전부 유실. normal_load(1,000 VU)만 완료 확인. 재실행 전 k6를 별도 머신에서 실행하거나 Spring WebFlux 전환 필요.  
-> \*\*\*\* 시나리오 03 에러율 99.62%: `TossConfirmBody` inner private record Jackson 직렬화 불가 → Toss API 요청 body 비어있음 → Wiremock 404 → payment FAILED → 이후 전부 409 DUPLICATE_PAYMENT 연쇄. 이슈 [#318](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/issues/318) 수정 후 재측정 필요.  
+> \* 시나리오 01 에러율 75%: 200 VU 중 300건이 409 DEPLETED(재고 소진 정상 응답), 100건 201 RESERVED. 오버셀 없음.
+> \*\* 시나리오 04 에러율 99.16%: 1,000 VU 중 100건 201 RESERVED + 8,433건 409 DEPLETED(정상) + 3,375건 기타. k6는 2xx 외 응답을 전부 실패로 집계. 오버셀 없음.
+> \*\*\* 시나리오 05: 2,100 VU SSE 동시 연결로 t3.small OOM 크래시 — k6 터미널 출력 및 Prometheus 메트릭 전부 유실. normal_load(1,000 VU)만 완료 확인. 재실행 전 k6를 별도 머신에서 실행하거나 Spring WebFlux 전환 필요.
+> \*\*\*\* 시나리오 03 에러율 99.62%: `TossConfirmBody` inner private record Jackson 직렬화 불가 → Toss API 요청 body 비어있음 → Wiremock 404 → payment FAILED → 이후 전부 409 DUPLICATE_PAYMENT 연쇄. 이슈 [#318](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/issues/318) 수정 후 재측정 필요.
 > \*\*\*\*\* 시나리오 06 에러율 99.43%: 혼합 150 VU에서 t3.small CPU 포화로 피드/대기열 전면 타임아웃 + TossConfirmBody 버그(#318)로 결제 0% 성공. P95 143.82ms는 빠른 오류 응답이 대부분이므로 misleading — 성공 요청 P95 2.48s가 실질 지표.
 
 ---
@@ -621,17 +685,17 @@ k6 run -e BASE_URL=http://localhost:$PORT \
 
 ### 1. EC2 재기동 시 RDS도 중지 상태
 
-**현상**: EC2 시작 후 Spring Boot 앱이 `HikariPool` 커넥션 획득 실패로 크래시.  
-**원인**: EC2와 RDS를 각각 수동으로 중지했다가 EC2만 재시작. RDS는 별도로 중지 상태 유지.  
-**해결**: AWS 콘솔에서 RDS 인스턴스 별도 시작 → 앱 재기동.  
+**현상**: EC2 시작 후 Spring Boot 앱이 `HikariPool` 커넥션 획득 실패로 크래시.
+**원인**: EC2와 RDS를 각각 수동으로 중지했다가 EC2만 재시작. RDS는 별도로 중지 상태 유지.
+**해결**: AWS 콘솔에서 RDS 인스턴스 별도 시작 → 앱 재기동.
 **교훈**: EC2 재기동 시 RDS·ElastiCache 상태를 함께 확인해야 함.
 
 ---
 
 ### 2. TOKEN 변수 newline 포함 → HTTP 헤더 파싱 실패
 
-**현상**: `curl` 요청 시 400 HTML 응답(Tomcat 기본 에러 페이지).  
-**원인**: `TOKEN=$(aws secretsmanager ...)` 출력에 `\r\n` 포함 → `Authorization: Bearer <token>\r\n` 헤더가 두 줄로 분리되어 파싱 실패.  
+**현상**: `curl` 요청 시 400 HTML 응답(Tomcat 기본 에러 페이지).
+**원인**: `TOKEN=$(aws secretsmanager ...)` 출력에 `\r\n` 포함 → `Authorization: Bearer <token>\r\n` 헤더가 두 줄로 분리되어 파싱 실패.
 **해결**:
 ```bash
 TOKEN=$(aws secretsmanager get-secret-value ... | jq -r '.token' | tr -d '\r\n')
@@ -642,8 +706,8 @@ TOKEN=$(aws secretsmanager get-secret-value ... | jq -r '.token' | tr -d '\r\n')
 
 ### 3. orders.json 생성 시 awk → Python3 교체
 
-**현상**: awk로 생성한 JSON을 `python3 -m json.tool`로 검증하면 `Expecting value: line 2 column 1` 오류.  
-**원인**: awk의 printf에서 탭·개행 이스케이프 처리 불안정.  
+**현상**: awk로 생성한 JSON을 `python3 -m json.tool`로 검증하면 `Expecting value: line 2 column 1` 오류.
+**원인**: awk의 printf에서 탭·개행 이스케이프 처리 불안정.
 **해결**: Python3 원라이너로 교체.
 ```bash
 mysql ... | python3 -c "
@@ -657,8 +721,8 @@ print(json.dumps([{'orderId':int(r[0]),'fanId':int(r[1]),'amount':float(r[2]),'o
 
 ### 4. Wiremock 위치 혼동 (JAR vs Docker)
 
-**현상**: `/opt/fandrops/wiremock/` 디렉터리 없음, JAR 파일도 없음.  
-**원인**: Wiremock이 Docker 컨테이너로 실행 중이었음. `docker ps`로 확인 가능.  
+**현상**: `/opt/fandrops/wiremock/` 디렉터리 없음, JAR 파일도 없음.
+**원인**: Wiremock이 Docker 컨테이너로 실행 중이었음. `docker ps`로 확인 가능.
 **해결**: 추가 설치 불필요. Docker 컨테이너가 이미 포트 8090을 점유 중.
 ```bash
 docker ps  # wiremock 컨테이너 확인
@@ -670,8 +734,8 @@ curl -s http://localhost:8090/__admin/mappings | python3 -m json.tool
 
 ### 5. DB reset 후 OrderRecoveryScheduler가 주문 즉시 취소
 
-**현상**: DB를 RESERVED로 리셋한 직후 k6 실행하면 전부 409 DUPLICATE\_PAYMENT 또는 404.  
-**원인**: `UPDATE orders SET status='RESERVED' WHERE ...` 시 `updated_at` 미업데이트 → 기존 `updated_at`(수십 분 전)이 유지됨 → `OrderRecoveryScheduler`(60초 주기, 30분 타임아웃)가 즉시 CANCEL 처리.  
+**현상**: DB를 RESERVED로 리셋한 직후 k6 실행하면 전부 409 DUPLICATE\_PAYMENT 또는 404.
+**원인**: `UPDATE orders SET status='RESERVED' WHERE ...` 시 `updated_at` 미업데이트 → 기존 `updated_at`(수십 분 전)이 유지됨 → `OrderRecoveryScheduler`(60초 주기, 30분 타임아웃)가 즉시 CANCEL 처리.
 **해결**: reset SQL에 `updated_at=NOW()` 추가.
 ```sql
 UPDATE orders SET status='RESERVED', updated_at=NOW() WHERE id BETWEEN 51 AND 100;
@@ -681,8 +745,8 @@ UPDATE orders SET status='RESERVED', updated_at=NOW() WHERE id BETWEEN 51 AND 10
 
 ### 6. TossConfirmBody inner private record Jackson 직렬화 불가
 
-**현상**: 시나리오 03 전체 99.62% 실패. Wiremock 요청 로그에서 body가 빈 문자열.  
-**원인**: `TossPaymentGatewayAdapter` 내부에 `record TossConfirmBody(...)` 를 package-private으로 선언. Jackson 기본 설정은 public 클래스만 직렬화 가능 → body `{}` 또는 빈 문자열 전송 → Wiremock `bodyPatterns` 불일치 → 404 → `payment.status=FAILED` → 이후 동일 orderId 전부 409 DUPLICATE\_PAYMENT 연쇄.  
+**현상**: 시나리오 03 전체 99.62% 실패. Wiremock 요청 로그에서 body가 빈 문자열.
+**원인**: `TossPaymentGatewayAdapter` 내부에 `record TossConfirmBody(...)` 를 package-private으로 선언. Jackson 기본 설정은 public 클래스만 직렬화 가능 → body `{}` 또는 빈 문자열 전송 → Wiremock `bodyPatterns` 불일치 → 404 → `payment.status=FAILED` → 이후 동일 orderId 전부 409 DUPLICATE\_PAYMENT 연쇄.
 **임시 해결**: Wiremock에 `bodyPatterns` 없는 priority:1 매핑 추가.
 ```bash
 curl -s -X POST http://localhost:8090/__admin/mappings \
@@ -695,8 +759,8 @@ curl -s -X POST http://localhost:8090/__admin/mappings \
 
 ### 7. inventory total_qty invariant 위반
 
-**현상**: `UPDATE inventory SET available_qty=200, reserved_qty=0 WHERE product_id=1` 실행 후 `total_qty=50` 그대로 → `available_qty(200) > total_qty(50)`.  
-**원인**: reset SQL에 `total_qty` 미포함.  
+**현상**: `UPDATE inventory SET available_qty=200, reserved_qty=0 WHERE product_id=1` 실행 후 `total_qty=50` 그대로 → `available_qty(200) > total_qty(50)`.
+**원인**: reset SQL에 `total_qty` 미포함.
 **해결**: reset 시 `total_qty`도 함께 업데이트.
 ```sql
 UPDATE inventory SET available_qty=200, reserved_qty=0, total_qty=200, version=0 WHERE product_id=1;
