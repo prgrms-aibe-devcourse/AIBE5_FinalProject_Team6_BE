@@ -1,6 +1,7 @@
 package com.fandrops.user.application.service;
 
 import com.fandrops.user.application.dto.CreateArtistMemberCommand;
+import com.fandrops.user.application.dto.PresignedUploadResult;
 import com.fandrops.user.application.exception.ArtistMemberNotFoundException;
 import com.fandrops.user.application.exception.ArtistNotFoundException;
 import com.fandrops.user.application.exception.DuplicateLoginIdException;
@@ -8,9 +9,12 @@ import com.fandrops.user.application.port.AgencyAccountRepository;
 import com.fandrops.user.application.port.ArtistMemberRepository;
 import com.fandrops.user.application.port.ArtistProfileRepository;
 import com.fandrops.user.application.port.AuditLogPort;
+import com.fandrops.user.application.port.S3PresignedUrlPort;
 import com.fandrops.user.domain.ArtistMember;
 import com.fandrops.user.domain.ArtistProfile;
 import com.fandrops.user.domain.AuditLog;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -22,23 +26,28 @@ import java.time.LocalDateTime;
 @Service
 public class ArtistMemberService {
 
+    private static final Logger log = LoggerFactory.getLogger(ArtistMemberService.class);
+
     private final ArtistMemberRepository artistMemberRepository;
     private final AgencyAccountRepository agencyAccountRepository;
     private final ArtistProfileRepository artistProfileRepository;
     private final AuditLogPort auditLogPort;
     private final PasswordEncoder passwordEncoder;
+    private final S3PresignedUrlPort s3PresignedUrlPort;
 
     public ArtistMemberService(
             ArtistMemberRepository artistMemberRepository,
             AgencyAccountRepository agencyAccountRepository,
             ArtistProfileRepository artistProfileRepository,
             AuditLogPort auditLogPort,
-            PasswordEncoder passwordEncoder) {
+            PasswordEncoder passwordEncoder,
+            S3PresignedUrlPort s3PresignedUrlPort) {
         this.artistMemberRepository = artistMemberRepository;
         this.agencyAccountRepository = agencyAccountRepository;
         this.artistProfileRepository = artistProfileRepository;
         this.auditLogPort = auditLogPort;
         this.passwordEncoder = passwordEncoder;
+        this.s3PresignedUrlPort = s3PresignedUrlPort;
     }
 
     // Agency loginId와의 cross-table 중복 체크 후 ArtistMember 생성
@@ -139,6 +148,51 @@ public class ArtistMemberService {
                 .traceId(traceId)
                 .clientIp(clientIp)
                 .build());
+    }
+
+    @Transactional(readOnly = true)
+    public PresignedUploadResult generateProfileImagePresignedUrl(
+            Long memberId, Long agencyId, String contentType, long contentLength,
+            String clientIp, String traceId) {
+        findMemberWithOwnership(memberId, agencyId);
+        PresignedUploadResult result = s3PresignedUrlPort.generate(contentType, contentLength);
+        try {
+            auditLogPort.save(AuditLog.builder()
+                    .occurredAt(Instant.now())
+                    .actorType("AGENCY")
+                    .actorId(agencyId)
+                    .action("ARTIST_MEMBER_PROFILE_IMAGE_UPDATE")
+                    .resourceType("ARTIST_MEMBER")
+                    .resourceId(memberId)
+                    .traceId(traceId)
+                    .afterJson("{\"contentType\":\"" + contentType + "\",\"contentLength\":" + contentLength + "}")
+                    .clientIp(clientIp)
+                    .build());
+        } catch (Exception e) {
+            log.error("[AUDIT_FAIL] presigned URL 발급 로그 저장 실패 traceId={} agencyId={}", traceId, agencyId, e);
+        }
+        return result;
+    }
+
+    @Transactional
+    public ArtistMember updateProfileImageUrl(Long memberId, String imageUrl,
+                                              Long agencyId, String clientIp, String traceId) {
+        ArtistMember member = findMemberWithOwnership(memberId, agencyId);
+        ArtistMember updated = artistMemberRepository.save(member.withProfileImageUrl(imageUrl));
+
+        auditLogPort.save(AuditLog.builder()
+                .occurredAt(Instant.now())
+                .actorType("AGENCY")
+                .actorId(agencyId)
+                .action("ARTIST_MEMBER_PROFILE_IMAGE_UPDATE")
+                .resourceType("ARTIST_MEMBER")
+                .resourceId(memberId)
+                .traceId(traceId)
+                .afterJson("{\"profileImageUrl\":" + escapeJson(imageUrl) + "}")
+                .clientIp(clientIp)
+                .build());
+
+        return updated;
     }
 
     private ArtistMember findMemberWithOwnership(Long memberId, Long actorId) {
