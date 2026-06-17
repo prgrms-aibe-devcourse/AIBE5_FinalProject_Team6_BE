@@ -15,9 +15,20 @@ on:
           - '03'
           - '06'
       confirm:
-        description: 'EC2에서 k6 부하 테스트를 실행합니다. "yes" 입력'
+        description: 'k6 부하 테스트를 실행합니다. "yes" 입력'
         required: true
         default: 'no'
+
+# k6를 Actions runner에서 직접 실행하여 EC2 CPU 경합 제거
+# BASE_URL = secrets.APP_BASE_URL (https://api.fandrops.site)
+# Wiremock은 EC2에서 Docker로 실행 중 — Spring Boot가 localhost:8090으로 접근하므로 runner 직접 접근 불필요
+#
+# 사전 준비 (수동):
+#   aws s3 cp infra/k6/seed/tokens.csv  s3://<BUCKET>/k6/tokens.csv
+#   aws s3 cp infra/k6/seed/orders.json s3://<BUCKET>/k6/orders.json  # 시나리오 03·06만
+#
+# 필요 Secrets:
+#   AWS_ROLE_ARN, S3_BUCKET, EC2_INSTANCE_ID, APP_BASE_URL
 
 jobs:
   run-k6:
@@ -37,69 +48,101 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ap-northeast-2
 
-      - name: k6 실행 스크립트 S3 업로드
+      - name: k6 설치
+        run: |
+          sudo gpg --no-default-keyring \
+            --keyring /usr/share/keyrings/k6-archive-keyring.gpg \
+            --keyserver hkp://keyserver.ubuntu.com:80 \
+            --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" \
+            | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update -q
+          sudo apt-get install -y k6
+          k6 version
+
+      - name: seed 파일 다운로드 (S3)
         run: |
           BUCKET="${{ secrets.S3_BUCKET }}"
           SCENARIO="${{ github.event.inputs.scenario }}"
+          mkdir -p infra/k6/seed
 
-          cat > /tmp/run-k6.sh << 'SCRIPT'
-          #!/bin/bash
-          set -euo pipefail
-          SCENARIO="$1"
+          # tokens.csv — 모든 시나리오 공통 (fan_id 1~2100 JWT)
+          aws s3 cp "s3://$BUCKET/k6/tokens.csv" infra/k6/seed/tokens.csv
+          echo "tokens.csv $(wc -l < infra/k6/seed/tokens.csv)행 다운로드 완료"
 
-          cd /opt/fandrops/k6
-          ACTIVE=$(cat /etc/fandrops/active-slot)
-          PORT=$([ "$ACTIVE" = "blue" ] && echo 8081 || echo 8082)
-          BASE="http://localhost:$PORT"
-          echo "활성 슬롯: $ACTIVE (포트 $PORT)"
+          # orders.json — 시나리오 03·06만 필요
+          if [[ "$SCENARIO" == "03" || "$SCENARIO" == "06" ]]; then
+            aws s3 cp "s3://$BUCKET/k6/orders.json" infra/k6/seed/orders.json || {
+              echo "❌ s3://$BUCKET/k6/orders.json 없음"
+              echo "   EC2에서 생성 후 업로드 필요:"
+              echo "   aws s3 cp /opt/fandrops/k6/seed/orders.json s3://$BUCKET/k6/orders.json"
+              exit 1
+            }
+            echo "orders.json $(jq length infra/k6/seed/orders.json)건 다운로드 완료"
+          fi
+
+      - name: Wiremock 상태 확인 (시나리오 03·06)
+        if: ${{ github.event.inputs.scenario == '03' || github.event.inputs.scenario == '06' }}
+        run: |
+          INSTANCE="${{ secrets.EC2_INSTANCE_ID }}"
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE" \
+            --document-name "AWS-RunShellScript" \
+            --parameters '{"commands":["docker ps --filter name=wiremock --format \"{{.Status}}\" | grep -q Up && echo OK || { echo \"ERR: Wiremock not running\"; exit 1; }"]}' \
+            --query "Command.CommandId" --output text)
+
+          echo "SSM Command ID: $COMMAND_ID"
+          sleep 8
+
+          STATUS=$(aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" --instance-id "$INSTANCE" \
+            --query "Status" --output text 2>/dev/null || echo "Unknown")
+
+          if [ "$STATUS" != "Success" ]; then
+            echo "❌ Wiremock 컨테이너 미실행 — EC2에서 'docker start wiremock' 후 재시도"
+            exit 1
+          fi
+          echo "✅ Wiremock 실행 중"
+
+      - name: k6 실행
+        run: |
+          SCENARIO="${{ github.event.inputs.scenario }}"
+          BASE="${{ secrets.APP_BASE_URL }}"
+          cd infra/k6
 
           case "$SCENARIO" in
             01)
               echo "=== 시나리오 01: 주문 동시성 (200 VU) ==="
               k6 run -e BASE_URL=$BASE -e FAN_POOL_SIZE=200 \
-                --out experimental-prometheus-rw \
                 scenarios/01_order_concurrency.js
               ;;
             02)
               echo "=== 시나리오 02: 피드 조회 Read P95 (50 VU, 2분) ==="
               k6 run -e BASE_URL=$BASE \
-                --out experimental-prometheus-rw \
                 scenarios/02_feed_read.js
               ;;
             03)
-              echo "=== 시나리오 03: 결제 확인 (Wiremock 필요) ==="
-              if [ ! -f seed/orders.json ]; then
-                echo "❌ seed/orders.json 없음 — EC2에서 사전 준비 필요"
-                exit 1
-              fi
+              echo "=== 시나리오 03: 결제 확인 (Wiremock EC2 로컬) ==="
               k6 run -e BASE_URL=$BASE \
                 -e ORDERS_JSON="$(cat seed/orders.json)" \
-                --out experimental-prometheus-rw \
                 scenarios/03_payment_confirm.js
               ;;
             04)
               echo "=== 시나리오 04: 드롭스 스파이크 (0→1000 VU) ==="
               k6 run -e BASE_URL=$BASE \
-                --out experimental-prometheus-rw \
                 scenarios/04_drop_spike.js
               ;;
             05)
               echo "=== 시나리오 05: SSE 대기열 안정성 (~6분) ==="
               k6 run -e BASE_URL=$BASE \
-                --out experimental-prometheus-rw \
                 scenarios/05_sse_queue.js
               ;;
             06)
-              echo "=== 시나리오 06: 통합 워크로드 (Wiremock 필요) ==="
-              if [ ! -f seed/orders.json ]; then
-                echo "❌ seed/orders.json 없음 — EC2에서 사전 준비 필요"
-                exit 1
-              fi
+              echo "=== 시나리오 06: 통합 워크로드 (Wiremock EC2 로컬) ==="
               k6 run -e BASE_URL=$BASE \
                 -e PRODUCT_ID=1 \
                 -e ARTIST_ID=1 \
                 -e ORDERS_JSON="$(cat seed/orders.json)" \
-                --out experimental-prometheus-rw \
                 scenarios/06_workload_model.js
               ;;
             *)
@@ -107,65 +150,3 @@ jobs:
               exit 1
               ;;
           esac
-          SCRIPT
-
-          aws s3 cp /tmp/run-k6.sh "s3://$BUCKET/deploy/run-k6.sh"
-          echo "S3 업로드 완료 (시나리오 $SCENARIO)"
-
-      - name: EC2에서 k6 실행 (SSM)
-        run: |
-          INSTANCE="${{ secrets.EC2_INSTANCE_ID }}"
-          BUCKET="${{ secrets.S3_BUCKET }}"
-          SCENARIO="${{ github.event.inputs.scenario }}"
-
-          COMMANDS=$(jq -n \
-            --arg bucket "$BUCKET" \
-            --arg scenario "$SCENARIO" \
-            '[
-              ("aws s3 cp s3://" + $bucket + "/deploy/run-k6.sh /tmp/run-k6.sh"),
-              "chmod +x /tmp/run-k6.sh",
-              ("/tmp/run-k6.sh " + $scenario)
-            ]')
-
-          COMMAND_ID=$(aws ssm send-command \
-            --instance-ids "$INSTANCE" \
-            --document-name "AWS-RunShellScript" \
-            --parameters "{\"commands\": $COMMANDS}" \
-            --comment "k6 scenario $SCENARIO" \
-            --query "Command.CommandId" \
-            --output text)
-
-          echo "SSM Command ID: $COMMAND_ID"
-          echo "COMMAND_ID=$COMMAND_ID" >> $GITHUB_ENV
-
-          # 완료 대기 (10초 간격, 최대 10분 — 시나리오 05·06 포함)
-          for i in $(seq 1 60); do
-            STATUS=$(aws ssm get-command-invocation \
-              --command-id "$COMMAND_ID" \
-              --instance-id "$INSTANCE" \
-              --query "Status" --output text 2>/dev/null || echo "Pending")
-            echo "[$i/60] 상태: $STATUS"
-            [ "$STATUS" = "Success"   ] && break
-            [ "$STATUS" = "Failed"    ] && {
-              echo "❌ k6 실행 실패"
-              aws ssm get-command-invocation \
-                --command-id "$COMMAND_ID" \
-                --instance-id "$INSTANCE" \
-                --query "StandardErrorContent" --output text || true
-              exit 1
-            }
-            [ "$STATUS" = "Cancelled" ] && { echo "취소됨"; exit 1; }
-            sleep 10
-          done
-
-          [ "$STATUS" = "Success" ] || { echo "타임아웃 (10분 초과)"; exit 1; }
-
-      - name: k6 결과 출력
-        if: always()
-        run: |
-          INSTANCE="${{ secrets.EC2_INSTANCE_ID }}"
-          echo "=== k6 시나리오 ${{ github.event.inputs.scenario }} 결과 ==="
-          aws ssm get-command-invocation \
-            --command-id "$COMMAND_ID" \
-            --instance-id "$INSTANCE" \
-            --query "StandardOutputContent" --output text || true
