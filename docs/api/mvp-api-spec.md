@@ -175,6 +175,28 @@ Gradle 모듈·담당자: [architecture.md § 도메인 오너십](../architectu
 
 ---
 
+## Agency Banner (F04-03)
+
+`user-api` · 담당: **표지민**  
+Agency 계정이 자신의 메인 배너를 직접 관리. `banner.agency_id = 로그인 Agency ID` 로 소유권 scoping.
+
+| Method | Endpoint | Auth | 설명 | Request Body | Response |
+| --- | --- | --- | --- | --- | --- |
+| GET | `/agency/banners` | Agency | 내 배너 목록 | — | `{ data: [BannerResponse], traceId }` |
+| POST | `/agency/banners` | Agency | 배너 등록 | `title`, `imageUrl`, `landingUrl`, `exposureOrder`, `startAt`?, `endAt`? | `201` `{ data: BannerResponse, traceId }` |
+| PATCH | `/agency/banners/{id}` | Agency | 배너 수정 (부분) | 위 필드 모두 선택, `isActive` | `{ data: BannerResponse, traceId }` |
+| DELETE | `/agency/banners/{id}` | Agency | 배너 비활성화 (soft delete) | — | `204` |
+| POST | `/agency/uploads` | Agency | 배너 이미지 S3 Presigned PUT URL 발급 | `contentType`, `contentLength` | `{ presignedUrl, imageUrl, expiresAt }` |
+
+**소유권 규칙**: `PATCH`·`DELETE` 시 `agency_id` 불일치 → `404 BANNER_NOT_FOUND` (ID 열거 방지).
+
+**이미지 업로드 플로우**:
+1. `POST /agency/uploads` → `presignedUrl`, `imageUrl`
+2. 클라이언트가 `presignedUrl`로 직접 S3 PUT
+3. `POST /agency/banners { imageUrl: ... }` ← PUT 완료 후에만 유효
+
+---
+
 ## Store Banner (F04-03 STORE)
 
 `order-api` · 담당: **형성빈**  
