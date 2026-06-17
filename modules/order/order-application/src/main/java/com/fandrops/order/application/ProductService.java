@@ -30,10 +30,10 @@ public class ProductService {
     }
 
     @Transactional(readOnly = true)
-    public ProductListResponse getProducts(String type, Long cursor, int size) {
+    public ProductListResponse getProducts(String type, Long artistId, Long cursor, int size) {
         List<Product> products = "drops".equals(type)
-                ? productRepository.findDropsProducts(cursor, size)
-                : productRepository.findRegularProducts(cursor, size);
+                ? productRepository.findDropsProducts(artistId, cursor, size)
+                : productRepository.findRegularProducts(artistId, cursor, size);
         List<ProductListItemResponse> items = products.stream()
                 .map(ProductListItemResponse::from)
                 .toList();

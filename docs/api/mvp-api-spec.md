@@ -158,7 +158,7 @@ Gradle 모듈·담당자: [architecture.md § 도메인 오너십](../architectu
 
 | Method | Endpoint | F-ID | 설명 | Request Body / Param | Response |
 | --- | --- | --- | --- | --- | --- |
-| GET | `/products` | F04-01·02 | 상품 목록 | `?type=regular` \| `drops`, `cursor`, `size` | `{ items: [...], nextCursor }` |
+| GET | `/products` | F04-01·02 | 상품 목록 | `?type=regular` \| `drops`, `artistId`(선택), `cursor`, `size` | `{ items: [...], nextCursor }` |
 | GET | `/products/{id}` | F04-01·02 | 상품 상세 | — | `{ id, artistId, name, price, status, dropsStartAt, dropsEndAt, totalQty, reservedQty, availableQty, updatedAt }` |
 | POST | `/products` | F04-01 | **상시** 상품 등록 | `artistId`, `name`, `price`, `totalQty` | `201` `{ productId }` |
 | POST | `/products` | F04-02 | **드롭스** 상품 등록 | 위 + `dropsStartAt`, `dropsEndAt`, `totalQty` | `201` `{ productId }` |
@@ -169,6 +169,7 @@ Gradle 모듈·담당자: [architecture.md § 도메인 오너십](../architectu
 
 - **F04-01** `?type=regular`: `drops_start_at`·`drops_end_at` 모두 NULL.
 - **F04-02** `?type=drops`: `drops_start_at ≤ now ≤ drops_end_at`. 카운트다운·대기열([§ Wait Queue](#wait-queue-대기열)) 적용.
+- `?artistId={id}`: 특정 아티스트 상품만 반환. 미전달 시 전체 반환 (하위 호환).
 - 재입고 시 `RESTOCK_ALERT` 발행 → 표지민 전송.
 - `totalQty` / `reservedQty` / `availableQty`: `INVENTORY` 조인 ([ERD §1](../erd/erd-design.md#1-inventory--재고-테이블-분리-및-이력history-기록)).
 
