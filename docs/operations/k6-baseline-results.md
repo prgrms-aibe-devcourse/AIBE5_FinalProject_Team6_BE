@@ -317,14 +317,19 @@ _미실행 — 결과 기록 후 업데이트 예정_
 ### 사전 준비
 
 ```bash
-# 시나리오 01 실행 후 반드시 재초기화 필요 (티켓 invalidate됨)
-UPDATE inventory SET available_qty=100, reserved_qty=0, version=0 WHERE product_id=1;
+# DB: inventory 초기화 (reserved_qty=0 포함)
+mysql -u fandrops_admin -pfandrops1234 \
+  -h fandrops-prod-mysql.coqwxjz7zumt.ap-northeast-2.rds.amazonaws.com fandrops \
+  -e "UPDATE inventory SET available_qty=100, reserved_qty=0, version=0 WHERE product_id=1;"
 
-# Redis: access ticket 재적재 (fan_id 1~2100)
-for i in $(seq 1 2100); do
-  redis-cli SET "access:ticket:1:$i" "test-ticket-token" EX 3600
+# Redis: access ticket 재적재 (fan_id 1~2100) — valkey-cli --tls 필수
+REDIS_HOST="master.fandrops-prod-redis.q7gdno.apn2.cache.amazonaws.com"
+for i in {1..2100}; do
+  valkey-cli -h $REDIS_HOST --tls setex "access:ticket:1:$i" 86400 "test-ticket-token"
 done
 ```
+
+> ⚠️ **시나리오 05(SSE) 실행 후 시나리오 04를 실행하면 Redis 티켓이 UUID로 오염되어 전원 403 실패** — 반드시 04 먼저 실행. 상세: [이슈 #304](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/issues/304)
 
 ### 실행 명령어
 
@@ -332,24 +337,37 @@ done
 cd /opt/fandrops/k6
 ACTIVE=$(cat /etc/fandrops/active-slot)
 PORT=$([ "$ACTIVE" = "blue" ] && echo 8081 || echo 8082)
-k6 run -e BASE_URL=http://localhost:$PORT \
-  --out experimental-prometheus-rw \
-  scenarios/04_drop_spike.js
+K6_PROMETHEUS_RW_TREND_STATS="p(95),p(99)" k6 run -e BASE_URL=http://localhost:$PORT --out experimental-prometheus-rw scenarios/04_drop_spike.js
 ```
 
-### 결과
+> `K6_PROMETHEUS_RW_TREND_STATS="p(95),p(99)"` — Prometheus에 p95/p99 게이지 메트릭 기록. 미설정 시 p99만 내보냄.
+
+### 결과 (2026-06-17, 1회차 — **공식 베이스라인**)
 
 | 지표 | 결과 | 목표 | 상태 |
 |---|---|---|---|
-| P95 응답 시간 | — | < 300ms | 미실행 |
-| 에러율 | — | < 0.1% | 미실행 |
-| spike_orders_reserved | — | ≤ 100 | 미실행 |
+| P95 응답시간 (전체) | **12.34s** | < 300ms | ❌ SLO 미달 |
+| P95 응답시간 (성공 요청) | **508ms** | < 300ms | ❌ SLO 미달 |
+| P90 응답시간 | 11.33s | — | — |
+| 평균 응답시간 | 4.63s | — | — |
+| http_req_failed | **99.16%** | < 0.1% | ❌ (해석 아래 참고) |
+| spike_orders_reserved | **100** | ≤ 100 | ✅ **오버셀 0건** |
+| 총 요청 수 | 11,908 (157.6 req/s) | — | — |
 
-> 실행 후 `SELECT reserved_qty FROM inventory WHERE product_id=1;`로 오버셀 수동 검증 필요.
+**DB 사후 검증 (2026-06-17):**
+```
+inventory: available_qty=0, reserved_qty=100, total_qty=100
+orders:    RESERVED=100, CANCELLED=8,433  (최근 30분 기준)
+```
+→ inventory reserved_qty=100 과 spike_orders_reserved=100 일치 — **오버셀 없음 확정**
+
+> **에러율 99.16% 해석**: k6는 2xx 외 응답을 전부 실패로 집계. 실제 구성: 201 RESERVED 100건 + 409 DEPLETED 8,433건(재고 소진 정상 응답) + 기타(403/429/5xx) 3,375건. `checks_succeeded 71.65%`(8,533건)가 정상 처리 비율.  
+> **Grafana 그래프 끊김**: 1,000 VU 스파이크 구간에서 t3.small CPU 포화로 Prometheus remote write 드롭 발생 — 공식 수치는 k6 터미널 기준 사용.  
+> **성공 요청 P95 508ms**: `{ expected_response:true }` 기준 — 실제 처리 완료된 요청의 응답시간.
 
 ### 오너 피드백 (형성빈)
 
-_미실행 — 결과 기록 후 업데이트 예정_
+_결과 기록 완료 — 최적화 방향 업데이트 예정_
 
 ---
 
@@ -491,11 +509,12 @@ _미실행 — 결과 기록 후 업데이트 예정_
 | 01 주문 동시성 | 형성빈 | 2.85s | 75%\* | 0건 | ❌ SLO 미달 |
 | 02 피드 조회 | 정환철 | 287.67ms | 0.00% | — | ❌ SLO 미달 |
 | 03 결제 확인 | 장성재 | — | — | — | 미실행 |
-| 04 드롭스 스파이크 | 형성빈 | — | — | — | 미실행 |
+| 04 드롭스 스파이크 | 형성빈 | 12.34s (성공 508ms) | 99.16%\*\* | 0건 | ❌ SLO 미달 |
 | 05 SSE 대기열 | 장성재, 지영재 | — | — | — | 미실행 |
 | 06 통합 워크로드 | 전체 | — | — | — | 미실행 |
 
-> \* 시나리오 01 에러율 75%: 200 VU 중 300건이 409 DEPLETED(재고 소진 정상 응답), 100건 201 RESERVED. 오버셀 없음.
+> \* 시나리오 01 에러율 75%: 200 VU 중 300건이 409 DEPLETED(재고 소진 정상 응답), 100건 201 RESERVED. 오버셀 없음.  
+> \*\* 시나리오 04 에러율 99.16%: 1,000 VU 중 100건 201 RESERVED + 8,433건 409 DEPLETED(정상) + 3,375건 기타. k6는 2xx 외 응답을 전부 실패로 집계. 오버셀 없음.
 
 ---
 
