@@ -283,16 +283,39 @@ k6 run -e BASE_URL=http://localhost:$PORT \
   scenarios/03_payment_confirm.js
 ```
 
-### 결과
+### 결과 (2026-06-17, 1회차 — **코드 버그로 재측정 필요**)
 
 | 지표 | 결과 | 목표 | 상태 |
 |---|---|---|---|
-| P95 응답 시간 | — | < 3,000ms | 미실행 |
-| 에러율 | — | < 1% | 미실행 |
+| P95 응답 시간 (전체) | **40.32ms** | < 3,000ms | ✅ |
+| P95 응답 시간 (성공 요청) | **119.32ms** | < 3,000ms | ✅ |
+| 평균 응답 시간 | 20.43ms | — | — |
+| 에러율 | **99.62%** | < 1% | ❌ (아래 해석 참고) |
+| 성공 건수 | 1,257 / 337,891 | — | — |
+| 처리량 | 2,111 req/s | — | — |
+| 총 요청 수 | 337,891 | — | — |
+
+> **에러율 99.62% 해석**: 정상적인 부하 측정 실패. 원인은 아래 두 가지 코드 버그.
+>
+> 1. **`TossConfirmBody` 직렬화 버그 ([#318](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/issues/318))**: `TossPaymentGatewayAdapter` 내부 private record가 Jackson에 의해 직렬화되지 않아 Toss API 요청 body가 비어있는 상태로 전송됨 → Wiremock 404 → `payment.status = FAILED`
+> 2. **409 DUPLICATE_PAYMENT 연쇄**: `payment.status = FAILED` 상태에서 같은 orderId 재호출 시 전부 409 반환 → ramping-vus 2m40s 동안 첫 50건 이후 전부 409
+>
+> Wiremock 임시 매핑 추가 후 일부(1,257건) 성공했으며, 성공 경로 P95 **119ms**는 의미 있는 참고 수치.
 
 ### 오너 피드백 (장성재)
 
-_미실행 — 결과 기록 후 업데이트 예정_
+**재측정 필요**: `TossConfirmBody` inner private record 직렬화 버그(이슈 [#318](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/issues/318)) 수정 후 재실행 필요.
+
+**수정 방향**: `TossPaymentGatewayAdapter.TossConfirmBody`를 `Map.of()`로 교체하거나 `public`으로 변경.
+
+```java
+// 수정 예시 (Map.of 방식)
+Map<String, Object> body = Map.of(
+    "paymentKey", tossPaymentKey,
+    "amount", amount,
+    "orderId", orderPaymentKey
+);
+```
 
 ---
 
@@ -538,14 +561,15 @@ _미실행 — 결과 기록 후 업데이트 예정_
 |---|---|---|---|---|---|
 | 01 주문 동시성 | 형성빈 | 2.85s | 75%\* | 0건 | ❌ SLO 미달 |
 | 02 피드 조회 | 정환철 | 287.67ms | 0.00% | — | ❌ SLO 미달 |
-| 03 결제 확인 | 장성재 | — | — | — | 미실행 |
+| 03 결제 확인 | 장성재 | 119.32ms (성공 기준) | 99.62%\*\*\*\* | — | ❌ 코드 버그([#318](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/issues/318)) 재측정 필요 |
 | 04 드롭스 스파이크 | 형성빈 | 12.34s (성공 508ms) | 99.16%\*\* | 0건 | ❌ SLO 미달 |
 | 05 SSE 대기열 | 장성재, 지영재 | — | —\*\*\* | — | ❌ OOM 크래시 |
 | 06 통합 워크로드 | 전체 | — | — | — | 미실행 |
 
 > \* 시나리오 01 에러율 75%: 200 VU 중 300건이 409 DEPLETED(재고 소진 정상 응답), 100건 201 RESERVED. 오버셀 없음.  
 > \*\* 시나리오 04 에러율 99.16%: 1,000 VU 중 100건 201 RESERVED + 8,433건 409 DEPLETED(정상) + 3,375건 기타. k6는 2xx 외 응답을 전부 실패로 집계. 오버셀 없음.  
-> \*\*\* 시나리오 05: 2,100 VU SSE 동시 연결로 t3.small OOM 크래시 — k6 터미널 출력 및 Prometheus 메트릭 전부 유실. normal_load(1,000 VU)만 완료 확인. 재실행 전 k6를 별도 머신에서 실행하거나 Spring WebFlux 전환 필요.
+> \*\*\* 시나리오 05: 2,100 VU SSE 동시 연결로 t3.small OOM 크래시 — k6 터미널 출력 및 Prometheus 메트릭 전부 유실. normal_load(1,000 VU)만 완료 확인. 재실행 전 k6를 별도 머신에서 실행하거나 Spring WebFlux 전환 필요.  
+> \*\*\*\* 시나리오 03 에러율 99.62%: `TossConfirmBody` inner private record Jackson 직렬화 불가 → Toss API 요청 body 비어있음 → Wiremock 404 → payment FAILED → 이후 전부 409 DUPLICATE_PAYMENT 연쇄. 이슈 [#318](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/issues/318) 수정 후 재측정 필요.
 
 ---
 
