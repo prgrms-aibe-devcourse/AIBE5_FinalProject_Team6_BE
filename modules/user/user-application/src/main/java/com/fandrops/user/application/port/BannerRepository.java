@@ -11,4 +11,6 @@ public interface BannerRepository {
     Optional<Banner> findById(Long id);
     List<Banner> findActiveMainBanners(LocalDateTime now);
     List<Banner> findAllMainBanners();
+    List<Banner> findAllByAgencyId(Long agencyId);
+    Optional<Banner> findByIdAndAgencyId(Long id, Long agencyId);
 }

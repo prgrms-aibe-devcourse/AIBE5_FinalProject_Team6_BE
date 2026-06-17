@@ -1,0 +1,2 @@
+ALTER TABLE banner
+    ADD COLUMN agency_id BIGINT NULL;

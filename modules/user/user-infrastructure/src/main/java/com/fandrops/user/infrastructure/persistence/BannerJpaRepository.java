@@ -7,6 +7,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 public interface BannerJpaRepository extends JpaRepository<BannerJpaEntity, Long> {
 
@@ -22,4 +23,8 @@ public interface BannerJpaRepository extends JpaRepository<BannerJpaEntity, Long
                                            @Param("now") LocalDateTime now);
 
     List<BannerJpaEntity> findByBannerTypeOrderByExposureOrderAsc(BannerType bannerType);
+
+    List<BannerJpaEntity> findByBannerTypeAndAgencyIdOrderByExposureOrderAsc(BannerType bannerType, Long agencyId);
+
+    Optional<BannerJpaEntity> findByIdAndAgencyId(Long id, Long agencyId);
 }

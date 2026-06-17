@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 
 public record BannerResponse(
         Long id,
+        Long agencyId,
         String title,
         String imageUrl,
         String landingUrl,
@@ -18,6 +19,7 @@ public record BannerResponse(
     public static BannerResponse from(BannerResult result) {
         return new BannerResponse(
                 result.id(),
+                result.agencyId(),
                 result.title(),
                 result.imageUrl(),
                 result.landingUrl(),

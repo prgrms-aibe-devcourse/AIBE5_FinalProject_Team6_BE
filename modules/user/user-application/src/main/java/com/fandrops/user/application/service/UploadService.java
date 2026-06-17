@@ -25,6 +25,29 @@ public class UploadService {
         this.auditLogPort = auditLogPort;
     }
 
+    public PresignedUploadResult requestPresignedUrlForAgency(
+            String contentType, long contentLength, Long agencyId, String clientIp, String traceId) {
+        if (!AllowedImageContentType.isAllowed(contentType)) {
+            throw new InvalidContentTypeException(contentType);
+        }
+        PresignedUploadResult result = s3PresignedUrlPort.generate(contentType, contentLength);
+        try {
+            auditLogPort.save(AuditLog.builder()
+                    .occurredAt(Instant.now())
+                    .actorType("AGENCY")
+                    .actorId(agencyId)
+                    .action("AGENCY_IMAGE_UPLOAD_URL_ISSUED")
+                    .resourceType("BANNER_IMAGE")
+                    .traceId(traceId)
+                    .afterJson("{\"contentType\":\"" + contentType + "\",\"contentLength\":" + contentLength + "}")
+                    .clientIp(clientIp)
+                    .build());
+        } catch (Exception e) {
+            log.error("[AUDIT_FAIL] Presigned URL 발급 로그 저장 실패 traceId={} agencyId={}", traceId, agencyId, e);
+        }
+        return result;
+    }
+
     public PresignedUploadResult requestPresignedUrl(
             String contentType, long contentLength, Long adminId, String clientIp, String traceId) {
         if (!AllowedImageContentType.isAllowed(contentType)) {
