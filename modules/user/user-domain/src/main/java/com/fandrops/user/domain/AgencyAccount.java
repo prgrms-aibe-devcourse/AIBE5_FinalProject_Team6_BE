@@ -43,6 +43,15 @@ public class AgencyAccount {
     public LocalDateTime getTokenExpiredAt() { return tokenExpiredAt; }
     public LocalDateTime getCreatedAt() { return createdAt; }
 
+    public AgencyAccount withPasswordHash(String newPasswordHash) {
+        return AgencyAccount.builder()
+                .id(this.id).loginId(this.loginId).passwordHash(newPasswordHash)
+                .companyName(this.companyName).contactEmail(this.contactEmail)
+                .status(this.status).role(this.role)
+                .invitationToken(this.invitationToken).tokenExpiredAt(this.tokenExpiredAt)
+                .createdAt(this.createdAt).build();
+    }
+
     public static class Builder {
         private Long id;
         private String loginId;

@@ -1,5 +1,6 @@
 package com.fandrops.user.domain;
 
+import java.time.LocalDateTime;
 import java.util.Objects;
 
 public class ArtistMember {
@@ -11,6 +12,7 @@ public class ArtistMember {
     private final String memberName;
     private final UserRole role;
     private final String profileImageUrl;
+    private final LocalDateTime deletedAt;
 
     private ArtistMember(Builder builder) {
         this.id = builder.id;
@@ -20,6 +22,7 @@ public class ArtistMember {
         this.memberName = Objects.requireNonNull(builder.memberName, "memberName은 필수입니다");
         this.role = builder.role != null ? builder.role : UserRole.ARTIST;
         this.profileImageUrl = builder.profileImageUrl;
+        this.deletedAt = builder.deletedAt;
     }
 
     public static Builder builder() { return new Builder(); }
@@ -28,7 +31,21 @@ public class ArtistMember {
         return ArtistMember.builder()
                 .id(this.id).artistId(this.artistId).loginId(this.loginId)
                 .passwordHash(this.passwordHash).memberName(this.memberName)
-                .role(this.role).profileImageUrl(url).build();
+                .role(this.role).profileImageUrl(url).deletedAt(this.deletedAt).build();
+    }
+
+    public ArtistMember withMemberName(String memberName) {
+        return ArtistMember.builder()
+                .id(this.id).artistId(this.artistId).loginId(this.loginId)
+                .passwordHash(this.passwordHash).memberName(memberName)
+                .role(this.role).profileImageUrl(this.profileImageUrl).deletedAt(this.deletedAt).build();
+    }
+
+    public ArtistMember withDeletedAt(LocalDateTime deletedAt) {
+        return ArtistMember.builder()
+                .id(this.id).artistId(this.artistId).loginId(this.loginId)
+                .passwordHash(this.passwordHash).memberName(this.memberName)
+                .role(this.role).profileImageUrl(this.profileImageUrl).deletedAt(deletedAt).build();
     }
 
     public Long getId() { return id; }
@@ -38,6 +55,7 @@ public class ArtistMember {
     public String getMemberName() { return memberName; }
     public UserRole getRole() { return role; }
     public String getProfileImageUrl() { return profileImageUrl; }
+    public LocalDateTime getDeletedAt() { return deletedAt; }
 
     public static class Builder {
         private Long id;
@@ -47,6 +65,7 @@ public class ArtistMember {
         private String memberName;
         private UserRole role;
         private String profileImageUrl;
+        private LocalDateTime deletedAt;
 
         public Builder id(Long id) { this.id = id; return this; }
         public Builder artistId(Long v) { this.artistId = v; return this; }
@@ -55,6 +74,7 @@ public class ArtistMember {
         public Builder memberName(String v) { this.memberName = v; return this; }
         public Builder role(UserRole v) { this.role = v; return this; }
         public Builder profileImageUrl(String v) { this.profileImageUrl = v; return this; }
+        public Builder deletedAt(LocalDateTime v) { this.deletedAt = v; return this; }
 
         public ArtistMember build() { return new ArtistMember(this); }
     }

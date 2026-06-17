@@ -108,9 +108,9 @@ class ProductRepositoryAdapterTest {
         @DisplayName("cursor·size 조건으로 상품 목록 반환")
         void findRegularProducts_returnsList() {
             List<ProductJpaEntity> entities = List.of(ProductJpaEntity.fromWithId(savedProduct()));
-            given(jpaRepository.findRegular(eq(null), any(Pageable.class))).willReturn(entities);
+            given(jpaRepository.findRegular(eq(null), eq(null), any(Pageable.class))).willReturn(entities);
 
-            List<Product> result = sut.findRegularProducts(null, 20);
+            List<Product> result = sut.findRegularProducts(null, null, 20);
 
             assertEquals(1, result.size());
         }

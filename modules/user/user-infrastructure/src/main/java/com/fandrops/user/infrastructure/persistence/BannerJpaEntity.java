@@ -39,6 +39,9 @@ public class BannerJpaEntity {
     @Column(name = "end_at")
     private LocalDateTime endAt;
 
+    @Column(name = "agency_id")
+    private Long agencyId;
+
     protected BannerJpaEntity() {}
 
     public static BannerJpaEntity from(Banner domain) {
@@ -52,6 +55,7 @@ public class BannerJpaEntity {
         entity.isActive = domain.isActive();
         entity.startAt = domain.getStartAt();
         entity.endAt = domain.getEndAt();
+        entity.agencyId = domain.getAgencyId();
         return entity;
     }
 
@@ -66,6 +70,7 @@ public class BannerJpaEntity {
                 .isActive(isActive)
                 .startAt(startAt)
                 .endAt(endAt)
+                .agencyId(agencyId)
                 .build();
     }
 }

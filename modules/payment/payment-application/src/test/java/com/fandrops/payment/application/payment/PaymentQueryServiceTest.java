@@ -77,4 +77,35 @@ class PaymentQueryServiceTest {
         assertThatThrownBy(() -> service.getDetail(PAYMENT_ID, OWNER_FAN_ID))
                 .isInstanceOf(PaymentNotFoundException.class);
     }
+
+    @Test
+    @DisplayName("Q-5: orderId로 본인 소유 결제 조회 → PaymentDetailResult 정상 반환")
+    void q5_getDetailByOrderId_ownerAccess_returnsDetail() {
+        when(orderFanQueryPort.findFanIdByOrderId(ORDER_ID)).thenReturn(Optional.of(OWNER_FAN_ID));
+        when(paymentRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.of(pendingPayment));
+
+        PaymentDetailResult result = service.getDetailByOrderId(ORDER_ID, OWNER_FAN_ID);
+
+        assertThat(result.getOrderId()).isEqualTo(ORDER_ID);
+        assertThat(result.getAmount()).isEqualTo(AMOUNT);
+    }
+
+    @Test
+    @DisplayName("Q-6: orderId로 타인 소유 결제 접근 → 404 (권한 우회 방지)")
+    void q6_getDetailByOrderId_otherFanAccess_throwsNotFound() {
+        when(orderFanQueryPort.findFanIdByOrderId(ORDER_ID)).thenReturn(Optional.of(OWNER_FAN_ID));
+
+        assertThatThrownBy(() -> service.getDetailByOrderId(ORDER_ID, OTHER_FAN_ID))
+                .isInstanceOf(PaymentNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("Q-7: orderId에 해당하는 결제 없음 → 404")
+    void q7_getDetailByOrderId_paymentNotFound_throwsNotFound() {
+        when(orderFanQueryPort.findFanIdByOrderId(ORDER_ID)).thenReturn(Optional.of(OWNER_FAN_ID));
+        when(paymentRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.getDetailByOrderId(ORDER_ID, OWNER_FAN_ID))
+                .isInstanceOf(PaymentNotFoundException.class);
+    }
 }

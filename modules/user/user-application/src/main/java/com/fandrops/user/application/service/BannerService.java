@@ -117,6 +117,101 @@ public class BannerService {
         return result;
     }
 
+    /** GET /agency/banners — Agency 소속 배너 목록 */
+    public List<BannerResult> getAgencyBanners(Long agencyId) {
+        return bannerRepository.findAllByAgencyId(agencyId)
+                .stream()
+                .map(BannerResult::from)
+                .toList();
+    }
+
+    /** POST /agency/banners — Agency 배너 생성 */
+    @Transactional
+    public BannerResult createAgencyBanner(CreateBannerCommand command, Long agencyId, String clientIp, String traceId) {
+        if (command.startAt() != null && command.endAt() != null
+                && command.startAt().isAfter(command.endAt())) {
+            throw new IllegalArgumentException("배너 종료 시각이 시작 시각보다 이를 수 없습니다.");
+        }
+        if (!s3ImageValidationPort.imageExists(command.imageUrl())) {
+            throw new S3ImageNotFoundException(command.imageUrl());
+        }
+        Banner banner = Banner.builder()
+                .bannerType(BannerType.MAIN)
+                .agencyId(agencyId)
+                .title(command.title())
+                .imageUrl(command.imageUrl())
+                .landingUrl(command.landingUrl())
+                .exposureOrder(command.exposureOrder())
+                .isActive(true)
+                .startAt(command.startAt())
+                .endAt(command.endAt())
+                .build();
+        BannerResult result = BannerResult.from(bannerRepository.save(banner));
+        auditLogPort.save(AuditLog.builder()
+                .occurredAt(Instant.now())
+                .actorType("AGENCY")
+                .actorId(agencyId)
+                .action("AGENCY_BANNER_CREATE")
+                .resourceType("BANNER")
+                .resourceId(result.id())
+                .traceId(traceId)
+                .afterJson(bannerJson(result))
+                .clientIp(clientIp)
+                .build());
+        return result;
+    }
+
+    /** PATCH /agency/banners/{id} — Agency 배너 수정 (소유권 검증) */
+    @Transactional
+    public BannerResult updateAgencyBanner(Long id, UpdateBannerCommand command, Long agencyId, String clientIp, String traceId) {
+        Banner banner = bannerRepository.findByIdAndAgencyId(id, agencyId)
+                .orElseThrow(() -> new BannerNotFoundException("존재하지 않는 배너입니다. id=" + id));
+        LocalDateTime effectiveStart = command.startAt() != null ? command.startAt().orElse(null) : banner.getStartAt();
+        LocalDateTime effectiveEnd = command.endAt() != null ? command.endAt().orElse(null) : banner.getEndAt();
+        if (effectiveStart != null && effectiveEnd != null && effectiveStart.isAfter(effectiveEnd)) {
+            throw new IllegalArgumentException("배너 종료 시각이 시작 시각보다 이를 수 없습니다.");
+        }
+        String beforeJson = bannerJson(BannerResult.from(banner));
+        banner.update(command.title(), command.imageUrl(), command.landingUrl(),
+                command.exposureOrder(), command.isActive(), command.startAt(), command.endAt());
+        BannerResult result = BannerResult.from(bannerRepository.save(banner));
+        auditLogPort.save(AuditLog.builder()
+                .occurredAt(Instant.now())
+                .actorType("AGENCY")
+                .actorId(agencyId)
+                .action("AGENCY_BANNER_UPDATE")
+                .resourceType("BANNER")
+                .resourceId(id)
+                .traceId(traceId)
+                .beforeJson(beforeJson)
+                .afterJson(bannerJson(result))
+                .clientIp(clientIp)
+                .build());
+        return result;
+    }
+
+    /** DELETE /agency/banners/{id} — soft delete (소유권 검증) */
+    @Transactional
+    public void deleteAgencyBanner(Long id, Long agencyId, String clientIp, String traceId) {
+        Banner banner = bannerRepository.findByIdAndAgencyId(id, agencyId)
+                .orElseThrow(() -> new BannerNotFoundException("존재하지 않는 배너입니다. id=" + id));
+        String beforeJson = "{\"isActive\":" + banner.isActive() + "}";
+        banner.deactivate();
+        bannerRepository.save(banner);
+        auditLogPort.save(AuditLog.builder()
+                .occurredAt(Instant.now())
+                .actorType("AGENCY")
+                .actorId(agencyId)
+                .action("AGENCY_BANNER_DELETE")
+                .resourceType("BANNER")
+                .resourceId(id)
+                .traceId(traceId)
+                .beforeJson(beforeJson)
+                .afterJson("{\"isActive\":false}")
+                .clientIp(clientIp)
+                .build());
+    }
+
     /** DELETE /admin/main-banners/{id} — soft delete (Admin) */
     @Transactional
     public void deleteBanner(Long id, Long adminId, String clientIp, String traceId) {

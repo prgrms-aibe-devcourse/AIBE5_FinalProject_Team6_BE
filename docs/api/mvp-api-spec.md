@@ -35,6 +35,7 @@ Gradle 모듈·담당자: [architecture.md § 도메인 오너십](../architectu
 | F04-01 | `POST /products` (상시), `?type=regular` | `order` |
 | F04-02 | `POST /products` (드롭스 기간), `?type=drops`, `/queue/*` | `order` · `payment` |
 | F04-03 | `/banners/main`, `/admin/main-banners` | `user` |
+| F04-03 (STORE) | `/store-banners`, `/admin/store-banners` | `order` |
 | F04-04~05 | `/cart`, `/orders`, `.../restock-subscribe` | `order` |
 | F05-01~03 | `POST /artists/{id}/events` (+ 외부 URL) | `community` |
 | F06-01~03 | `/payments/*`, webhook | `payment` |
@@ -157,7 +158,7 @@ Gradle 모듈·담당자: [architecture.md § 도메인 오너십](../architectu
 
 | Method | Endpoint | F-ID | 설명 | Request Body / Param | Response |
 | --- | --- | --- | --- | --- | --- |
-| GET | `/products` | F04-01·02 | 상품 목록 | `?type=regular` \| `drops`, `cursor`, `size` | `{ items: [...], nextCursor }` |
+| GET | `/products` | F04-01·02 | 상품 목록 | `?type=regular` \| `drops`, `artistId`(선택), `cursor`, `size` | `{ items: [...], nextCursor }` |
 | GET | `/products/{id}` | F04-01·02 | 상품 상세 | — | `{ id, artistId, name, price, status, dropsStartAt, dropsEndAt, totalQty, reservedQty, availableQty, updatedAt }` |
 | POST | `/products` | F04-01 | **상시** 상품 등록 | `artistId`, `name`, `price`, `totalQty` | `201` `{ productId }` |
 | POST | `/products` | F04-02 | **드롭스** 상품 등록 | 위 + `dropsStartAt`, `dropsEndAt`, `totalQty` | `201` `{ productId }` |
@@ -168,8 +169,72 @@ Gradle 모듈·담당자: [architecture.md § 도메인 오너십](../architectu
 
 - **F04-01** `?type=regular`: `drops_start_at`·`drops_end_at` 모두 NULL.
 - **F04-02** `?type=drops`: `drops_start_at ≤ now ≤ drops_end_at`. 카운트다운·대기열([§ Wait Queue](#wait-queue-대기열)) 적용.
+- `?artistId={id}`: 특정 아티스트 상품만 반환. 미전달 시 전체 반환 (하위 호환).
 - 재입고 시 `RESTOCK_ALERT` 발행 → 표지민 전송.
 - `totalQty` / `reservedQty` / `availableQty`: `INVENTORY` 조인 ([ERD §1](../erd/erd-design.md#1-inventory--재고-테이블-분리-및-이력history-기록)).
+
+---
+
+## Agency Banner (F04-03)
+
+`user-api` · 담당: **표지민**  
+Agency 계정이 자신의 메인 배너를 직접 관리. `banner.agency_id = 로그인 Agency ID` 로 소유권 scoping.
+
+| Method | Endpoint | Auth | 설명 | Request Body | Response |
+| --- | --- | --- | --- | --- | --- |
+| GET | `/agency/banners` | Agency | 내 배너 목록 | — | `{ data: [BannerResponse], traceId }` |
+| POST | `/agency/banners` | Agency | 배너 등록 | `title`, `imageUrl`, `landingUrl`, `exposureOrder`, `startAt`?, `endAt`? | `201` `{ data: BannerResponse, traceId }` |
+| PATCH | `/agency/banners/{id}` | Agency | 배너 수정 (부분) | 위 필드 모두 선택, `isActive` | `{ data: BannerResponse, traceId }` |
+| DELETE | `/agency/banners/{id}` | Agency | 배너 비활성화 (soft delete) | — | `204` |
+| POST | `/agency/uploads` | Agency | 배너 이미지 S3 Presigned PUT URL 발급 | `contentType`, `contentLength` | `{ presignedUrl, imageUrl, expiresAt }` |
+
+**소유권 규칙**: `PATCH`·`DELETE` 시 `agency_id` 불일치 → `404 BANNER_NOT_FOUND` (ID 열거 방지).
+
+**이미지 업로드 플로우**:
+1. `POST /agency/uploads` → `presignedUrl`, `imageUrl`
+2. 클라이언트가 `presignedUrl`로 직접 S3 PUT
+3. `POST /agency/banners { imageUrl: ... }` ← PUT 완료 후에만 유효
+
+---
+
+## Store Banner (F04-03 STORE)
+
+`order-api` · 담당: **형성빈**  
+`banner` 테이블 `banner_type='STORE'` 레코드만 접근. MAIN 배너는 user 모듈(표지민) 담당.
+
+| Method | Endpoint | Auth | 설명 | Request Body / Param | Response |
+| --- | --- | --- | --- | --- | --- |
+| GET | `/store-banners` | 없음 | 활성 스토어 배너 목록 (노출 시간 범위 내) | — | `{ data: [StoreBannerResponse], traceId }` |
+| POST | `/admin/store-banners` | Admin | 스토어 배너 등록 | `title`, `imageUrl`, `landingUrl`, `exposureOrder`, `startAt`?, `endAt`?, `productId`? | `201` `{ bannerId }` |
+| PATCH | `/admin/store-banners/{id}` | Admin | 스토어 배너 수정 (부분) | 위 필드 모두 선택 | `{ bannerId }` |
+| DELETE | `/admin/store-banners/{id}` | Admin | 스토어 배너 비활성화 (soft delete) | — | `204` |
+
+**`StoreBannerResponse` 필드**
+
+| 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| `id` | Long | 배너 ID |
+| `title` | String | 배너 제목 |
+| `imageUrl` | String | 이미지 URL |
+| `landingUrl` | String | 클릭 시 이동 URL |
+| `exposureOrder` | int | 노출 순서 (오름차순) |
+| `status` | String | `ACTIVE` / `WAITING` / `INACTIVE` |
+| `startAt` | ISO8601? | 노출 시작 시각 (null = 즉시) |
+| `endAt` | ISO8601? | 노출 종료 시각 (null = 무기한) |
+| `productId` | Long? | 연결 상품 ID (ERD §9) |
+
+**status 계산 규칙**  
+`INACTIVE` ← `isActive=false` 또는 `endAt < now`  
+`WAITING` ← `isActive=true` AND `startAt > now`  
+`ACTIVE` ← 그 외
+
+**에러 코드**
+
+| 상황 | HTTP | errorCode |
+| --- | --- | --- |
+| 존재하지 않는 배너 수정·삭제 | 404 | `STORE_BANNER_NOT_FOUND` |
+| `startAt >= endAt` | 400 | `INVALID_REQUEST` |
+| 필수 필드 누락 | 400 | `INVALID_REQUEST` |
 
 ---
 
@@ -392,6 +457,10 @@ Toss PG → 서버 비동기 결제 상태 수신. 상세: [payment-flow-reason.
 | DELETE | `/admin/main-banners/{id}` | `user` | 표지민 | 메인 배너 삭제 |
 | POST | `/admin/uploads` | `user` | 표지민 | 배너 이미지 S3 Presigned PUT URL 발급 — `{ contentType, contentLength }` → `{ presignedUrl, imageUrl, expiresAt }` · 클라이언트가 presignedUrl로 직접 S3 PUT 후 imageUrl을 배너 등록에 사용 (#180) |
 | GET | `/banners/main` | `user` | 표지민 | GNB 홈 메인 배너 노출 (F04-03) |
+| GET | `/admin/store-banners` | `order` | 형성빈 | 스토어 배너 목록 관리 (F04-03 STORE) |
+| POST | `/admin/store-banners` | `order` | 형성빈 | 스토어 배너 등록 |
+| PATCH | `/admin/store-banners/{id}` | `order` | 형성빈 | 스토어 배너 수정 |
+| DELETE | `/admin/store-banners/{id}` | `order` | 형성빈 | 스토어 배너 비활성화 (soft delete) |
 
 #### POST `/admin/uploads` — S3 PUT 시 주의사항
 
@@ -419,7 +488,7 @@ S3 PUT 요청의 `Content-Length` 헤더가 선언한 값과 **다를 경우 S3�
 4. POST /admin/main-banners { imageUrl: ... }  ← PUT 완료 후에만 유효
 ```
 
-F04-03은 **메인 배너만**. 스토어 아티스트 노출 순서는 F04-01 (`GET /artists?sort=fanCount`).
+F04-03은 **메인 배너(user)** + **스토어 배너(order)** 분리 관리. 스토어 아티스트 노출 순서는 F04-01 (`GET /artists?sort=fanCount`).
 
 ---
 

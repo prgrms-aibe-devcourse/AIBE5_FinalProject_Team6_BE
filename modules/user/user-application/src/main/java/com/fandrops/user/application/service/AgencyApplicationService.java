@@ -2,15 +2,17 @@ package com.fandrops.user.application.service;
 
 import com.fandrops.user.application.dto.AgencyApplicationResult;
 import com.fandrops.user.application.dto.CreateAgencyApplicationCommand;
+import com.fandrops.user.application.event.AgencyApplicationApprovedEmailEvent;
+import com.fandrops.user.application.event.AgencyApplicationRejectedEmailEvent;
 import com.fandrops.user.application.event.AgencyApprovedEvent;
 import com.fandrops.user.application.exception.AgencyApplicationNotFoundException;
 import com.fandrops.user.application.exception.DuplicateAgencyAccountException;
 import com.fandrops.user.application.exception.DuplicateApplicationException;
 import com.fandrops.user.application.port.AgencyAccountRepository;
 import com.fandrops.user.application.port.AgencyApplicationRepository;
+import com.fandrops.user.application.port.ArtistMemberRepository;
 import com.fandrops.user.application.port.ArtistProfileRepository;
 import com.fandrops.user.application.port.AuditLogPort;
-import com.fandrops.user.application.port.EmailNotificationPort;
 import com.fandrops.user.domain.AgencyAccount;
 import com.fandrops.user.domain.AgencyAccountStatus;
 import com.fandrops.user.domain.AgencyApplication;
@@ -34,8 +36,8 @@ public class AgencyApplicationService {
 
     private final AgencyApplicationRepository agencyApplicationRepository;
     private final AgencyAccountRepository agencyAccountRepository;
+    private final ArtistMemberRepository artistMemberRepository;
     private final ArtistProfileRepository artistProfileRepository;
-    private final EmailNotificationPort emailNotificationPort;
     private final PasswordEncoder passwordEncoder;
     private final ApplicationEventPublisher eventPublisher;
     private final AuditLogPort auditLogPort;
@@ -43,15 +45,15 @@ public class AgencyApplicationService {
     public AgencyApplicationService(
             AgencyApplicationRepository agencyApplicationRepository,
             AgencyAccountRepository agencyAccountRepository,
+            ArtistMemberRepository artistMemberRepository,
             ArtistProfileRepository artistProfileRepository,
-            EmailNotificationPort emailNotificationPort,
             PasswordEncoder passwordEncoder,
             ApplicationEventPublisher eventPublisher,
             AuditLogPort auditLogPort) {
         this.agencyApplicationRepository = agencyApplicationRepository;
         this.agencyAccountRepository = agencyAccountRepository;
+        this.artistMemberRepository = artistMemberRepository;
         this.artistProfileRepository = artistProfileRepository;
-        this.emailNotificationPort = emailNotificationPort;
         this.passwordEncoder = passwordEncoder;
         this.eventPublisher = eventPublisher;
         this.auditLogPort = auditLogPort;
@@ -91,9 +93,9 @@ public class AgencyApplicationService {
                 .toList();
     }
 
-    // F02-02: 승인 — AGENCY_ACCOUNT 생성 + 이메일 발송
-    // 이메일 발송 실패 시 @Transactional 롤백 의도적 설계:
-    // agency가 임시 비밀번호 이메일을 못 받으면 로그인 방법이 없으므로 승인 자체를 취소해야 함
+    // F02-02: 승인 — AGENCY_ACCOUNT 생성 + DB 커밋 후 비동기 이메일 발송
+    // 이메일은 @TransactionalEventListener(AFTER_COMMIT) + @Async로 처리되어 DB connection 선점 해제.
+    // 이메일 발송 실패 시 승인은 유지(계정·임시 비밀번호 DB 저장 완료) — 추후 관리자 재발급 기능으로 보완 예정.
     @Transactional
     public void approveApplication(Long id, Long adminId, String clientIp, String traceId) {
         AgencyApplication application = agencyApplicationRepository.findById(id)
@@ -105,6 +107,10 @@ public class AgencyApplicationService {
         String loginId = application.getContactEmail();
         if (agencyAccountRepository.existsByLoginId(loginId)) {
             throw new DuplicateAgencyAccountException("이미 해당 이메일로 운영자 계정이 존재합니다: " + loginId);
+        }
+        // ArtistMember와 loginId 충돌 방지 — 동일 loginId 존재 시 ArtistMember 영구 로그인 불가 (#267)
+        if (artistMemberRepository.existsByLoginId(loginId)) {
+            throw new DuplicateAgencyAccountException("이미 ArtistMember 계정에서 사용 중인 loginId입니다: " + loginId);
         }
 
         application.approve(LocalDateTime.now(ZoneOffset.UTC));
@@ -133,8 +139,8 @@ public class AgencyApplicationService {
                 application.getTargetArtistName()
         ));
 
-        emailNotificationPort.sendApplicationApprovedEmail(
-                application.getContactEmail(), loginId, tempPassword);
+        eventPublisher.publishEvent(new AgencyApplicationApprovedEmailEvent(
+                application.getContactEmail(), loginId, tempPassword));
 
         auditLogPort.save(AuditLog.builder()
                 .occurredAt(Instant.now())
@@ -150,7 +156,7 @@ public class AgencyApplicationService {
                 .build());
     }
 
-    // F02-02: 반려 — 이메일 발송
+    // F02-02: 반려 — DB 커밋 후 비동기 이메일 발송
     @Transactional
     public void rejectApplication(Long id, String rejectReason, Long adminId, String clientIp, String traceId) {
         AgencyApplication application = agencyApplicationRepository.findById(id)
@@ -162,8 +168,8 @@ public class AgencyApplicationService {
         application.reject(rejectReason, LocalDateTime.now(ZoneOffset.UTC));
         agencyApplicationRepository.save(application);
 
-        emailNotificationPort.sendApplicationRejectedEmail(
-                application.getContactEmail(), rejectReason);
+        eventPublisher.publishEvent(new AgencyApplicationRejectedEmailEvent(
+                application.getContactEmail(), rejectReason));
 
         auditLogPort.save(AuditLog.builder()
                 .occurredAt(Instant.now())

@@ -45,4 +45,17 @@ public class BannerRepositoryImpl implements BannerRepository {
                 .map(BannerJpaEntity::toDomain)
                 .toList();
     }
+
+    @Override
+    public List<Banner> findAllByAgencyId(Long agencyId) {
+        return jpaRepository.findByBannerTypeAndAgencyIdOrderByExposureOrderAsc(BannerType.MAIN, agencyId)
+                .stream()
+                .map(BannerJpaEntity::toDomain)
+                .toList();
+    }
+
+    @Override
+    public Optional<Banner> findByIdAndAgencyId(Long id, Long agencyId) {
+        return jpaRepository.findByIdAndAgencyId(id, agencyId).map(BannerJpaEntity::toDomain);
+    }
 }
