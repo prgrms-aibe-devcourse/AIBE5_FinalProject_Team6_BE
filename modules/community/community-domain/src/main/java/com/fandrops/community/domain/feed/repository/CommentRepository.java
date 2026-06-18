@@ -17,6 +17,9 @@ public interface CommentRepository {
     // 대댓글 전체 조회 (대댓글은 보통 소량이므로 커서 없이 조회)
     List<Comment> findRepliesByParentId(Long parentId);
 
+    // N+1 방지: 복수 parentId 대댓글 bulk 조회
+    List<Comment> findRepliesByParentIds(List<Long> parentIds);
+
     // /fans/me/activities — 팬 댓글 이력 커서 페이징
     List<Comment> findByFanId(Long fanId, Long cursorId, int size);
 

@@ -20,6 +20,7 @@ import java.time.ZoneOffset;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -102,12 +103,17 @@ public class CommentService {
         boolean hasMore = topLevel.size() > size;
         List<Comment> page = hasMore ? topLevel.subList(0, size) : topLevel;
 
+        List<Long> parentIds = page.stream().map(Comment::getId).toList();
+        Map<Long, List<CommentResult>> repliesByParentId = commentRepository.findRepliesByParentIds(parentIds)
+                .stream()
+                .collect(Collectors.groupingBy(
+                        Comment::getParentId,
+                        Collectors.mapping(this::toResult, Collectors.toList())));
+
         List<CommentWithRepliesResult> items = page.stream()
                 .map(c -> new CommentWithRepliesResult(
                         toResult(c),
-                        commentRepository.findRepliesByParentId(c.getId()).stream()
-                                .map(this::toResult)
-                                .toList()))
+                        repliesByParentId.getOrDefault(c.getId(), List.of())))
                 .toList();
         String nextCursor = hasMore ? String.valueOf(page.get(page.size() - 1).getId()) : null;
         return new CommentListResult(items, nextCursor, hasMore);

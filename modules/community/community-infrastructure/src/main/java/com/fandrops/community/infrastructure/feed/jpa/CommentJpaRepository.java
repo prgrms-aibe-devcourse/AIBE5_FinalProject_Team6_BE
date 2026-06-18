@@ -17,6 +17,9 @@ public interface CommentJpaRepository extends JpaRepository<CommentJpaEntity, Lo
     // 대댓글 전체 조회 (소량이므로 커서 없이)
     List<CommentJpaEntity> findByParentIdOrderByIdAsc(Long parentId);
 
+    // bulk 대댓글 조회 — WHERE parent_id IN (...)
+    List<CommentJpaEntity> findByParentIdInOrderByParentIdAscIdAsc(List<Long> parentIds);
+
     // /fans/me/activities 커서 페이징
     List<CommentJpaEntity> findByFanIdOrderByIdDesc(Long fanId, Pageable pageable);
 

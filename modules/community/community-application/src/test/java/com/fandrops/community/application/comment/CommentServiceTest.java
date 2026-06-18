@@ -184,7 +184,7 @@ class CommentServiceTest {
     class GetCommentsTest {
 
         @Test
-        @DisplayName("cursor=null 첫 요청 — 최상위 댓글 + 대댓글 포함 반환")
+        @DisplayName("cursor=null 첫 요청 — 최상위 댓글 + 대댓글 bulk 조회 후 포함 반환")
         void firstPage_returnsTopLevelWithReplies() {
             ArtistFeed feed = ArtistFeed.reconstruct(1L, 10L, 5L, "내용", 0, 0, LocalDateTime.now(clock));
             Comment c1 = Comment.reconstruct(1L, 1L, 10L, 99L, null, null, "댓글1", LocalDateTime.now(clock));
@@ -193,7 +193,7 @@ class CommentServiceTest {
             when(feedRepository.findById(eq(1L))).thenReturn(Optional.of(feed));
             when(commentRepository.findTopLevelByFeedId(eq(1L), isNull(), eq(21)))
                     .thenReturn(List.of(c1));
-            when(commentRepository.findRepliesByParentId(eq(1L))).thenReturn(List.of(reply1));
+            when(commentRepository.findRepliesByParentIds(eq(List.of(1L)))).thenReturn(List.of(reply1));
 
             CommentListResult result = commentService.getComments(1L, null, 20);
 
@@ -216,7 +216,7 @@ class CommentServiceTest {
             when(feedRepository.findById(eq(1L))).thenReturn(Optional.of(feed));
             when(commentRepository.findTopLevelByFeedId(eq(1L), isNull(), eq(3)))
                     .thenReturn(List.of(c1, c2, c3));
-            when(commentRepository.findRepliesByParentId(anyLong())).thenReturn(List.of());
+            when(commentRepository.findRepliesByParentIds(anyList())).thenReturn(List.of());
 
             CommentListResult result = commentService.getComments(1L, null, 2);
 
@@ -234,7 +234,7 @@ class CommentServiceTest {
             when(feedRepository.findById(eq(1L))).thenReturn(Optional.of(feed));
             when(commentRepository.findTopLevelByFeedId(eq(1L), isNull(), eq(21)))
                     .thenReturn(List.of(c1));
-            when(commentRepository.findRepliesByParentId(eq(1L))).thenReturn(List.of());
+            when(commentRepository.findRepliesByParentIds(eq(List.of(1L)))).thenReturn(List.of());
 
             CommentListResult result = commentService.getComments(1L, null, 20);
 
@@ -267,6 +267,7 @@ class CommentServiceTest {
             ArtistFeed feed = ArtistFeed.reconstruct(1L, 10L, 5L, "내용", 0, 0, LocalDateTime.now(clock));
             when(feedRepository.findById(eq(1L))).thenReturn(Optional.of(feed));
             when(commentRepository.findTopLevelByFeedId(eq(1L), eq(5L), eq(21))).thenReturn(List.of());
+            when(commentRepository.findRepliesByParentIds(anyList())).thenReturn(List.of());
 
             commentService.getComments(1L, "5", 20);
 

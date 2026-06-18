@@ -2,6 +2,7 @@ package com.fandrops.community.api.feed;
 
 import com.fandrops.common.ApiResponse;
 import com.fandrops.community.api.CommunityControllerSupport;
+import com.fandrops.community.application.exception.ForbiddenException;
 import com.fandrops.community.application.feed.FeedCreateCommand;
 import com.fandrops.community.application.feed.FeedListResult;
 import com.fandrops.community.application.feed.FeedResult;
@@ -61,7 +62,7 @@ public class FeedController extends CommunityControllerSupport {
             } else if (hasFanRole(authentication)) {
                 viewerFanId = Long.parseLong(authentication.getName());
             } else {
-                throw new IllegalStateException("지원하지 않는 role: " + authentication.getAuthorities());
+                throw new ForbiddenException("지원하지 않는 role: " + authentication.getAuthorities());
             }
         }
 
@@ -88,7 +89,7 @@ public class FeedController extends CommunityControllerSupport {
             } else if (hasFanRole(authentication)) {
                 viewerFanId = Long.parseLong(authentication.getName());
             } else {
-                throw new IllegalStateException("지원하지 않는 role: " + authentication.getAuthorities());
+                throw new ForbiddenException("지원하지 않는 role: " + authentication.getAuthorities());
             }
         }
 
