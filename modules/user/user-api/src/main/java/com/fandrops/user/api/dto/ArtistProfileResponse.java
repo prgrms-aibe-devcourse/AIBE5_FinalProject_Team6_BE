@@ -6,6 +6,7 @@ import java.time.LocalDateTime;
 
 public record ArtistProfileResponse(
         Long id,
+        Long agencyAccountId,
         String name,
         long fanCount,
         LocalDateTime joinedAt,
@@ -19,6 +20,7 @@ public record ArtistProfileResponse(
     public static ArtistProfileResponse from(ArtistProfile profile) {
         return new ArtistProfileResponse(
                 profile.getId(),
+                profile.getAgencyId(),
                 profile.getName(),
                 profile.getFanCount(),
                 profile.getJoinedAt(),

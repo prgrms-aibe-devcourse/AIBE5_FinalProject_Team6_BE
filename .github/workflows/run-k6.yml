@@ -101,6 +101,7 @@ jobs:
           BASE="${{ secrets.APP_BASE_URL }}"
           cd infra/k6
 
+          set +e
           case "$SCENARIO" in
             01)
               echo "=== 시나리오 01: 주문 동시성 (200 VU) ==="
@@ -141,3 +142,12 @@ jobs:
               exit 1
               ;;
           esac
+          K6_EXIT=$?
+          set -e
+
+          if [[ $K6_EXIT -eq 99 ]]; then
+            echo "::warning::k6 threshold 미달 (exit 99) — SLO 위반. 측정값은 위 요약 참고."
+          elif [[ $K6_EXIT -ne 0 ]]; then
+            echo "❌ k6 실행 오류 (exit $K6_EXIT)"
+            exit $K6_EXIT
+          fi

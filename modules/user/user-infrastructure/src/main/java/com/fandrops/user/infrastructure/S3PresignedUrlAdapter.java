@@ -29,7 +29,16 @@ public class S3PresignedUrlAdapter implements S3PresignedUrlPort {
 
     @Override
     public PresignedUploadResult generate(String contentType, long contentLength) {
-        String normalizedPrefix = properties.getUploadPrefix().replaceAll("/+$", "");
+        return generate(contentType, contentLength, properties.getUploadPrefix());
+    }
+
+    @Override
+    public PresignedUploadResult generateForProfileImage(String contentType, long contentLength) {
+        return generate(contentType, contentLength, properties.getUploadProfileImagePrefix());
+    }
+
+    private PresignedUploadResult generate(String contentType, long contentLength, String prefix) {
+        String normalizedPrefix = prefix.replaceAll("/+$", "");
         String objectKey = normalizedPrefix + "/" + UUID.randomUUID() + AllowedImageContentType.extensionFor(contentType);
 
         PutObjectRequest putRequest = PutObjectRequest.builder()
