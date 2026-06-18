@@ -8,6 +8,7 @@ import com.fandrops.inventory.domain.InventoryRefType;
 import com.fandrops.inventory.domain.exception.InvalidInventoryStateException;
 import com.fandrops.inventory.domain.exception.OutOfStockException;
 import com.fandrops.inventory.domain.port.InventoryHistoryRepository;
+import com.fandrops.inventory.domain.port.InventoryReadRepository;
 import com.fandrops.inventory.domain.port.InventoryRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -33,6 +34,9 @@ import static org.mockito.Mockito.verify;
 class InventoryCommandServiceTest {
 
     @Mock
+    private InventoryReadRepository inventoryReadRepository;
+
+    @Mock
     private InventoryRepository inventoryRepository;
 
     @Mock
@@ -55,7 +59,7 @@ class InventoryCommandServiceTest {
             // post-update 상태: availableQty=90 (100에서 10 차감됨)
             Inventory postUpdate = Inventory.reconstitute(1L, PRODUCT_ID, 100, 10, 90, 0);
             given(inventoryRepository.reserveAtomic(PRODUCT_ID, 10)).willReturn(1);
-            given(inventoryRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(postUpdate));
+            given(inventoryReadRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(postUpdate));
 
             sut.reserve(ORDER_ID, PRODUCT_ID, 10);
 
@@ -75,7 +79,7 @@ class InventoryCommandServiceTest {
         void reserve_atomicUpdateZeroRows_throwsOutOfStock() {
             Inventory inventory = Inventory.create(PRODUCT_ID, 5);
             given(inventoryRepository.reserveAtomic(PRODUCT_ID, 10)).willReturn(0);
-            given(inventoryRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(inventory));
+            given(inventoryReadRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(inventory));
 
             assertThrows(OutOfStockException.class,
                     () -> sut.reserve(ORDER_ID, PRODUCT_ID, 10));
@@ -88,7 +92,7 @@ class InventoryCommandServiceTest {
         @DisplayName("재고 없는 상품이면 InventoryNotFoundException")
         void reserve_inventoryNotFound() {
             given(inventoryRepository.reserveAtomic(PRODUCT_ID, 10)).willReturn(0);
-            given(inventoryRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.empty());
+            given(inventoryReadRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.empty());
 
             assertThrows(InventoryNotFoundException.class,
                     () -> sut.reserve(ORDER_ID, PRODUCT_ID, 10));
@@ -117,7 +121,7 @@ class InventoryCommandServiceTest {
             // post-update 상태: totalQty=80, reservedQty=0, availableQty=80 (20 confirm 후)
             Inventory postUpdate = Inventory.reconstitute(1L, PRODUCT_ID, 80, 0, 80, 0);
             given(inventoryRepository.confirmAtomic(PRODUCT_ID, 20)).willReturn(1);
-            given(inventoryRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(postUpdate));
+            given(inventoryReadRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(postUpdate));
 
             sut.confirm(ORDER_ID, PRODUCT_ID, 20);
 
@@ -137,7 +141,7 @@ class InventoryCommandServiceTest {
         void confirm_insufficientReserved_propagatesWithoutSave() {
             Inventory inventory = Inventory.create(PRODUCT_ID, 100);  // reservedQty=0
             given(inventoryRepository.confirmAtomic(PRODUCT_ID, 10)).willReturn(0);
-            given(inventoryRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(inventory));
+            given(inventoryReadRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(inventory));
 
             assertThrows(InvalidInventoryStateException.class,
                     () -> sut.confirm(ORDER_ID, PRODUCT_ID, 10));
@@ -150,7 +154,7 @@ class InventoryCommandServiceTest {
         @DisplayName("재고 없는 상품이면 InventoryNotFoundException")
         void confirm_inventoryNotFound() {
             given(inventoryRepository.confirmAtomic(PRODUCT_ID, 20)).willReturn(0);
-            given(inventoryRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.empty());
+            given(inventoryReadRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.empty());
 
             assertThrows(InventoryNotFoundException.class,
                     () -> sut.confirm(ORDER_ID, PRODUCT_ID, 20));
@@ -179,7 +183,7 @@ class InventoryCommandServiceTest {
             // post-update 상태: reservedQty=0, availableQty=100 (30 restore 후)
             Inventory postUpdate = Inventory.reconstitute(1L, PRODUCT_ID, 100, 0, 100, 0);
             given(inventoryRepository.restoreAtomic(PRODUCT_ID, 30)).willReturn(1);
-            given(inventoryRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(postUpdate));
+            given(inventoryReadRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(postUpdate));
 
             sut.restore(ORDER_ID, PRODUCT_ID, 30);
 
@@ -199,7 +203,7 @@ class InventoryCommandServiceTest {
         void restore_insufficientReserved_propagatesWithoutSave() {
             Inventory inventory = Inventory.create(PRODUCT_ID, 100);  // reservedQty=0
             given(inventoryRepository.restoreAtomic(PRODUCT_ID, 10)).willReturn(0);
-            given(inventoryRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(inventory));
+            given(inventoryReadRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(inventory));
 
             assertThrows(InvalidInventoryStateException.class,
                     () -> sut.restore(ORDER_ID, PRODUCT_ID, 10));
@@ -212,7 +216,7 @@ class InventoryCommandServiceTest {
         @DisplayName("재고 없는 상품이면 InventoryNotFoundException")
         void restore_inventoryNotFound() {
             given(inventoryRepository.restoreAtomic(PRODUCT_ID, 30)).willReturn(0);
-            given(inventoryRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.empty());
+            given(inventoryReadRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.empty());
 
             assertThrows(InventoryNotFoundException.class,
                     () -> sut.restore(ORDER_ID, PRODUCT_ID, 30));
@@ -227,7 +231,7 @@ class InventoryCommandServiceTest {
         @DisplayName("재입고 시 INCREASE 이력 저장")
         void increase_savesInventoryAndHistory() {
             Inventory inventory = Inventory.create(PRODUCT_ID, 100);
-            given(inventoryRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(inventory));
+            given(inventoryReadRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(inventory));
 
             sut.increase(RESTOCK_ID, PRODUCT_ID, 50);
 
@@ -242,7 +246,7 @@ class InventoryCommandServiceTest {
         @Test
         @DisplayName("재고 없는 상품이면 InventoryNotFoundException")
         void increase_inventoryNotFound() {
-            given(inventoryRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.empty());
+            given(inventoryReadRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.empty());
 
             assertThrows(InventoryNotFoundException.class,
                     () -> sut.increase(RESTOCK_ID, PRODUCT_ID, 50));

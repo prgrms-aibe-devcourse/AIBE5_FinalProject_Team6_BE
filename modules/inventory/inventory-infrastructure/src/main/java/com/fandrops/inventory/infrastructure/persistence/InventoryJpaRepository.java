@@ -5,11 +5,14 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface InventoryJpaRepository extends JpaRepository<InventoryJpaEntity, Long> {
 
     Optional<InventoryJpaEntity> findByProductId(Long productId);
+
+    List<InventoryJpaEntity> findByProductIdIn(List<Long> productIds);
 
     @Modifying(clearAutomatically = true)
     @Query("UPDATE InventoryJpaEntity e " +

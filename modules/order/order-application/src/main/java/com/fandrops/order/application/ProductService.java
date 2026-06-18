@@ -13,6 +13,7 @@ import com.fandrops.order.domain.port.InventoryCreatePort;
 import com.fandrops.order.domain.port.InventoryReadPort;
 import com.fandrops.order.domain.port.ProductRepository;
 import java.util.List;
+import java.util.Map;
 import org.springframework.transaction.annotation.Transactional;
 
 public class ProductService {
@@ -34,8 +35,14 @@ public class ProductService {
         List<Product> products = "drops".equals(type)
                 ? productRepository.findDropsProducts(artistId, cursor, size)
                 : productRepository.findRegularProducts(artistId, cursor, size);
+        List<Long> productIds = products.stream().map(Product::getId).toList();
+        if (productIds.isEmpty()) {
+            return new ProductListResponse(List.of(), null);
+        }
+        Map<Long, InventoryInfo> inventoryMap = inventoryReadPort.getByProductIds(productIds);
         List<ProductListItemResponse> items = products.stream()
-                .map(ProductListItemResponse::from)
+                .map(p -> ProductListItemResponse.from(p,
+                        inventoryMap.getOrDefault(p.getId(), new InventoryInfo(0, 0, 0))))
                 .toList();
         Long nextCursor = products.size() == size
                 ? products.get(products.size() - 1).getId()
