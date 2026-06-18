@@ -7,6 +7,8 @@ import com.fandrops.notification.application.dto.PublishNotificationCommand;
 import com.fandrops.order.application.event.RestockAlertEvent;
 import com.fandrops.payment.application.payment.PaymentApprovedEvent;
 import com.fandrops.payment.application.payment.PaymentFailedEvent;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -18,19 +20,27 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class NotificationEventListenerTest {
 
     @Mock PublishNotificationUseCase publishNotificationUseCase;
+    @Mock MeterRegistry meterRegistry;
 
     NotificationEventListener listener;
 
     @BeforeEach
     void setUp() {
-        listener = new NotificationEventListener(publishNotificationUseCase);
+        Counter counter = mock(Counter.class);
+        // 실패 케이스에서만 호출됨 — 성공 케이스의 불필요한 stub 검출을 피하기 위해 lenient 사용
+        lenient().when(meterRegistry.counter(anyString(), anyString(), anyString())).thenReturn(counter);
+        listener = new NotificationEventListener(publishNotificationUseCase, meterRegistry);
     }
 
     // ── handlePaymentApproved ─────────────────────────────────────────────────
@@ -49,12 +59,17 @@ class NotificationEventListenerTest {
     }
 
     @Test
-    @DisplayName("결제 승인 이벤트 publish 실패 → 예외 전파 없음")
-    void handlePaymentApproved_publishFails_doesNotThrow() {
+    @DisplayName("결제 승인 이벤트 publish 실패 → 예외 전파 없음 + counter increment")
+    void handlePaymentApproved_publishFails_doesNotThrowAndIncrementsCounter() {
+        Counter counter = mock(Counter.class);
+        when(meterRegistry.counter("fandrops.notification.failures", "eventType", "PAYMENT_SUCCESS"))
+                .thenReturn(counter);
         doThrow(new RuntimeException("DB error"))
                 .when(publishNotificationUseCase).publish(any());
 
         assertDoesNotThrow(() -> listener.handlePaymentApproved(new PaymentApprovedEvent(1L)));
+
+        verify(counter).increment();
     }
 
     // ── handlePaymentFailed ───────────────────────────────────────────────────
