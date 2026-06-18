@@ -18,6 +18,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.*;
 
@@ -46,7 +47,7 @@ class ProductExpirySchedulerTest {
         void expireDrops_marksSoldOutAndSaves() {
             Product p1 = dropsProduct(1L);
             Product p2 = dropsProduct(2L);
-            given(productRepository.findExpiredDrops(any(LocalDateTime.class)))
+            given(productRepository.findExpiredDrops(any(LocalDateTime.class), anyInt()))
                     .willReturn(List.of(p1, p2));
             given(productRepository.save(any())).willAnswer(inv -> inv.getArgument(0));
 
@@ -61,7 +62,7 @@ class ProductExpirySchedulerTest {
         @Test
         @DisplayName("만료 상품이 없으면 save 호출 없음")
         void expireDrops_noExpired_noSave() {
-            given(productRepository.findExpiredDrops(any(LocalDateTime.class)))
+            given(productRepository.findExpiredDrops(any(LocalDateTime.class), anyInt()))
                     .willReturn(List.of());
 
             sut.expireDrops();
@@ -74,7 +75,7 @@ class ProductExpirySchedulerTest {
         void expireDrops_singleFailure_continuesOthers() {
             Product p1 = dropsProduct(1L);
             Product p2 = dropsProduct(2L);
-            given(productRepository.findExpiredDrops(any(LocalDateTime.class)))
+            given(productRepository.findExpiredDrops(any(LocalDateTime.class), anyInt()))
                     .willReturn(List.of(p1, p2));
             given(productRepository.save(p1)).willThrow(new RuntimeException("DB 오류"));
             given(productRepository.save(p2)).willAnswer(inv -> inv.getArgument(0));

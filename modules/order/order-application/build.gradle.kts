@@ -4,5 +4,6 @@
     implementation("org.springframework:spring-tx")
     implementation("org.springframework:spring-context")
     implementation("org.slf4j:slf4j-api")
+    implementation("net.javacrumbs.shedlock:shedlock-spring:6.3.0")
     testImplementation("org.mockito:mockito-junit-jupiter")
 }
