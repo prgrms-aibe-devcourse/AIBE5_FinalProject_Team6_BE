@@ -11,6 +11,7 @@ import org.redisson.api.RedissonClient;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
@@ -72,6 +73,13 @@ public class InventoryRedissonLockAdapter implements InventoryRepository {
     @Override
     public Optional<Inventory> findByProductId(Long productId) {
         return jpaRepository.findByProductId(productId).map(InventoryJpaEntity::toDomain);
+    }
+
+    @Override
+    public List<Inventory> findByProductIdIn(List<Long> productIds) {
+        return jpaRepository.findByProductIdIn(productIds).stream()
+                .map(InventoryJpaEntity::toDomain)
+                .toList();
     }
 
     @Override

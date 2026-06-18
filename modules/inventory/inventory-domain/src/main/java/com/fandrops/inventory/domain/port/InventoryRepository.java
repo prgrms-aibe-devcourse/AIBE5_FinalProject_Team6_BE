@@ -2,11 +2,14 @@ package com.fandrops.inventory.domain.port;
 
 import com.fandrops.inventory.domain.Inventory;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface InventoryRepository {
 
     Optional<Inventory> findByProductId(Long productId);
+
+    List<Inventory> findByProductIdIn(List<Long> productIds);
 
     void save(Inventory inventory);
 

@@ -4,6 +4,8 @@ import com.fandrops.inventory.application.exception.DuplicateHistoryException;
 import com.fandrops.inventory.application.exception.InventoryLockConflictException;
 import com.fandrops.inventory.application.exception.InventoryNotFoundException;
 import com.fandrops.inventory.domain.Inventory;
+import java.util.List;
+import java.util.Map;
 import com.fandrops.inventory.domain.InventoryChangeType;
 import com.fandrops.inventory.domain.InventoryHistory;
 import com.fandrops.inventory.domain.InventoryRefType;
@@ -95,6 +97,12 @@ public class InventoryCommandService {
     @Transactional(readOnly = true)
     public Inventory getInventoryByProductId(Long productId) {
         return findByProductId(productId);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<Long, Inventory> getInventoryByProductIds(List<Long> productIds) {
+        return inventoryRepository.findByProductIdIn(productIds).stream()
+                .collect(java.util.stream.Collectors.toMap(Inventory::getProductId, i -> i));
     }
 
     @Transactional

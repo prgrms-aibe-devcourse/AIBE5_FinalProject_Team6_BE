@@ -158,7 +158,7 @@ Gradle 모듈·담당자: [architecture.md § 도메인 오너십](../architectu
 
 | Method | Endpoint | F-ID | 설명 | Request Body / Param | Response |
 | --- | --- | --- | --- | --- | --- |
-| GET | `/products` | F04-01·02 | 상품 목록 | `?type=regular` \| `drops`, `artistId`(선택), `cursor`, `size` | `{ items: [...], nextCursor }` |
+| GET | `/products` | F04-01·02 | 상품 목록 | `?type=regular` \| `drops`, `artistId`(선택), `cursor`, `size` | `{ items: [{ id, artistId, name, price, status, totalQty, availableQty }], nextCursor }` |
 | GET | `/products/{id}` | F04-01·02 | 상품 상세 | — | `{ id, artistId, name, price, status, dropsStartAt, dropsEndAt, totalQty, reservedQty, availableQty, updatedAt }` |
 | POST | `/products` | F04-01 | **상시** 상품 등록 | `artistId`, `name`, `price`, `totalQty` | `201` `{ productId }` |
 | POST | `/products` | F04-02 | **드롭스** 상품 등록 | 위 + `dropsStartAt`, `dropsEndAt`, `totalQty` | `201` `{ productId }` |
