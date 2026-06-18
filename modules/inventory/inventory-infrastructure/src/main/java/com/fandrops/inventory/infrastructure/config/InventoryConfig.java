@@ -2,6 +2,7 @@ package com.fandrops.inventory.infrastructure.config;
 
 import com.fandrops.inventory.application.InventoryCommandService;
 import com.fandrops.inventory.domain.port.InventoryHistoryRepository;
+import com.fandrops.inventory.domain.port.InventoryReadRepository;
 import com.fandrops.inventory.domain.port.InventoryRepository;
 import com.fandrops.inventory.infrastructure.adapter.InventoryHistoryRepositoryAdapter;
 import com.fandrops.inventory.infrastructure.adapter.InventoryRedissonLockAdapter;
@@ -12,6 +13,7 @@ import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
 import org.redisson.config.Config;
 import org.redisson.config.SingleServerConfig;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -20,8 +22,14 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class InventoryConfig {
 
+    /** 재고 읽기 포트 — 전략과 무관하게 항상 JPA 어댑터 사용. */
+    @Bean
+    public InventoryReadRepository inventoryReadRepository(InventoryJpaRepository jpaRepository) {
+        return new InventoryRepositoryAdapter(jpaRepository);
+    }
+
     /**
-     * 기본 전략: MySQL atomic UPDATE (WHERE available_qty >= qty).
+     * 재고 쓰기 포트 — 기본 전략: MySQL atomic UPDATE (WHERE available_qty >= qty).
      * fandrops.inventory.lock-strategy 미설정 시 활성화.
      */
     @Bean
@@ -30,17 +38,17 @@ public class InventoryConfig {
             havingValue = "atomic-update",
             matchIfMissing = true
     )
-    public InventoryRepositoryAdapter inventoryRepositoryAdapter(InventoryJpaRepository jpaRepository) {
+    public InventoryRepository inventoryAtomicRepository(InventoryJpaRepository jpaRepository) {
         return new InventoryRepositoryAdapter(jpaRepository);
     }
 
     /**
-     * 대안 전략: Redisson 분산 락 + Read-Check-Write.
+     * 재고 쓰기 포트 — 대안 전략: Redisson 분산 락 + Read-Check-Write.
      * fandrops.inventory.lock-strategy=redisson 설정 시 활성화.
      */
     @Bean
     @ConditionalOnProperty(name = "fandrops.inventory.lock-strategy", havingValue = "redisson")
-    public InventoryRedissonLockAdapter inventoryRedissonLockAdapter(
+    public InventoryRepository inventoryRedissonRepository(
             InventoryJpaRepository jpaRepository,
             RedissonClient redissonClient) {
         return new InventoryRedissonLockAdapter(jpaRepository, redissonClient);
@@ -74,8 +82,9 @@ public class InventoryConfig {
 
     @Bean
     public InventoryCommandService inventoryCommandService(
-            InventoryRepository inventoryRepository,
+            InventoryReadRepository inventoryReadRepository,
+            @Qualifier("inventoryAtomicRepository") InventoryRepository inventoryRepository,
             InventoryHistoryRepository inventoryHistoryRepository) {
-        return new InventoryCommandService(inventoryRepository, inventoryHistoryRepository);
+        return new InventoryCommandService(inventoryReadRepository, inventoryRepository, inventoryHistoryRepository);
     }
 }

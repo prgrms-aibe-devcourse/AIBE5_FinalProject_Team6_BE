@@ -70,11 +70,6 @@ public class InventoryRedissonLockAdapter implements InventoryRepository {
     }
 
     @Override
-    public Optional<Inventory> findByProductId(Long productId) {
-        return jpaRepository.findByProductId(productId).map(InventoryJpaEntity::toDomain);
-    }
-
-    @Override
     public void save(Inventory inventory) {
         jpaRepository.save(InventoryJpaEntity.from(inventory));
     }

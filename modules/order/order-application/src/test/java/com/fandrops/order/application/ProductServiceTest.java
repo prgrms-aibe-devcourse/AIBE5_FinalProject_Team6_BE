@@ -23,10 +23,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
@@ -67,14 +69,19 @@ class ProductServiceTest {
     class GetRegularProducts {
 
         @Test
-        @DisplayName("상시 목록 반환 — size 미만이면 nextCursor null")
+        @DisplayName("상시 목록 반환 — size 미만이면 nextCursor null, totalQty·availableQty 포함")
         void getProducts_regular_nextCursorNull() {
-            given(productRepository.findRegularProducts(null, null, 20)).willReturn(List.of(product()));
+            Product p = product();
+            given(productRepository.findRegularProducts(null, null, 20)).willReturn(List.of(p));
+            given(inventoryReadPort.getByProductIds(anyList()))
+                    .willReturn(Map.of(PRODUCT_ID, inventoryInfo()));
 
             ProductListResponse result = sut.getProducts("regular", null, null, 20);
 
             assertEquals(1, result.getItems().size());
             assertNull(result.getNextCursor());
+            assertEquals(100, result.getItems().get(0).getTotalQty());
+            assertEquals(100, result.getItems().get(0).getAvailableQty());
         }
 
         @Test
@@ -86,6 +93,7 @@ class ProductServiceTest {
                     Product.of(1L, ARTIST_ID, "상품1", BigDecimal.valueOf(10000), ProductStatus.ON_SALE, null, null, LocalDateTime.now())
             );
             given(productRepository.findRegularProducts(null, null, 3)).willReturn(products);
+            given(inventoryReadPort.getByProductIds(anyList())).willReturn(Map.of());
 
             ProductListResponse result = sut.getProducts("regular", null, null, 3);
 
@@ -94,9 +102,22 @@ class ProductServiceTest {
         }
 
         @Test
+        @DisplayName("재고 미존재 상품은 totalQty·availableQty 0으로 fallback")
+        void getProducts_inventoryMissing_fallbackZero() {
+            given(productRepository.findRegularProducts(null, null, 20)).willReturn(List.of(product()));
+            given(inventoryReadPort.getByProductIds(anyList())).willReturn(Map.of());
+
+            var item = sut.getProducts("regular", null, null, 20).getItems().get(0);
+
+            assertEquals(0, item.getTotalQty());
+            assertEquals(0, item.getAvailableQty());
+        }
+
+        @Test
         @DisplayName("artistId 전달 시 해당 아티스트 상품만 반환")
         void getProducts_withArtistId_filtersCorrectly() {
             given(productRepository.findRegularProducts(ARTIST_ID, null, 20)).willReturn(List.of(product()));
+            given(inventoryReadPort.getByProductIds(anyList())).willReturn(Map.of());
 
             ProductListResponse result = sut.getProducts("regular", ARTIST_ID, null, 20);
 
@@ -113,6 +134,7 @@ class ProductServiceTest {
         @DisplayName("drops type 요청 시 findDropsProducts 호출")
         void getProducts_drops_callsDropsRepository() {
             given(productRepository.findDropsProducts(null, null, 20)).willReturn(List.of(dropsProduct(1L)));
+            given(inventoryReadPort.getByProductIds(anyList())).willReturn(Map.of());
 
             ProductListResponse result = sut.getProducts("drops", null, null, 20);
 
@@ -125,6 +147,7 @@ class ProductServiceTest {
         @DisplayName("drops 타입 + artistId 전달 시 findDropsProducts에 artistId 전달")
         void getProducts_drops_withArtistId() {
             given(productRepository.findDropsProducts(ARTIST_ID, null, 20)).willReturn(List.of(dropsProduct(1L)));
+            given(inventoryReadPort.getByProductIds(anyList())).willReturn(Map.of());
 
             sut.getProducts("drops", ARTIST_ID, null, 20);
 

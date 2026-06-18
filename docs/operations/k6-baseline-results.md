@@ -1,26 +1,43 @@
 # k6 부하 테스트 — 시나리오별 설명 및 베이스라인 결과
 
-> **목적**: 튜닝 전 SLO 기준선 수치 확정 및 도메인 오너별 최적화 피드백 전달
+> **목적**: 코드 버그 탐색·실행 환경 검증·오버셀 정합성 확인 (예비 측정)
 > **실행 환경**: EC2 t3.small (단일 인스턴스) — Spring Boot + Prometheus + Grafana + k6 동시 실행
-> **실행일**: 2026-06-12
+> **실행일**: 2026-06-12 ~ 2026-06-17
 > **기준 SLO**: `docs/observability-metrics.md` 참고
+
+> ⚠️ **이 문서의 수치는 공식 SLO 베이스라인이 아닙니다.**
+>
+> k6를 앱 서버와 같은 EC2에서 실행하면 CPU·메모리 경합으로 레이턴시가 실제보다 높게 측정됩니다.
+> 이 측정의 가치는 **코드 버그 발견(s03 #318), 실행 순서 의존성 확인, 오버셀 0건 검증**에 있습니다.
+>
+> **공식 SLO 베이스라인 및 최적화 전/후 비교는 EC2-2 전용 k6 runner에서 측정합니다.**
+> EC2-2 기동 후 최적화 전 수치를 먼저 측정하고, 최적화 완료 후 동일 환경에서 재측정해야 개선폭이 유효합니다.
+> 자세한 절차: `aws-phase4-runbook.md § 4-7`
 
 ---
 
 ## 테스트 환경 공통 사항
 
+### 예비 측정 환경 (이 문서)
+
 | 항목 | 값 |
 |---|---|
 | EC2 인스턴스 | t3.small (2 vCPU, 2 GB RAM) |
+| k6 실행 위치 | 동일 EC2 (CPU·메모리 경합 발생) |
 | Spring Boot | Blue/Green 슬롯 중 활성 슬롯 직접 접근 (`:8081` 또는 `:8082`) |
 | DB | RDS MySQL (별도 인스턴스) |
 | Redis | ElastiCache (별도 인스턴스) |
 | 모니터링 | Prometheus + Grafana (동일 EC2) |
 | 토큰 | `infra/k6/seed/tokens.csv` — fan_id 1~2100 JWT |
 
-> **주의**: k6가 Spring Boot + 모니터링 스택과 같은 EC2에서 실행되므로 CPU/메모리 경합이 발생합니다.
-> tail latency(P90~P95)가 실제 서비스 환경보다 높게 측정될 수 있습니다.
-> **절대 수치보다 최적화 전/후 동일 환경 비교값이 중요합니다.** 최적화 후 반드시 동일 조건에서 재측정하여 개선폭을 확인하세요.
+### 공식 SLO 측정 환경 (EC2-2 기동 후)
+
+| 항목 | 값 |
+|---|---|
+| k6 실행 위치 | EC2-2 t3.small 전용 runner (서울 리전, 경합 없음) |
+| 측정 대상 | EC2-1 Spring Boot (active 슬롯) |
+| 네트워크 | 동일 리전 내부 → 네트워크 오버헤드 없음 |
+| 적용 시나리오 | s01·s02·s03·s04·s06 (s05는 Actions runner 유지) |
 
 ---
 
@@ -72,8 +89,16 @@ k6 run -e BASE_URL=http://localhost:$PORT --out experimental-prometheus-rw scena
 
 ### 목적
 
-200 VU가 동시에 `POST /api/v1/orders`를 호출할 때 재고 100개에 대해 오버셀이 발생하지 않는지 검증한다.
-Redis 기반 분산 락 + 대기열 처리의 동시성 정확성을 확인하는 핵심 시나리오.
+드롭스 오픈런 상황에서 팬들이 동시에 주문을 요청할 때 재고 오버셀이 발생하지 않는지 검증하는 핵심 시나리오다.
+
+FANDROPS의 주문 흐름은 **대기열 진입 → accessToken 발급 → 주문 API 호출** 순서로 진행된다. 재고 차감은 Redis 분산 락(`reserveAtomic`) + DB `WHERE available_qty >= qty` 원자적 UPDATE로 보호되며, 200 VU가 동시에 발화해도 `orders_reserved ≤ 100`(재고 수량)이어야 한다.
+
+검증 핵심:
+- **오버셀 0건**: `SELECT COUNT(*) FROM orders WHERE status = 'RESERVED'` = 100
+- **락 정합성**: Redis 분산 락이 동시 요청을 직렬화하는지
+- **대기열 처리량**: 200 VU가 단일 스케줄러 배치로 처리되는지 (`max-concurrent-processing` 설정값 영향)
+
+실패 시 나타나는 현상: `orders_reserved > 100` → 재고보다 많은 주문이 RESERVED 상태 → 결제 단계에서 데이터 불일치.
 
 ### 실행 흐름
 
@@ -183,8 +208,16 @@ orders:    RESERVED=150, CANCELLED=50
 
 ### 목적
 
-`GET /api/v1/artists/{id}/feeds` 엔드포인트의 읽기 성능 기준선을 측정한다.
-50 VU 2분 constant-vus 부하에서 P95 응답 시간이 120ms 이내인지 확인한다.
+팬이 아티스트 피드를 조회하는 가장 빈번한 읽기 동작의 성능 기준선을 측정한다. 드롭스 오픈런 전후로 팬들이 아티스트 피드를 집중적으로 조회하는 패턴을 재현한다.
+
+Read SLO(P95 < 120ms)는 쓰기 SLO(300ms)보다 엄격하다. 이 엔드포인트는 인증 없이 `permitAll`로 누구나 호출 가능하므로 트래픽 집중 시 가장 먼저 병목이 나타난다.
+
+검증 핵심:
+- **P95 < 120ms**: 50 VU 2분 지속 부하에서 달성 여부
+- **N+1 쿼리 여부**: 피드 목록 조회 시 아티스트·이미지·좋아요 카운트 등을 별도 쿼리로 N번 조회하는지
+- **캐시 효과**: Redis 캐싱 적용 전후 응답 시간 차이
+
+실패 시 나타나는 현상: P95 > 120ms → 오픈런 시 피드 페이지 로딩 지연 → 팬 이탈 증가.
 
 ### 실행 흐름
 
@@ -256,7 +289,17 @@ min=5.52ms이므로 엔드포인트 자체는 빠르게 응답 가능. 50 VU 부
 
 ### 목적
 
-`POST /api/v1/payments/toss/confirm` 엔드포인트에 대해 Wiremock으로 Toss PG를 모킹하여 다양한 응답 시나리오(성공/타임아웃/잔액부족/서버오류)를 부하 하에서 검증한다.
+주문 후 결제 확인 단계에서 Toss PG 응답 지연·오류 상황에서도 중복 결제 없이 정상 처리되는지 검증한다. 실제 Toss API를 호출하면 비용이 발생하고 외부 의존성이 생기므로 Wiremock으로 PG를 모킹해 제어된 환경에서 부하를 가한다.
+
+결제 확인은 idempotency_key + payment_key unique constraint로 중복 결제를 방지한다. 타임아웃·서버 오류 상황에서 재시도가 들어올 때 이 제약이 올바르게 동작하는지가 핵심이다.
+
+검증 핵심:
+- **중복 결제 0건**: 동일 `payment_key`로 중복 confirm 요청 시 409 반환 여부
+- **타임아웃 처리**: Wiremock 지연 응답(2,000ms) 시 앱이 적절히 처리하는지
+- **P95 < 3,000ms**: 결제 SLO — PG 응답 대기 포함
+- **에러율 < 1%**: 성공 시나리오 기준
+
+실패 시 나타나는 현상: idempotency 미동작 → 동일 주문에 중복 결제 → 환불 처리 비용 및 정합성 오류.
 
 ### 실행 흐름
 
@@ -358,7 +401,17 @@ Map<String, Object> body = Map.of(
 
 ### 목적
 
-드롭스 상품 오픈 시 발생하는 급격한 트래픽 스파이크(0 → 1,000 VU, 30초)를 시뮬레이션하여 재고 오버셀 없이 처리 가능한지 검증한다.
+드롭스 상품이 오픈되는 순간 팬들이 일제히 몰려드는 오픈런 트래픽을 재현한다. 0 → 1,000 VU가 30초 만에 급증하는 `ramping-vus` 패턴으로 Rate Limit, 대기열, 재고 차감이 스파이크 하에서도 정합성을 유지하는지 확인한다.
+
+s01(200 VU 동시성)과 달리 스파이크 자체가 검증 대상이다. 램프업 구간에서 들어온 요청이 Rate Limit(`5r/s`)에 의해 큐에 쌓이고, 대기열 스케줄러가 처리하는 동안 오버셀이 발생하지 않아야 한다.
+
+검증 핵심:
+- **오버셀 0건**: 1,000 VU 스파이크 중 `orders_reserved ≤ 100`
+- **Rate Limit 동작**: Nginx `limit_req zone=fandrops_order` 초과 요청이 429로 처리되는지
+- **스파이크 중 P95**: 정상 처리된 요청(`expected_response:true`) 기준 응답 시간
+- **에러율 해석**: 409 DEPLETED(재고 소진)·429(Rate Limit)는 정상 동작, 500은 이상
+
+실패 시 나타나는 현상: 스파이크 중 분산 락 타임아웃 → 락 획득 실패 → 오버셀 또는 대량 500.
 
 ### 실행 흐름
 
@@ -458,8 +511,23 @@ orders:    RESERVED=100, CANCELLED=8,433  (최근 30분 기준)
 
 ### 목적
 
-SSE 대기열 엔드포인트(`GET /api/v1/queue/stream/{productId}`)의 연결 수 한계를 검증한다.
-Nginx worker_connections 및 JVM FD 한계 내에서 안정적으로 동작하는지 확인하고, 2,100 VU 초과 시 429(`retryable:true`) 응답 계약을 검증한다.
+드롭스 오픈런 시 팬들이 대기열 상태를 실시간으로 전달받는 SSE 연결의 안정성을 검증한다. SSE는 HTTP 연결을 장시간 유지하는 방식이라 일반 API와 달리 동시 연결 수가 서버 FD(File Descriptor)·Nginx worker_connections 한계에 직접 영향을 받는다.
+
+3단계 VU 증가로 각 구간의 동작을 구분해 확인한다.
+
+| 구간 | VU | 검증 목표 |
+|---|---|---|
+| 정상 | 1,000 VU | 에러율 < 0.1% — 안정적 연결 유지 |
+| 경계 | 1,800 VU | 에러율 < 1% — 한계 근접 동작 확인 |
+| 초과 | 2,100 VU | 429 `retryable:true` 응답 계약 이행 여부 |
+
+검증 핵심:
+- **연결 안정성**: 1,000 VU 구간에서 SSE 스트림이 끊기지 않고 유지되는지
+- **429 계약**: 2,100 VU 초과 시 서버가 적절히 거부 응답(`retryable:true`)을 반환하는지 — 클라이언트가 재시도 가능한 형태로 처리됨
+- **Nginx FD 한계**: `worker_connections ≥ 2048` 설정 하에서 연결 거부가 발생하지 않는지
+- **JVM FD**: `ulimit -n ≥ 8192` 환경에서 소켓 고갈 없는지
+
+실패 시 나타나는 현상: 연결 수 한계 초과 시 무응답(connection timeout) → 팬이 대기열 상태를 받지 못해 오픈런 참여 불가.
 
 ### 실행 흐름
 
@@ -543,7 +611,22 @@ Spring MVC SSE는 연결 1개당 Tomcat 스레드 1개를 점유. 2,100 연결 =
 
 ### 목적
 
-실제 서비스 트래픽 패턴을 단일 스크립트로 재현하여 혼합 부하 하에서 전체 SLO를 측정한다.
+개별 시나리오(s01~s05)는 단일 엔드포인트만 검증하지만, 실제 서비스에서는 피드 조회·주문·결제가 동시에 발생한다. s06은 실제 트래픽 비율을 반영한 혼합 부하로 전체 SLO를 한 번에 측정한다.
+
+개별 테스트에서는 발견되지 않는 **시스템 전체 병목**이 드러난다. 예를 들어 피드 조회(Read)가 DB 커넥션 풀을 점유하면 동시 주문(Write) 응답 시간이 올라가는 식의 간섭 효과를 확인할 수 있다.
+
+트래픽 구성:
+- 피드 조회(Read): 다수 VU — 가장 빈번한 동작
+- 주문(Write): 중간 VU — 오픈런 구간 집중
+- 결제 확인(Write): 소수 VU — 주문 완료 후 후속 동작
+
+검증 핵심:
+- **혼합 P95 < 300ms**: 모든 Write 엔드포인트가 동시 부하 하에서도 SLO 유지
+- **Read P95 < 120ms**: 피드 조회가 주문·결제 트래픽에 영향받지 않는지
+- **에러율 < 0.1%**: 혼합 부하에서 커넥션 풀 고갈·타임아웃 없는지
+- **오버셀 0건**: 혼합 트래픽 중 주문 정합성 유지
+
+실패 시 나타나는 현상: 특정 엔드포인트가 DB 커넥션 풀을 독점 → 다른 요청 전체 타임아웃 → 서비스 전체 다운.
 
 ### 워크로드 분포
 
@@ -774,3 +857,97 @@ curl -s -X POST http://localhost:8090/__admin/mappings \
 UPDATE inventory SET available_qty=200, reserved_qty=0, total_qty=200, version=0 WHERE product_id=1;
 ```
 **교훈**: inventory reset SQL은 항상 `available_qty + reserved_qty = total_qty` 불변식을 유지해야 함.
+
+---
+
+## 트러블슈팅 이력 (2026-06-18) — Actions runner 첫 실행
+
+### 8. IAM S3 GetObject 권한 누락 → seed 파일 다운로드 403
+
+**현상**: Actions runner에서 `aws s3 cp s3://<BUCKET>/k6/tokens.csv` 실행 시 `An error occurred (403) Forbidden`.  
+**원인**: `fandrops-github-actions-role`에 `k6/*` prefix에 대한 `s3:GetObject` 권한 없음. 기존 정책은 `deploy/*`만 허용.  
+**해결**: IAM 인라인 정책 `fandrops-k6-seed-policy` 추가.
+```json
+{
+  "Effect": "Allow",
+  "Action": "s3:GetObject",
+  "Resource": "arn:aws:s3:::<BUCKET>/k6/*"
+}
+```
+
+---
+
+### 9. Nginx 502 Bad Gateway — `proxy_pass` 포트 하드코딩
+
+**현상**: k6 모든 요청 502 반환. `curl http://localhost/api/v1/...` → 502.  
+**원인**: `/etc/nginx/default.d/fandrops-location.conf`에 `proxy_pass http://localhost:8080` 하드코딩. CD 배포 시 active 슬롯이 green(:8082)으로 전환되었으나 location.conf는 8080 그대로 유지.  
+**진단**: `cat /etc/nginx/fandrops-active.conf` → `server 127.0.0.1:8082` (정상), `cat /etc/nginx/default.d/fandrops-location.conf` → `localhost:8080` (하드코딩 확인).  
+**임시 해결**: `sudo sed -i 's/localhost:8080/localhost:8082/g' /etc/nginx/default.d/fandrops-location.conf && sudo nginx -s reload`  
+**근본 해결**: CD 파이프라인에 nginx 설정 파일 동기화 단계 추가 (트러블슈팅 12 참고).
+
+---
+
+### 10. Nginx `"upstream" directive is not allowed here`
+
+**현상**: `sudo nginx -t` → `"upstream" directive is not allowed here in /etc/nginx/default.d/fandrops-location.conf:1`.  
+**원인**: `fandrops-location.conf` 첫 줄의 `include /etc/nginx/fandrops-active.conf`가 `default.d/`(server context)에서 로드됨. `fandrops-active.conf`의 `upstream` 블록은 `http` context에서만 허용.  
+**해결**:
+1. `/etc/nginx/conf.d/fandrops-upstream.conf` 신규 생성 (http context) — `include` + zone 정의 포함
+2. `/etc/nginx/default.d/fandrops-location.conf`에서 `include` 줄 제거
+3. repo `nginx/fandrops-location.conf`도 동일하게 수정
+
+```nginx
+# /etc/nginx/conf.d/fandrops-upstream.conf
+include /etc/nginx/fandrops-active.conf;
+limit_req_zone  $binary_remote_addr zone=fandrops_order:10m   rate=5r/s;
+...
+```
+
+---
+
+### 11. `zero size shared memory zone "fandrops_order"`
+
+**현상**: nginx -t → `nginx: [emerg] zero size shared memory zone "fandrops_order"`.  
+**원인**: `nginx/fandrops-zones.conf`(repo)가 한 번도 EC2에 배포된 적 없음. `limit_req zone=fandrops_order` 지시어는 있으나 `limit_req_zone` 정의가 없어 크기가 0.  
+**해결**: 트러블슈팅 10에서 생성한 `conf.d/fandrops-upstream.conf`에 zone 정의 포함. nginx -t 통과.
+
+---
+
+### 12. CD 파이프라인 nginx 설정 파일 drift
+
+**현상**: CD 배포 후 nginx 설정이 repo와 달라 수동 수정 필요. 매 배포 시 재발 가능.  
+**원인**: `bluegreen-deploy.sh`가 `fandrops-active.conf`(포트)만 갱신. `fandrops-location.conf`·`fandrops-upstream.conf`는 배포 대상에 없어 EC2 설정이 repo와 diverge.  
+**해결**:
+- `nginx/fandrops-upstream.conf` 신규 추가
+- `nginx/fandrops-location.conf`에서 `include` 줄 제거
+- `cd.yml`: nginx 설정 파일 S3 업로드 단계 추가
+- `bluegreen-deploy.sh`: step 5에 S3 → EC2 nginx 동기화 추가
+
+이후 배포마다 nginx 설정이 repo 기준으로 자동 동기화됨.
+
+---
+
+### 13. JWT 403 — tokens.csv 서명 secret 불일치
+
+**현상**: k6 100% 403 응답. 응답 body 없음(Spring Security filter 단에서 차단).  
+**원인**: S3의 `tokens.csv`가 이전 테스트용 secret으로 서명됨. 앱 서버는 실제 운영 `JWT_SECRET`으로 검증 → 서명 불일치 → 403.  
+**진단 과정**:
+1. `curl .../actuator/health` → 200 (앱 정상)
+2. 인증 없는 공개 엔드포인트 → 200 (Nginx 정상)
+3. Bearer 토큰 포함 요청 → 403, body 없음 → JWT 검증 실패 확인
+4. EC2 `/etc/fandrops/fandrops-prod.conf`에서 `JWT_SECRET` 확인 → tokens.csv 서명 secret과 불일치 확인
+5. 올바른 secret으로 fan_id 1~2100 JWT 재생성 → S3 재업로드 → 정상
+
+> ⚠️ `JWT_SECRET`은 `/etc/fandrops/fandrops-prod.conf`에만 보관. 코드·커밋에 절대 기록 금지.
+
+**tokens.csv 만료 일정**: 7일 유효기간 → **2026-06-25까지** 재생성 필요.
+
+---
+
+### 14. k6 exit code 99 → Actions job 실패 표시
+
+**현상**: k6 p(95)=216ms > threshold 120ms → exit 99 → Actions job 빨간불. 인프라 정상인데 전체 실패처럼 보임.  
+**원인**: k6 threshold 미달 시 exit 99 반환. GitHub Actions는 exit 0 이외를 job 실패로 처리.  
+**해결**: `run-k6.yml` k6 실행 단계에 exit code 분기 추가.
+- exit 99: job 성공 + `::warning::` 배너 (SLO 미달 경고)
+- 그 외 non-zero: job 실패 (실제 오류)

@@ -5,6 +5,9 @@ import com.fandrops.order.domain.InventoryInfo;
 import com.fandrops.order.domain.port.InventoryCreatePort;
 import com.fandrops.order.domain.port.InventoryIncreasePort;
 import com.fandrops.order.domain.port.InventoryReadPort;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -26,9 +29,22 @@ public class InventoryPortConfig {
 
     @Bean
     public InventoryReadPort inventoryReadPort(InventoryCommandService inventoryCommandService) {
-        return productId -> {
-            var inv = inventoryCommandService.getInventoryByProductId(productId);
-            return new InventoryInfo(inv.getTotalQty(), inv.getReservedQty(), inv.getAvailableQty());
+        return new InventoryReadPort() {
+            @Override
+            public InventoryInfo getByProductId(Long productId) {
+                var inv = inventoryCommandService.getInventoryByProductId(productId);
+                return new InventoryInfo(inv.getTotalQty(), inv.getReservedQty(), inv.getAvailableQty());
+            }
+
+            @Override
+            public Map<Long, InventoryInfo> getByProductIds(List<Long> productIds) {
+                return inventoryCommandService.getInventoryByProductIds(productIds).entrySet().stream()
+                        .collect(Collectors.toMap(
+                                Map.Entry::getKey,
+                                e -> new InventoryInfo(e.getValue().getTotalQty(),
+                                        e.getValue().getReservedQty(),
+                                        e.getValue().getAvailableQty())));
+            }
         };
     }
 }

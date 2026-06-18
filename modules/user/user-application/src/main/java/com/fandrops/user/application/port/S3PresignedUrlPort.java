@@ -4,4 +4,5 @@ import com.fandrops.user.application.dto.PresignedUploadResult;
 
 public interface S3PresignedUrlPort {
     PresignedUploadResult generate(String contentType, long contentLength);
+    PresignedUploadResult generateForProfileImage(String contentType, long contentLength);
 }

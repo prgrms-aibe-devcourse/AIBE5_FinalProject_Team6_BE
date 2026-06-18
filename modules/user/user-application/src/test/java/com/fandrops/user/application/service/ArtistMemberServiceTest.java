@@ -304,13 +304,13 @@ class ArtistMemberServiceTest {
         PresignedUploadResult expected = new PresignedUploadResult(
                 "https://s3.presigned.url", "https://cdn.fandrops.com/img.jpg",
                 Instant.now().plusSeconds(600));
-        when(s3PresignedUrlPort.generate("image/jpeg", 1024L)).thenReturn(expected);
+        when(s3PresignedUrlPort.generateForProfileImage("image/jpeg", 1024L)).thenReturn(expected);
 
         PresignedUploadResult result = artistMemberService.generateProfileImagePresignedUrl(
                 1L, ACTOR_ID, "image/jpeg", 1024L, CLIENT_IP, TRACE_ID);
 
         assertEquals(expected.presignedUrl(), result.presignedUrl());
-        verify(s3PresignedUrlPort).generate("image/jpeg", 1024L);
+        verify(s3PresignedUrlPort).generateForProfileImage("image/jpeg", 1024L);
         verify(auditLogPort).save(argThat(log ->
                 "ARTIST_MEMBER_PROFILE_IMAGE_PRESIGNED_URL_ISSUED".equals(log.getAction())));
     }
@@ -323,7 +323,7 @@ class ArtistMemberServiceTest {
         PresignedUploadResult expected = new PresignedUploadResult(
                 "https://s3.presigned.url", VALID_IMAGE_URL,
                 Instant.now().plusSeconds(600));
-        when(s3PresignedUrlPort.generate("image/jpeg", 1024L)).thenReturn(expected);
+        when(s3PresignedUrlPort.generateForProfileImage("image/jpeg", 1024L)).thenReturn(expected);
         doThrow(new RuntimeException("audit DB down")).when(auditLogPort).save(any());
 
         PresignedUploadResult result = artistMemberService.generateProfileImagePresignedUrl(
@@ -340,7 +340,7 @@ class ArtistMemberServiceTest {
                         1L, ACTOR_ID, "application/javascript", 1024L, CLIENT_IP, TRACE_ID));
 
         verify(artistMemberRepository, never()).findById(anyLong());
-        verify(s3PresignedUrlPort, never()).generate(anyString(), anyLong());
+        verify(s3PresignedUrlPort, never()).generateForProfileImage(anyString(), anyLong());
     }
 
     @Test

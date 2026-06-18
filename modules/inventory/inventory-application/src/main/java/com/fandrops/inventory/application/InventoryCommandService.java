@@ -4,6 +4,9 @@ import com.fandrops.inventory.application.exception.DuplicateHistoryException;
 import com.fandrops.inventory.application.exception.InventoryLockConflictException;
 import com.fandrops.inventory.application.exception.InventoryNotFoundException;
 import com.fandrops.inventory.domain.Inventory;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import com.fandrops.inventory.domain.InventoryChangeType;
 import com.fandrops.inventory.domain.InventoryHistory;
 import com.fandrops.inventory.domain.InventoryRefType;
@@ -11,6 +14,7 @@ import com.fandrops.inventory.domain.exception.InvalidInventoryStateException;
 import com.fandrops.inventory.domain.exception.OutOfStockException;
 import com.fandrops.inventory.domain.exception.ReserveFailedException;
 import com.fandrops.inventory.domain.port.InventoryHistoryRepository;
+import com.fandrops.inventory.domain.port.InventoryReadRepository;
 import com.fandrops.inventory.domain.port.InventoryRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
@@ -19,11 +23,14 @@ import org.springframework.transaction.annotation.Transactional;
 /** 재고 예약·확정·복원·증가를 단일 TX에서 처리하는 application 서비스. */
 public class InventoryCommandService {
 
+    private final InventoryReadRepository inventoryReadRepository;
     private final InventoryRepository inventoryRepository;
     private final InventoryHistoryRepository inventoryHistoryRepository;
 
-    public InventoryCommandService(InventoryRepository inventoryRepository,
+    public InventoryCommandService(InventoryReadRepository inventoryReadRepository,
+                                   InventoryRepository inventoryRepository,
                                    InventoryHistoryRepository inventoryHistoryRepository) {
+        this.inventoryReadRepository = inventoryReadRepository;
         this.inventoryRepository = inventoryRepository;
         this.inventoryHistoryRepository = inventoryHistoryRepository;
     }
@@ -97,6 +104,12 @@ public class InventoryCommandService {
         return findByProductId(productId);
     }
 
+    @Transactional(readOnly = true)
+    public Map<Long, Inventory> getInventoryByProductIds(List<Long> productIds) {
+        return inventoryReadRepository.findByProductIdIn(productIds).stream()
+                .collect(Collectors.toMap(Inventory::getProductId, i -> i));
+    }
+
     @Transactional
     public void increase(Long restockId, Long productId, int qty) {
         Inventory inventory = findByProductId(productId);
@@ -118,7 +131,7 @@ public class InventoryCommandService {
     }
 
     private Inventory findByProductId(Long productId) {
-        return inventoryRepository.findByProductId(productId)
+        return inventoryReadRepository.findByProductId(productId)
                 .orElseThrow(() -> new InventoryNotFoundException(productId));
     }
 }

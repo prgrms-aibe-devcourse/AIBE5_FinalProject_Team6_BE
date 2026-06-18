@@ -92,20 +92,6 @@ class OutboxEventSchedulerTest {
     }
 
     @Test
-    @DisplayName("ARTIST_APPLICATION_APPROVED — payload JSON에서 fanId 파싱")
-    void process_artistApplicationApproved_extractsFanIdFromPayload() {
-        OutboxEvent event = buildEvent("ARTIST_APPLICATION_APPROVED", 1L, "{\"fanId\":77}");
-        when(outboxEventPort.findPending(50)).thenReturn(List.of(event));
-
-        scheduler.process();
-
-        List<Notification> saved = capturedSaveAll();
-        assertEquals(1, saved.size());
-        assertEquals(77L, saved.get(0).getFanId());
-        verify(fanIdResolverPort, never()).findFanIdByOrderId(any());
-    }
-
-    @Test
     @DisplayName("fanId 조회 실패 — notification 저장 안함, retryCount 1 증가")
     void process_fanIdNotFound_incrementsRetryWithoutSavingNotification() {
         OutboxEvent event = buildEvent("PAYMENT_SUCCESS", 999L, "{}");

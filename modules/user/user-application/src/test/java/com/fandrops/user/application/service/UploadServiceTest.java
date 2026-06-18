@@ -18,6 +18,7 @@ import java.time.Instant;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -77,5 +78,45 @@ class UploadServiceTest {
         uploadService.requestPresignedUrl("image/jpeg", 1024L, 1L, "127.0.0.1", "trace-id");
 
         verify(auditLogPort).save(any());
+    }
+
+    // ── requestPresignedUrlForAgency ──────────────────────────────────────────
+
+    @ParameterizedTest
+    @ValueSource(strings = {"image/jpeg", "image/png", "image/webp"})
+    @DisplayName("Agency — 허용된 contentType이면 S3 포트를 호출하고 결과를 반환한다")
+    void requestPresignedUrlForAgency_allowedType_callsPortAndReturnsResult(String contentType) {
+        PresignedUploadResult expected = new PresignedUploadResult(
+                "https://presigned", "https://image", Instant.now().plusSeconds(600));
+        when(s3PresignedUrlPort.generate(contentType, 2048L)).thenReturn(expected);
+
+        PresignedUploadResult result = uploadService.requestPresignedUrlForAgency(
+                contentType, 2048L, 10L, "10.0.0.1", "trace-agency");
+
+        assertEquals(expected, result);
+        verify(s3PresignedUrlPort).generate(contentType, 2048L);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"image/gif", "application/pdf", "text/plain", ""})
+    @DisplayName("Agency — 허용되지 않은 contentType이면 InvalidContentTypeException")
+    void requestPresignedUrlForAgency_disallowedType_throwsException(String contentType) {
+        assertThrows(InvalidContentTypeException.class,
+                () -> uploadService.requestPresignedUrlForAgency(
+                        contentType, 2048L, 10L, "10.0.0.1", "trace-agency"));
+    }
+
+    @Test
+    @DisplayName("Agency — audit 로그 저장 실패해도 예외 전파 없이 결과 반환 (fire & forget)")
+    void requestPresignedUrlForAgency_auditLogFails_doesNotThrow() {
+        PresignedUploadResult expected = new PresignedUploadResult(
+                "https://presigned", "https://image", Instant.now().plusSeconds(600));
+        when(s3PresignedUrlPort.generate("image/jpeg", 1024L)).thenReturn(expected);
+        doThrow(new RuntimeException("DB error")).when(auditLogPort).save(any());
+
+        PresignedUploadResult result = uploadService.requestPresignedUrlForAgency(
+                "image/jpeg", 1024L, 10L, "10.0.0.1", "trace-agency");
+
+        assertEquals(expected, result);
     }
 }
