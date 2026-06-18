@@ -32,6 +32,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.17")
+    implementation("net.javacrumbs.shedlock:shedlock-spring:6.3.0")
     implementation("net.javacrumbs.shedlock:shedlock-provider-jdbc-template:6.3.0")
     compileOnly("org.projectlombok:lombok")
     runtimeOnly("com.h2database:h2")
