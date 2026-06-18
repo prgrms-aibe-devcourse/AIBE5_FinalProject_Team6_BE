@@ -29,12 +29,17 @@ Phase 3(고도화·FE 연동·배포 안정화)에서 Phase 4(부하 테스트·
 
 ```
 ① Blue/Green 배포 EC2 적용 → Phase 3 §8 참고 (Phase 3 완료 항목)
-② k6 Baseline 실행 — 단일 EC2, 튜닝 전 기준선 수치 확보
-③ D 단기 실험 — EC2-2 기동, 분산 설계 검증, terminate
-④ SLO 미달 항목 튜닝
-⑤ Grafana 커스텀 메트릭 알람 활성화 (#191)
-⑥ 최종 SLO 수치 측정 및 기록
+② k6 예비 측정 — 단일 EC2에서 실행, 코드 버그 탐색·오버셀 검증 (공식 SLO 기준선 아님)
+③ D 단기 실험 — EC2-2 t3.small 기동, 분산 설계 검증 (Phase 1)
+④ EC2-2 k6 runner 전환 — 공식 SLO 베이스라인 측정 (최적화 전, Phase 2 시작)
+⑤ SLO 미달 항목 튜닝 (도메인 오너)
+⑥ EC2-2에서 최적화 후 재측정 → 동일 환경 비교로 개선폭 확인
+⑦ Grafana 커스텀 메트릭 알람 활성화 (#191)
+⑧ 최종 SLO 수치 기록 + EC2-2 terminate
 ```
+
+> **측정 환경 원칙**: 최적화 전·후 비교는 반드시 EC2-2 동일 환경에서 측정해야 유효하다.  
+> 예비 측정(②)과 공식 베이스라인(④)은 환경이 다르므로 수치를 직접 비교하지 않는다.
 
 ---
 
@@ -399,7 +404,17 @@ sudo nginx -t && sudo systemctl reload nginx
 
 ---
 
-### 4-7. EC2-2 k6 runner 전환 — SLO 재검증 (최적화 완료 후)
+### 4-7. EC2-2 k6 runner 전환 — 공식 SLO 베이스라인 및 재검증
+
+> **공식 SLO 베이스라인**: Spring Boot 종료 직후, **최적화 전**에 먼저 측정한다.  
+> 예비 측정(§ 3)은 EC2 로컬에서 CPU 경합이 있는 환경이므로 공식 기준선으로 사용하지 않는다.  
+> EC2-2에서 최적화 전·후를 동일 환경으로 측정해야 개선폭이 유효하다.
+
+**Step 1 — 공식 베이스라인 측정 (최적화 전)**
+
+k6 설치 완료 후 팀원 최적화 작업 시작 전에 먼저 전 시나리오를 실행해 공식 기준선을 확보한다.
+
+**Step 2 — 팀원 최적화 작업 완료 후 재측정**
 
 > **전제 조건:** 팀원 최적화 작업(s02 N+1 쿼리, s03 TossConfirmBody #318 등) 완료 후 진행.
 
@@ -649,9 +664,10 @@ curl -s "http://admin:admin@localhost:3000/api/health"
   - 05 SSE 대기열: OOM 크래시 — k6 runner 이관 후 재측정 필요
   - 06 통합 워크로드: t3.small 과부하 + 버그 — 재측정 필요
 - [x] k6 GitHub Actions runner 이관 완료 — EC2 CPU 경합 제거 (`k6-actions-runner.md`)
-- [ ] 재측정 완료 — 시나리오 03(#318 수정 후), 05(Actions runner), 06(runner 실행 후)
 - [ ] D 단기 실험 완료 — EC2-2 t3.small 분산 검증(오버셀 0건·중복결제 0건) (#234)
-- [ ] EC2-2 k6 runner SLO 재검증 완료 — s01·s02·s03·s04·s06 서울 리전 측정
+- [ ] EC2-2 공식 SLO 베이스라인 측정 완료 — 최적화 전, s01·s02·s03·s04·s05·s06
+- [ ] 팀원 최적화 완료 — s02 N+1 쿼리(정환철), s03 TossConfirmBody(#318, 장성재) 등
+- [ ] EC2-2에서 최적화 후 재측정 완료 — 동일 환경 비교로 개선폭 확인
 - [ ] SLO 목표 달성 확인 (Write P95 < 300ms, Read P95 < 120ms, 5xx < 0.1%)
 - [x] Grafana 커스텀 메트릭 알람 활성화 (#191·#235) — 2026-06-18 완료 (fandrops-failed-order-p0, fandrops-outbox-pending-p1 정상 수집·Gmail 수신 확인)
 - [ ] 최종 SLO 수치 Grafana 스크린샷 보관
