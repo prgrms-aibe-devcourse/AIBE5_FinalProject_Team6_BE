@@ -9,7 +9,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 드롭스 종료 자동 처리 스케줄러.
@@ -26,7 +25,6 @@ public class ProductExpiryScheduler {
         this.productRepository = productRepository;
     }
 
-    @Transactional
     @Scheduled(fixedDelay = 60_000)
     public void expireDrops() {
         LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
