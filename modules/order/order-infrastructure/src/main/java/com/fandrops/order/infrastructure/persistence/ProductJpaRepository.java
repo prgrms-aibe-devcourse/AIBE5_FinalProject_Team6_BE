@@ -28,4 +28,12 @@ public interface ProductJpaRepository extends JpaRepository<ProductJpaEntity, Lo
     List<ProductJpaEntity> findDrops(@Param("now") LocalDateTime now,
                                      @Param("artistId") Long artistId,
                                      @Param("cursor") Long cursor, Pageable pageable);
+
+    // 만료 드롭스: dropsEndAt 지났고 아직 ON_SALE 상태 — 자동 SOLD_OUT 전이 대상. Pageable로 배치 크기 상한 적용
+    @Query("SELECT p FROM ProductJpaEntity p " +
+           "WHERE p.dropsStartAt IS NOT NULL " +
+           "AND p.dropsEndAt < :now " +
+           "AND p.status = 'ON_SALE' " +
+           "ORDER BY p.dropsEndAt ASC")
+    List<ProductJpaEntity> findExpiredDrops(@Param("now") LocalDateTime now, Pageable pageable);
 }
