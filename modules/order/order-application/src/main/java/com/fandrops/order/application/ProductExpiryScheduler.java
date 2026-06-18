@@ -5,6 +5,7 @@ import com.fandrops.order.domain.port.ProductRepository;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -18,6 +19,7 @@ import org.springframework.stereotype.Component;
 public class ProductExpiryScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(ProductExpiryScheduler.class);
+    private static final int BATCH_SIZE = 100;
 
     private final ProductRepository productRepository;
 
@@ -26,9 +28,10 @@ public class ProductExpiryScheduler {
     }
 
     @Scheduled(fixedDelay = 60_000)
+    @SchedulerLock(name = "productExpiryScheduler", lockAtMostFor = "PT55S", lockAtLeastFor = "PT10S")
     public void expireDrops() {
         LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
-        List<Product> expired = productRepository.findExpiredDrops(now);
+        List<Product> expired = productRepository.findExpiredDrops(now, BATCH_SIZE);
         for (Product product : expired) {
             try {
                 product.markSoldOut();
