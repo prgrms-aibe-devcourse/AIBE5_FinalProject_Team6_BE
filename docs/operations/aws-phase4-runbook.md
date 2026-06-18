@@ -452,9 +452,18 @@ PR 머지 + 배포 완료 후:
 
 ### 6-3. 모니터링 스택 재기동 절차
 
-> EC2 재부팅 또는 OOM 크래시 후 Prometheus/Grafana 컨테이너가 종료될 수 있다.
+> `compose.monitoring.yml`에 `restart: unless-stopped` 정책이 설정되어 있어 **EC2 재시작 및 일반 크래시는 자동 복구**된다.  
+> OOM 크래시 후 자동 재시작된 경우 `GMAIL_APP_PASSWORD`가 비어 있어 Gmail 알림만 동작하지 않는다 → `start-monitoring.sh` 수동 실행 필요.
 
-**재기동 스크립트 (`/opt/fandrops-monitoring/start-monitoring.sh`):**
+**자동 재기동 적용 범위:**
+
+| 상황 | 동작 |
+| --- | --- |
+| EC2 재시작 | ✅ 자동 재기동 (restart policy) |
+| 일반 컨테이너 크래시 | ✅ 자동 재기동 (restart policy) |
+| OOM 크래시 | ⚠️ 컨테이너는 자동 재시작되나 Gmail 알림 비활성 → 수동 스크립트 실행 필요 |
+
+**OOM 크래시 후 수동 재기동 스크립트 (`/opt/fandrops-monitoring/start-monitoring.sh`):**
 
 ```bash
 #!/bin/bash
