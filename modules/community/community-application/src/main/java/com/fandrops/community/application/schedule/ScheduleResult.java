@@ -9,5 +9,6 @@ public record ScheduleResult(
         ArtistScheduleType type,
         String title,
         OffsetDateTime startTime,
-        String liveUrl
+        String liveUrl,
+        String externalTicketUrl
 ) {}

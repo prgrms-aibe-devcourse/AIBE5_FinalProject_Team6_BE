@@ -67,4 +67,24 @@ class ArtistScheduleTest {
         assertThrows(ScheduleDomainException.class,
                 () -> ArtistSchedule.create(1L, "팬미팅", ArtistScheduleType.EVENT, null));
     }
+
+    @Test
+    @DisplayName("createEvent — externalTicketUrl 포함 정상 생성")
+    void createEvent_withUrl_success() {
+        ArtistSchedule s = ArtistSchedule.createEvent(
+                1L, "팬미팅", VALID_TIME, "https://ticket.example.com/123");
+
+        assertEquals(ArtistScheduleType.EVENT, s.getType());
+        assertEquals("https://ticket.example.com/123", s.getExternalTicketUrl());
+        assertNull(s.getLiveUrl());
+    }
+
+    @Test
+    @DisplayName("createEvent — externalTicketUrl null 허용")
+    void createEvent_nullUrl_success() {
+        ArtistSchedule s = ArtistSchedule.createEvent(1L, "팬미팅", VALID_TIME, null);
+
+        assertEquals(ArtistScheduleType.EVENT, s.getType());
+        assertNull(s.getExternalTicketUrl());
+    }
 }

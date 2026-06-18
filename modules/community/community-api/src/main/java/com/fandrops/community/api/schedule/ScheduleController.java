@@ -47,7 +47,7 @@ public class ScheduleController extends CommunityControllerSupport {
         Long artistMemberId = resolveArtistMemberId(authentication, artistMemberIdHeader);
         ScheduleResult result = scheduleService.createEvent(
                 new EventCreateCommand(artistId, artistMemberId, request.title(),
-                        request.type(), request.scheduledAt()));
+                        request.type(), request.scheduledAt(), request.externalTicketUrl()));
         return ResponseEntity.status(201).body(ApiResponse.ok(Map.of("eventId", result.id()), traceId()));
     }
 

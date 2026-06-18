@@ -66,12 +66,14 @@ public class ArtistScheduleRepositoryAdapter implements ArtistScheduleRepository
     private ArtistScheduleJpaEntity toJpa(ArtistSchedule s) {
         return new ArtistScheduleJpaEntity(
                 s.getId(), s.getArtistId(), s.getNoticeId(),
-                s.getTitle(), s.getType(), s.getScheduledAt(), s.getLiveUrl(), s.getContent());
+                s.getTitle(), s.getType(), s.getScheduledAt(),
+                s.getLiveUrl(), s.getContent(), s.getExternalTicketUrl());
     }
 
     private ArtistSchedule toDomain(ArtistScheduleJpaEntity e) {
         return ArtistSchedule.reconstruct(
                 e.getId(), e.getArtistId(), e.getNoticeId(),
-                e.getTitle(), e.getType(), e.getScheduledAt(), e.getLiveUrl(), e.getContent());
+                e.getTitle(), e.getType(), e.getScheduledAt(),
+                e.getLiveUrl(), e.getContent(), e.getExternalTicketUrl());
     }
 }

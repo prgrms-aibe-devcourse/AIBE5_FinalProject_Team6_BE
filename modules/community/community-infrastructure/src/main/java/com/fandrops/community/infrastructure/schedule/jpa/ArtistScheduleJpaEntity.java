@@ -41,4 +41,7 @@ public class ArtistScheduleJpaEntity {
 
     @Column(name = "content", columnDefinition = "TEXT")
     private String content;
+
+    @Column(name = "external_ticket_url", length = 2048)
+    private String externalTicketUrl;
 }

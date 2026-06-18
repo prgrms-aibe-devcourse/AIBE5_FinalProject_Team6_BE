@@ -67,6 +67,8 @@ public class AttendanceService {
             // saveAndFlush flush 이후 UNIQUE 제약 위반 (동시 요청 경합)
             throw new AlreadyCheckedInException(e.getMessage());
         }
+        // 연속 일수가 아닌 총 체크인 횟수 (팀 합의: 총 7회 달성 시 리워드)
+        // countByEventIdAndFanId() = 해당 이벤트에서 팬의 총 체크인 수
         int streakDays = logRepository.countByEventIdAndFanId(eventId, fanId);
         return new CheckInResult(eventId, today, streakDays);
     }
