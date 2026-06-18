@@ -27,59 +27,50 @@ public class NotificationEventListener {
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handlePaymentApproved(PaymentApprovedEvent event) {
         log.info("결제 승인 알림 이벤트 수신: orderId={}", event.getOrderId());
-        PublishNotificationCommand command = new PublishNotificationCommand(
-                "PAYMENT_SUCCESS",
-                event.getOrderId(),
-                "{\"orderId\":" + event.getOrderId() + "}"
-        );
-        publishNotificationUseCase.publish(command);
+        publish("PAYMENT_SUCCESS", event.getOrderId(),
+                "{\"orderId\":" + event.getOrderId() + "}");
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handlePaymentFailed(PaymentFailedEvent event) {
         log.info("결제 실패 알림 이벤트 수신: orderId={}", event.getOrderId());
-        PublishNotificationCommand command = new PublishNotificationCommand(
-                "PAYMENT_FAILED",
-                event.getOrderId(),
-                "{\"orderId\":" + event.getOrderId() + "}"
-        );
-        publishNotificationUseCase.publish(command);
+        publish("PAYMENT_FAILED", event.getOrderId(),
+                "{\"orderId\":" + event.getOrderId() + "}");
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handleRestockAlert(RestockAlertEvent event) {
         log.info("재입고 알림 이벤트 수신: fanId={}, productId={}", event.getFanId(), event.getProductId());
-        PublishNotificationCommand command = new PublishNotificationCommand(
-                "RESTOCK",
-                event.getProductId(),
+        publish("RESTOCK", event.getProductId(),
                 "{\"fanId\":" + event.getFanId() + ",\"productId\":" + event.getProductId() + "}");
-        publishNotificationUseCase.publish(command);
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handleNewFeed(NewFeedEvent event) {
         log.info("새 피드 알림 이벤트 수신: feedId={}, artistId={}", event.getFeedId(), event.getArtistId());
-        PublishNotificationCommand command = new PublishNotificationCommand(
-                "NEW_FEED", event.getFeedId(),
+        publish("NEW_FEED", event.getFeedId(),
                 "{\"artistId\":" + event.getArtistId() + ",\"feedId\":" + event.getFeedId() + "}");
-        publishNotificationUseCase.publish(command);
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handleNewComment(NewCommentEvent event) {
         log.info("댓글 알림 이벤트 수신: commentId={}, parentId={}", event.getCommentId(), event.getParentId());
-        PublishNotificationCommand command = new PublishNotificationCommand(
-                "NEW_COMMENT", event.getFeedId(),
+        publish("NEW_COMMENT", event.getFeedId(),
                 "{\"commentId\":" + event.getCommentId() + ",\"parentId\":" + event.getParentId() + "}");
-        publishNotificationUseCase.publish(command);
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handleArtistSchedule(ArtistScheduleEvent event) {
         log.info("아티스트 일정 알림 이벤트 수신: scheduleId={}, artistId={}", event.getScheduleId(), event.getArtistId());
-        PublishNotificationCommand command = new PublishNotificationCommand(
-                "ARTIST_SCHEDULE", event.getScheduleId(),
+        publish("ARTIST_SCHEDULE", event.getScheduleId(),
                 "{\"artistId\":" + event.getArtistId() + ",\"scheduleId\":" + event.getScheduleId() + "}");
-        publishNotificationUseCase.publish(command);
+    }
+
+    private void publish(String eventType, Long resourceId, String payload) {
+        try {
+            publishNotificationUseCase.publish(new PublishNotificationCommand(eventType, resourceId, payload));
+        } catch (Exception e) {
+            log.error("[NOTIFICATION_FAIL] Outbox 저장 실패 eventType={} resourceId={}", eventType, resourceId, e);
+        }
     }
 }
