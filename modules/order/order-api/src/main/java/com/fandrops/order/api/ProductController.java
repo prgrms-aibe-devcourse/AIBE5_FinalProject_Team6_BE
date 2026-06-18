@@ -35,6 +35,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/products")
 public class ProductController {
 
+    private static final int MAX_PAGE_SIZE = 100;
+
     private final ProductService productService;
     private final RestockAlertService restockAlertService;
     private final Environment environment;
@@ -53,8 +55,9 @@ public class ProductController {
             @RequestParam(required = false) Long artistId,
             @RequestParam(required = false) Long cursor,
             @RequestParam(defaultValue = "20") int size) {
+        int pageSize = Math.min(size, MAX_PAGE_SIZE);
         return ResponseEntity.ok(ApiResponse.ok(
-                productService.getProducts(type, artistId, cursor, size), traceId()));
+                productService.getProducts(type, artistId, cursor, pageSize), traceId()));
     }
 
     @GetMapping("/{id}")
