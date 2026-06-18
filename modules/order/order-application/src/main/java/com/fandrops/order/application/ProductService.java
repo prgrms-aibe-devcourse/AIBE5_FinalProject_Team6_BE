@@ -36,6 +36,9 @@ public class ProductService {
                 ? productRepository.findDropsProducts(artistId, cursor, size)
                 : productRepository.findRegularProducts(artistId, cursor, size);
         List<Long> productIds = products.stream().map(Product::getId).toList();
+        if (productIds.isEmpty()) {
+            return new ProductListResponse(List.of(), null);
+        }
         Map<Long, InventoryInfo> inventoryMap = inventoryReadPort.getByProductIds(productIds);
         List<ProductListItemResponse> items = products.stream()
                 .map(p -> ProductListItemResponse.from(p,

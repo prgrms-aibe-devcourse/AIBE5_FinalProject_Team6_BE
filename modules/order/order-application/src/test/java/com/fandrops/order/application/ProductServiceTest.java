@@ -102,6 +102,18 @@ class ProductServiceTest {
         }
 
         @Test
+        @DisplayName("재고 미존재 상품은 totalQty·availableQty 0으로 fallback")
+        void getProducts_inventoryMissing_fallbackZero() {
+            given(productRepository.findRegularProducts(null, null, 20)).willReturn(List.of(product()));
+            given(inventoryReadPort.getByProductIds(anyList())).willReturn(Map.of());
+
+            var item = sut.getProducts("regular", null, null, 20).getItems().get(0);
+
+            assertEquals(0, item.getTotalQty());
+            assertEquals(0, item.getAvailableQty());
+        }
+
+        @Test
         @DisplayName("artistId 전달 시 해당 아티스트 상품만 반환")
         void getProducts_withArtistId_filtersCorrectly() {
             given(productRepository.findRegularProducts(ARTIST_ID, null, 20)).willReturn(List.of(product()));
