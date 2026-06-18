@@ -16,6 +16,7 @@ public class S3Properties {
     @Min(1)
     private int presignedUrlExpiryMinutes = 10;
     private String uploadPrefix = "uploads/banners";
+    private String uploadProfileImagePrefix = "uploads/profiles";
 
     public String getBucket() { return bucket; }
     public void setBucket(String bucket) { this.bucket = bucket; }
@@ -28,4 +29,7 @@ public class S3Properties {
 
     public String getUploadPrefix() { return uploadPrefix; }
     public void setUploadPrefix(String uploadPrefix) { this.uploadPrefix = uploadPrefix; }
+
+    public String getUploadProfileImagePrefix() { return uploadProfileImagePrefix; }
+    public void setUploadProfileImagePrefix(String uploadProfileImagePrefix) { this.uploadProfileImagePrefix = uploadProfileImagePrefix; }
 }

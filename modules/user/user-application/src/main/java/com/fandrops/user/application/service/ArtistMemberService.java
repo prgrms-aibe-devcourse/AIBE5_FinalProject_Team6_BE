@@ -167,7 +167,7 @@ public class ArtistMemberService {
             throw new InvalidContentTypeException(contentType);
         }
         findMemberWithOwnership(memberId, agencyId);
-        PresignedUploadResult result = s3PresignedUrlPort.generate(contentType, contentLength);
+        PresignedUploadResult result = s3PresignedUrlPort.generateForProfileImage(contentType, contentLength);
         try {
             auditLogPort.save(AuditLog.builder()
                     .occurredAt(Instant.now())
