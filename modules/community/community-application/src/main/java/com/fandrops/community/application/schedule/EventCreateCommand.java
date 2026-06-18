@@ -7,5 +7,6 @@ public record EventCreateCommand(
         Long artistMemberId,
         String title,
         String type,          // "DROP" | "LIVE" | "EVENT" | "NOTICE" — 서비스에서 ArtistScheduleType으로 변환
-        OffsetDateTime scheduledAt
+        OffsetDateTime scheduledAt,
+        String externalTicketUrl  // EVENT 타입 전용, 나머지 타입은 null
 ) {}

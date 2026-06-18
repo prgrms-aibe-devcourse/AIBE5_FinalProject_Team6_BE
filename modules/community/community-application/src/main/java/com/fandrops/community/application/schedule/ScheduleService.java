@@ -51,8 +51,9 @@ public class ScheduleService {
                     "지원하지 않는 일정 유형입니다: " + command.type() + " (DROP|LIVE|EVENT|NOTICE)");
         }
         LocalDateTime scheduledAtUtc = command.scheduledAt().withOffsetSameInstant(ZoneOffset.UTC).toLocalDateTime();
-        ArtistSchedule schedule = ArtistSchedule.create(
-                command.artistId(), command.title(), type, scheduledAtUtc);
+        ArtistSchedule schedule = (type == ArtistScheduleType.EVENT)
+                ? ArtistSchedule.createEvent(command.artistId(), command.title(), scheduledAtUtc, command.externalTicketUrl())
+                : ArtistSchedule.create(command.artistId(), command.title(), type, scheduledAtUtc);
         return toResult(scheduleRepository.save(schedule));
     }
 
@@ -179,7 +180,8 @@ public class ScheduleService {
                 s.getType(),
                 s.getTitle(),
                 s.getScheduledAt().atOffset(ZoneOffset.UTC),
-                s.getLiveUrl()
+                s.getLiveUrl(),
+                s.getExternalTicketUrl()
         );
     }
 }

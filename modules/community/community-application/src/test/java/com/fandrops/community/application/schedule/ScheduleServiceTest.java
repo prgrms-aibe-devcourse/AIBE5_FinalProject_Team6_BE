@@ -96,15 +96,18 @@ class ScheduleServiceTest {
         @Test
         @DisplayName("유효한 커맨드 — save 호출 후 ScheduleResult 반환")
         void success() {
-            ArtistSchedule saved = schedule(1L, 10L, ArtistScheduleType.EVENT, "팬미팅", NOW.plusDays(30));
+            ArtistSchedule saved = schedule(1L, 10L, ArtistScheduleType.EVENT, "팬미팅",
+                    NOW.plusDays(30), null, "https://ticket.example.com/1");
             when(scheduleRepository.save(any())).thenReturn(saved);
 
             ScheduleResult result = scheduleService.createEvent(
-                    new EventCreateCommand(10L, 5L, "팬미팅", "EVENT", NOW.plusDays(30).atOffset(ZoneOffset.UTC)));
+                    new EventCreateCommand(10L, 5L, "팬미팅", "EVENT",
+                            NOW.plusDays(30).atOffset(ZoneOffset.UTC), "https://ticket.example.com/1"));
 
             assertEquals(1L, result.id());
             assertEquals(ArtistScheduleType.EVENT, result.type());
             assertEquals("팬미팅", result.title());
+            assertEquals("https://ticket.example.com/1", result.externalTicketUrl());
             verify(scheduleRepository).save(any());
         }
 
@@ -113,7 +116,8 @@ class ScheduleServiceTest {
         void unknownType_throws() {
             assertThrows(IllegalArgumentException.class,
                     () -> scheduleService.createEvent(
-                            new EventCreateCommand(10L, 5L, "행사", "UNKNOWN", NOW.plusDays(1).atOffset(ZoneOffset.UTC))));
+                            new EventCreateCommand(10L, 5L, "행사", "UNKNOWN",
+                                    NOW.plusDays(1).atOffset(ZoneOffset.UTC), null)));
             verify(scheduleRepository, never()).save(any());
         }
 
@@ -122,7 +126,8 @@ class ScheduleServiceTest {
         void nullArtistMemberId_throws() {
             assertThrows(NullPointerException.class,
                     () -> scheduleService.createEvent(
-                            new EventCreateCommand(10L, null, "행사", "EVENT", NOW.plusDays(1).atOffset(ZoneOffset.UTC))));
+                            new EventCreateCommand(10L, null, "행사", "EVENT",
+                                    NOW.plusDays(1).atOffset(ZoneOffset.UTC), null)));
             verify(scheduleRepository, never()).save(any());
         }
     }
@@ -418,6 +423,13 @@ class ScheduleServiceTest {
     private static ArtistSchedule schedule(Long id, Long artistId, ArtistScheduleType type,
                                             String title, LocalDateTime scheduledAt, String liveUrl) {
         return ArtistSchedule.reconstruct(id, artistId, null, title, type, scheduledAt, liveUrl);
+    }
+
+    private static ArtistSchedule schedule(Long id, Long artistId, ArtistScheduleType type,
+                                            String title, LocalDateTime scheduledAt,
+                                            String liveUrl, String externalTicketUrl) {
+        return ArtistSchedule.reconstruct(id, artistId, null, title, type, scheduledAt,
+                liveUrl, null, externalTicketUrl);
     }
 
     private static ArtistSchedule notice(Long id, Long artistId, String title,
