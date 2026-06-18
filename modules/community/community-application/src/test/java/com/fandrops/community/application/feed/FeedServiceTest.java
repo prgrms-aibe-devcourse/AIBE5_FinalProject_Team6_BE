@@ -266,4 +266,67 @@ class FeedServiceTest {
             verify(feedRepository, never()).delete(any());
         }
     }
+
+    @Nested
+    @DisplayName("getFeed — 피드 단건 상세 조회")
+    class GetFeedTest {
+
+        @Test
+        @DisplayName("피드 조회 성공 — 이미지·isLiked 포함 반환")
+        void success_returnsWithImagesAndIsLiked() {
+            ArtistFeed feed = ArtistFeed.reconstruct(1L, 10L, 5L, "내용", 1, 0, LocalDateTime.now(clock));
+            FeedImage img = FeedImage.reconstruct(1L, 1L, "https://cdn.example.com/img.jpg", LocalDateTime.now(clock));
+
+            when(feedRepository.findById(eq(1L))).thenReturn(Optional.of(feed));
+            when(imageRepository.findByFeedIdInOrderByCreatedAt(List.of(1L))).thenReturn(List.of(img));
+            when(feedLikeRepository.findLikedFeedIdsByFanId(eq(99L), anyList())).thenReturn(Set.of(1L));
+
+            FeedResult result = feedService.getFeed(1L, 99L, null);
+
+            assertEquals(1L, result.id());
+            assertEquals("내용", result.content());
+            assertTrue(result.isLiked());
+            assertEquals(1, result.imageUrls().size());
+        }
+
+        @Test
+        @DisplayName("비로그인 viewer — isLiked=false, FeedLikeRepo 미호출")
+        void anonymous_isLikedFalse() {
+            ArtistFeed feed = ArtistFeed.reconstruct(1L, 10L, 5L, "내용", 0, 0, LocalDateTime.now(clock));
+
+            when(feedRepository.findById(eq(1L))).thenReturn(Optional.of(feed));
+            when(imageRepository.findByFeedIdInOrderByCreatedAt(List.of(1L))).thenReturn(List.of());
+
+            FeedResult result = feedService.getFeed(1L, null, null);
+
+            assertFalse(result.isLiked());
+            verifyNoInteractions(feedLikeRepository);
+        }
+
+        @Test
+        @DisplayName("아티스트 멤버 viewer — findLikedFeedIdsByArtistMemberId 호출")
+        void artistMemberViewer_callsCorrectRepo() {
+            ArtistFeed feed = ArtistFeed.reconstruct(1L, 10L, 5L, "내용", 1, 0, LocalDateTime.now(clock));
+
+            when(feedRepository.findById(eq(1L))).thenReturn(Optional.of(feed));
+            when(imageRepository.findByFeedIdInOrderByCreatedAt(List.of(1L))).thenReturn(List.of());
+            when(feedLikeRepository.findLikedFeedIdsByArtistMemberId(eq(5L), anyList())).thenReturn(Set.of(1L));
+
+            FeedResult result = feedService.getFeed(1L, null, 5L);
+
+            assertTrue(result.isLiked());
+            verify(feedLikeRepository).findLikedFeedIdsByArtistMemberId(eq(5L), anyList());
+            verify(feedLikeRepository, never()).findLikedFeedIdsByFanId(anyLong(), anyList());
+        }
+
+        @Test
+        @DisplayName("존재하지 않는 feedId → FeedNotFoundException")
+        void notFound_throws() {
+            when(feedRepository.findById(eq(999L))).thenReturn(Optional.empty());
+
+            assertThrows(FeedNotFoundException.class,
+                    () -> feedService.getFeed(999L, null, null));
+            verifyNoInteractions(imageRepository, feedLikeRepository);
+        }
+    }
 }

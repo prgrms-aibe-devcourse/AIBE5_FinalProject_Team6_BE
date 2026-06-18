@@ -122,6 +122,14 @@ public class FeedService {
         return Set.of();
     }
 
+    public FeedResult getFeed(Long feedId, Long viewerFanId, Long viewerArtistMemberId) {
+        ArtistFeed feed = feedRepository.findById(feedId)
+                .orElseThrow(() -> new FeedNotFoundException("피드를 찾을 수 없습니다."));
+        List<FeedImage> images = imageRepository.findByFeedIdInOrderByCreatedAt(List.of(feedId));
+        Set<Long> likedFeedIds = resolveLikedFeedIds(List.of(feedId), viewerFanId, viewerArtistMemberId);
+        return toResult(feed, images, likedFeedIds.contains(feedId));
+    }
+
     // 단일 TX: comment_like → comment → feed_like → feed_image → feed 순으로 삭제
     @Transactional
     public void deleteFeed(Long feedId, Long requesterArtistMemberId) {

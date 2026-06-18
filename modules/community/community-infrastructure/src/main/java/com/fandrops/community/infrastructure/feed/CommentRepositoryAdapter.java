@@ -49,6 +49,15 @@ public class CommentRepositoryAdapter implements CommentRepository {
     }
 
     @Override
+    public List<Comment> findRepliesByParentIds(List<Long> parentIds) {
+        if (parentIds.isEmpty()) {
+            return List.of();
+        }
+        return jpaRepository.findByParentIdInOrderByParentIdAscIdAsc(parentIds)
+                .stream().map(this::toDomain).toList();
+    }
+
+    @Override
     public List<Comment> findByFanId(Long fanId, Long cursorId, int size) {
         PageRequest page = PageRequest.of(0, size);
         List<CommentJpaEntity> entities = (cursorId == null)

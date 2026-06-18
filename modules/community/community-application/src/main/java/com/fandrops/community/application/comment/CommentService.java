@@ -18,7 +18,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
 import java.time.ZoneOffset;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -83,6 +85,38 @@ public class CommentService {
                 new NewCommentEvent(saved.getId(), saved.getFeedId(), saved.getParentId(), saved.getArtistId()));
 
         return toResult(saved);
+    }
+
+    @Transactional(readOnly = true)
+    public CommentListResult getComments(Long feedId, String cursor, int size) {
+        feedRepository.findById(feedId)
+                .orElseThrow(() -> new FeedNotFoundException("피드를 찾을 수 없습니다."));
+        Long cursorId = null;
+        if (cursor != null) {
+            try {
+                cursorId = Long.parseLong(cursor);
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("cursor 형식이 올바르지 않습니다: " + cursor);
+            }
+        }
+        List<Comment> topLevel = commentRepository.findTopLevelByFeedId(feedId, cursorId, size + 1);
+        boolean hasMore = topLevel.size() > size;
+        List<Comment> page = hasMore ? topLevel.subList(0, size) : topLevel;
+
+        List<Long> parentIds = page.stream().map(Comment::getId).toList();
+        Map<Long, List<CommentResult>> repliesByParentId = commentRepository.findRepliesByParentIds(parentIds)
+                .stream()
+                .collect(Collectors.groupingBy(
+                        Comment::getParentId,
+                        Collectors.mapping(this::toResult, Collectors.toList())));
+
+        List<CommentWithRepliesResult> items = page.stream()
+                .map(c -> new CommentWithRepliesResult(
+                        toResult(c),
+                        repliesByParentId.getOrDefault(c.getId(), List.of())))
+                .toList();
+        String nextCursor = hasMore ? String.valueOf(page.get(page.size() - 1).getId()) : null;
+        return new CommentListResult(items, nextCursor, hasMore);
     }
 
     private CommentResult toResult(Comment comment) {
