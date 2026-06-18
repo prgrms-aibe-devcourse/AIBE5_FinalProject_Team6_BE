@@ -22,6 +22,14 @@ public class S3ImageValidationAdapter implements S3ImageValidationPort {
     }
 
     @Override
+    public boolean isOwnedUrl(String imageUrl) {
+        if (imageUrl == null) return false;
+        String baseUrl = "https://%s.s3.%s.amazonaws.com/".formatted(
+                properties.getBucket(), properties.getRegion());
+        return imageUrl.startsWith(baseUrl);
+    }
+
+    @Override
     public boolean imageExists(String imageUrl) {
         String baseUrl = "https://%s.s3.%s.amazonaws.com/".formatted(
                 properties.getBucket(), properties.getRegion());
