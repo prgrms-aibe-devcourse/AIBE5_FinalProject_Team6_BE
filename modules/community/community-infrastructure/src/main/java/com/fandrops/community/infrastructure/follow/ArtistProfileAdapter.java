@@ -2,6 +2,8 @@ package com.fandrops.community.infrastructure.follow;
 
 import com.fandrops.community.application.port.ArtistProfilePort;
 import com.fandrops.community.application.port.ArtistSummary;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -14,6 +16,8 @@ import java.util.stream.Collectors;
 
 @Component
 public class ArtistProfileAdapter implements ArtistProfilePort {
+
+    private static final Logger log = LoggerFactory.getLogger(ArtistProfileAdapter.class);
 
     private final JdbcTemplate jdbc;
 
@@ -31,14 +35,20 @@ public class ArtistProfileAdapter implements ArtistProfilePort {
 
     @Override
     public void incrementFanCount(Long artistId) {
-        jdbc.update("UPDATE artist_profile SET fan_count = fan_count + 1 WHERE id = ?", artistId);
+        int rows = jdbc.update("UPDATE artist_profile SET fan_count = fan_count + 1 WHERE id = ?", artistId);
+        if (rows == 0) {
+            log.warn("[FAN_COUNT] artist_profile not found artistId={}", artistId);
+        }
     }
 
     @Override
     public void decrementFanCount(Long artistId) {
-        jdbc.update(
+        int rows = jdbc.update(
                 "UPDATE artist_profile SET fan_count = GREATEST(fan_count - 1, 0) WHERE id = ?",
                 artistId);
+        if (rows == 0) {
+            log.warn("[FAN_COUNT] artist_profile not found artistId={}", artistId);
+        }
     }
 
     @Override

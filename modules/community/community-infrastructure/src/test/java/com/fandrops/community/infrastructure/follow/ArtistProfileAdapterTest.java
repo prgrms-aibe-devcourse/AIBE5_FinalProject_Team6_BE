@@ -83,6 +83,22 @@ class ArtistProfileAdapterTest {
         assertTrue(sqlCaptor.getValue().toUpperCase().contains("GREATEST"));
     }
 
+    @Test
+    @DisplayName("incrementFanCount: 0 rows affected → 예외 없이 warn 로그만 (정합성 감지)")
+    void incrementFanCount_zeroRowsAffected_doesNotThrow() {
+        when(jdbc.update(anyString(), eq(999L))).thenReturn(0);
+
+        assertDoesNotThrow(() -> adapter.incrementFanCount(999L));
+    }
+
+    @Test
+    @DisplayName("decrementFanCount: 0 rows affected → 예외 없이 warn 로그만 (정합성 감지)")
+    void decrementFanCount_zeroRowsAffected_doesNotThrow() {
+        when(jdbc.update(anyString(), eq(999L))).thenReturn(0);
+
+        assertDoesNotThrow(() -> adapter.decrementFanCount(999L));
+    }
+
     // ── activate ──────────────────────────────────────────────────────────────
 
     @Test
