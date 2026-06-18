@@ -1,15 +1,22 @@
 package com.fandrops.user.api;
 
 import com.fandrops.common.ApiResponse;
+import com.fandrops.user.application.exception.AgencyAccountNotFoundException;
 import com.fandrops.user.application.exception.AgencyApplicationNotFoundException;
+import com.fandrops.user.application.exception.ArtistMemberNotFoundException;
+import com.fandrops.user.application.exception.ArtistNotFoundException;
 import com.fandrops.user.application.exception.BannerNotFoundException;
 import com.fandrops.user.application.exception.DuplicateAgencyAccountException;
 import com.fandrops.user.application.exception.DuplicateApplicationException;
 import com.fandrops.user.application.exception.DuplicateEmailException;
+import com.fandrops.user.application.exception.DuplicateLoginIdException;
 import com.fandrops.user.application.exception.DuplicateSocialAccountException;
 import com.fandrops.user.application.exception.FanNotFoundException;
+import com.fandrops.user.application.exception.InvalidContentTypeException;
 import com.fandrops.user.application.exception.InvalidCredentialsException;
 import com.fandrops.user.application.exception.InvalidTokenException;
+import com.fandrops.user.application.exception.S3ImageNotFoundException;
+import com.fandrops.user.application.exception.S3OperationException;
 import com.fandrops.user.domain.AgencyApplicationAlreadyReviewedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -68,6 +75,12 @@ public class UserExceptionHandler {
         return ApiResponse.fail("FAN_NOT_FOUND", e.getMessage(), false, traceId());
     }
 
+    @ExceptionHandler(AgencyAccountNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public ApiResponse<Void> handleAgencyAccountNotFound(AgencyAccountNotFoundException e) {
+        return ApiResponse.fail("AGENCY_ACCOUNT_NOT_FOUND", e.getMessage(), false, traceId());
+    }
+
     @ExceptionHandler(AgencyApplicationNotFoundException.class)
     @ResponseStatus(HttpStatus.NOT_FOUND)
     public ApiResponse<Void> handleAgencyApplicationNotFound(AgencyApplicationNotFoundException e) {
@@ -92,10 +105,47 @@ public class UserExceptionHandler {
         return ApiResponse.fail("DUPLICATE_AGENCY_ACCOUNT", e.getMessage(), false, traceId());
     }
 
+    @ExceptionHandler(DuplicateLoginIdException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public ApiResponse<Void> handleDuplicateLoginId(DuplicateLoginIdException e) {
+        return ApiResponse.fail("DUPLICATE_LOGIN_ID", e.getMessage(), false, traceId());
+    }
+
+    @ExceptionHandler(ArtistNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public ApiResponse<Void> handleArtistNotFound(ArtistNotFoundException e) {
+        return ApiResponse.fail("ARTIST_NOT_FOUND", e.getMessage(), false, traceId());
+    }
+
+    @ExceptionHandler(ArtistMemberNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public ApiResponse<Void> handleArtistMemberNotFound(ArtistMemberNotFoundException e) {
+        return ApiResponse.fail("ARTIST_MEMBER_NOT_FOUND", e.getMessage(), false, traceId());
+    }
+
     @ExceptionHandler(AgencyApplicationAlreadyReviewedException.class)
     @ResponseStatus(HttpStatus.CONFLICT)
     public ApiResponse<Void> handleAlreadyReviewed(AgencyApplicationAlreadyReviewedException e) {
         return ApiResponse.fail("ALREADY_REVIEWED", e.getMessage(), false, traceId());
+    }
+
+    @ExceptionHandler(InvalidContentTypeException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ApiResponse<Void> handleInvalidContentType(InvalidContentTypeException e) {
+        return ApiResponse.fail("INVALID_CONTENT_TYPE", e.getMessage(), false, traceId());
+    }
+
+    @ExceptionHandler(S3ImageNotFoundException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ApiResponse<Void> handleS3ImageNotFound(S3ImageNotFoundException e) {
+        return ApiResponse.fail("S3_IMAGE_NOT_FOUND", e.getMessage(), false, traceId());
+    }
+
+    @ExceptionHandler(S3OperationException.class)
+    @ResponseStatus(HttpStatus.BAD_GATEWAY)
+    public ApiResponse<Void> handleS3Operation(S3OperationException e) {
+        log.error("S3 작업 실패: {}", e.getMessage(), e);
+        return ApiResponse.fail("S3_OPERATION_FAILED", "이미지 서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.", true, traceId());
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

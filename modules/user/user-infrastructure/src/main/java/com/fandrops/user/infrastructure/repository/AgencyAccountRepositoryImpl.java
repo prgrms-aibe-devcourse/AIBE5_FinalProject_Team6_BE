@@ -23,6 +23,11 @@ public class AgencyAccountRepositoryImpl implements AgencyAccountRepository {
     }
 
     @Override
+    public Optional<AgencyAccount> findById(Long id) {
+        return jpaRepository.findById(id).map(AgencyAccountJpaEntity::toDomain);
+    }
+
+    @Override
     public Optional<AgencyAccount> findByLoginId(String loginId) {
         return jpaRepository.findByLoginId(loginId).map(AgencyAccountJpaEntity::toDomain);
     }

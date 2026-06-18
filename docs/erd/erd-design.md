@@ -296,13 +296,13 @@ B2B2C에서 운영 주체–아티스트–멤버 계층을 DB에 명시해야 �
 
 ### `BANNER`
 
-`banner_type`: `MAIN`  `STORE`. `product_id` FK(스토어 배너), `title`, `image_url`, `landing_url`, `exposure_order`, `is_active`, `start_at` / `end_at`.
+`banner_type`: `MAIN`  `STORE`. `agency_id` FK → `agency_account` (Agency 직접 등록 배너; NULL = Admin 직접 등록). `product_id` FK(스토어 배너), `title`, `image_url`, `landing_url`, `exposure_order`, `is_active`, `start_at` / `end_at`.
 
 
-| 종류        | 담당 (Admin CRUD · Read)                            |
-| --------- | ------------------------------------------------- |
-| **MAIN**  | `user` (표지민) — GNB 홈 메인 배너·아티스트·이벤트 홍보 (F04-03)   |
-| **STORE** | `order` (형성빈) — 상품·드롭스 프로모션 (`banner_type=STORE`) |
+| 종류        | 담당                                                                              |
+| --------- | ------------------------------------------------------------------------------- |
+| **MAIN**  | `user` (표지민) — GNB 홈 메인 배너. Admin(`/admin/main-banners`) + Agency(`/agency/banners`) 양쪽 관리 가능. `agency_id NULL` = Admin 등록, `agency_id NOT NULL` = Agency 등록 (F04-03) |
+| **STORE** | `order` (형성빈) — 상품·드롭스 프로모션 (`banner_type=STORE`)                                |
 
 
 비노출은 `**is_active=false`** (ERD에 `deleted_at` 없음).

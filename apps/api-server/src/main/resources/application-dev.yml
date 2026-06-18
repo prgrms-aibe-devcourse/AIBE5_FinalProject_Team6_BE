@@ -50,3 +50,7 @@ fandrops:
       response-header-enabled: true
   feature-flags:
     enabled: false
+  inventory:
+    # 재고 락 전략: atomic-update(기본) | redisson
+    # k6 비교: PRODUCT_ID=1 k6 run 04_drop_spike.js → 전략 전환 후 동일 시나리오 재실행
+    lock-strategy: atomic-update

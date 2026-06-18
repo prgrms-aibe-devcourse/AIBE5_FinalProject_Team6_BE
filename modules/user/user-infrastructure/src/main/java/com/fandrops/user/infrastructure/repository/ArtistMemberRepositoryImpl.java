@@ -23,7 +23,18 @@ public class ArtistMemberRepositoryImpl implements ArtistMemberRepository {
     }
 
     @Override
+    public Optional<ArtistMember> findById(Long id) {
+        return jpaRepository.findByIdAndDeletedAtIsNull(id).map(ArtistMemberJpaEntity::toDomain);
+    }
+
+    @Override
     public Optional<ArtistMember> findByLoginId(String loginId) {
-        return jpaRepository.findByLoginId(loginId).map(ArtistMemberJpaEntity::toDomain);
+        // 소프트 삭제된 멤버는 로그인 불가
+        return jpaRepository.findByLoginIdAndDeletedAtIsNull(loginId).map(ArtistMemberJpaEntity::toDomain);
+    }
+
+    @Override
+    public boolean existsByLoginId(String loginId) {
+        return jpaRepository.existsByLoginId(loginId);
     }
 }

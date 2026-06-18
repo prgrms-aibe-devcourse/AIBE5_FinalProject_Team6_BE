@@ -111,6 +111,15 @@ fandrops:
     enabled: false
   order:
     payment-timeout: PT15M
+  s3:
+    # S3 버킷은 application-local.override.yml 에서 지정 (gitignore 대상)
+    # override.yml 예시:
+    #   fandrops:
+    #     s3:
+    #       bucket: <팀 슬랙 #dev-config 채널 참고>
+    region: ap-northeast-2
+    presigned-url-expiry-minutes: 10
+    upload-prefix: uploads/banners
 
 toss:
   api:

@@ -50,10 +50,11 @@ public class ProductController {
     @GetMapping
     public ResponseEntity<ApiResponse<ProductListResponse>> getProducts(
             @RequestParam(defaultValue = "regular") String type,
+            @RequestParam(required = false) Long artistId,
             @RequestParam(required = false) Long cursor,
             @RequestParam(defaultValue = "20") int size) {
         return ResponseEntity.ok(ApiResponse.ok(
-                productService.getProducts(type, cursor, size), traceId()));
+                productService.getProducts(type, artistId, cursor, size), traceId()));
     }
 
     @GetMapping("/{id}")

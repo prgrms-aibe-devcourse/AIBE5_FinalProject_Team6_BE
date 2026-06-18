@@ -4,8 +4,10 @@ import com.fandrops.user.application.dto.BannerResult;
 import com.fandrops.user.application.dto.CreateBannerCommand;
 import com.fandrops.user.application.dto.UpdateBannerCommand;
 import com.fandrops.user.application.exception.BannerNotFoundException;
+import com.fandrops.user.application.exception.S3ImageNotFoundException;
 import com.fandrops.user.application.port.AuditLogPort;
 import com.fandrops.user.application.port.BannerRepository;
+import com.fandrops.user.application.port.S3ImageValidationPort;
 import com.fandrops.user.domain.AuditLog;
 import com.fandrops.user.domain.Banner;
 import com.fandrops.user.domain.BannerType;
@@ -22,6 +24,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -31,16 +34,18 @@ class BannerServiceTest {
 
     @Mock BannerRepository bannerRepository;
     @Mock AuditLogPort auditLogPort;
+    @Mock S3ImageValidationPort s3ImageValidationPort;
 
     BannerService bannerService;
 
     private static final Long ADMIN_ID = 1L;
+    private static final Long AGENCY_ID = 20L;
     private static final String CLIENT_IP = "127.0.0.1";
     private static final String TRACE_ID = "test-trace-id";
 
     @BeforeEach
     void setUp() {
-        bannerService = new BannerService(bannerRepository, auditLogPort);
+        bannerService = new BannerService(bannerRepository, auditLogPort, s3ImageValidationPort);
     }
 
     private Banner sampleBanner(Long id) {
@@ -50,6 +55,19 @@ class BannerServiceTest {
                 .title("테스트 배너")
                 .imageUrl("https://cdn.fandrops.com/banner.jpg")
                 .landingUrl("https://fandrops.com/event")
+                .exposureOrder(1)
+                .isActive(true)
+                .build();
+    }
+
+    private Banner sampleAgencyBanner(Long id) {
+        return Banner.builder()
+                .id(id)
+                .bannerType(BannerType.MAIN)
+                .agencyId(AGENCY_ID)
+                .title("에이전시 배너")
+                .imageUrl("https://cdn.fandrops.com/agency-banner.jpg")
+                .landingUrl("https://fandrops.com/agency-event")
                 .exposureOrder(1)
                 .isActive(true)
                 .build();
@@ -106,6 +124,7 @@ class BannerServiceTest {
         LocalDateTime same = LocalDateTime.of(2025, 6, 1, 12, 0);
         CreateBannerCommand command = new CreateBannerCommand(
                 "배너", "https://img.jpg", "https://landing.com", 1, same, same);
+        when(s3ImageValidationPort.imageExists(any())).thenReturn(true);
         when(bannerRepository.save(any(Banner.class))).thenReturn(sampleBanner(3L));
 
         assertDoesNotThrow(() -> bannerService.createBanner(command, ADMIN_ID, CLIENT_IP, TRACE_ID));
@@ -117,6 +136,7 @@ class BannerServiceTest {
     void createBanner_savesWithMainType() {
         CreateBannerCommand command = new CreateBannerCommand(
                 "신규 배너", "https://img.jpg", "https://landing.com", 0, null, null);
+        when(s3ImageValidationPort.imageExists(any())).thenReturn(true);
         Banner saved = sampleBanner(2L);
         when(bannerRepository.save(any(Banner.class))).thenReturn(saved);
 
@@ -149,6 +169,7 @@ class BannerServiceTest {
 
         assertEquals("변경된 제목", banner.getTitle());
         assertEquals("https://cdn.fandrops.com/banner.jpg", banner.getImageUrl()); // 유지
+        verify(auditLogPort).save(any(AuditLog.class));
     }
 
     @Test
@@ -164,6 +185,7 @@ class BannerServiceTest {
         verify(bannerRepository).save(banner);
         assertEquals("테스트 배너", banner.getTitle());
         assertEquals("https://cdn.fandrops.com/banner.jpg", banner.getImageUrl());
+        verify(auditLogPort).save(any(AuditLog.class));
     }
 
     @Test
@@ -184,6 +206,7 @@ class BannerServiceTest {
 
         assertEquals(newStart, banner.getStartAt());
         assertEquals(LocalDateTime.of(2025, 12, 31, 0, 0), banner.getEndAt()); // endAt 유지
+        verify(auditLogPort).save(any(AuditLog.class));
     }
 
     @Test
@@ -239,6 +262,7 @@ class BannerServiceTest {
 
         assertNull(banner.getStartAt());
         assertEquals(LocalDateTime.of(2025, 12, 31, 0, 0), banner.getEndAt()); // endAt 유지
+        verify(auditLogPort).save(any(AuditLog.class));
     }
 
     @Test
@@ -258,6 +282,7 @@ class BannerServiceTest {
 
         assertEquals(LocalDateTime.of(2025, 6, 1, 0, 0), banner.getStartAt()); // startAt 유지
         assertNull(banner.getEndAt());
+        verify(auditLogPort).save(any(AuditLog.class));
     }
 
     @Test
@@ -277,6 +302,7 @@ class BannerServiceTest {
 
         assertNull(banner.getStartAt());
         assertNull(banner.getEndAt());
+        verify(auditLogPort).save(any(AuditLog.class));
     }
 
     @Test
@@ -299,6 +325,161 @@ class BannerServiceTest {
         when(bannerRepository.findById(999L)).thenReturn(Optional.empty());
         assertThrows(BannerNotFoundException.class,
                 () -> bannerService.deleteBanner(999L, ADMIN_ID, CLIENT_IP, TRACE_ID));
+    }
+
+    // ── Agency 배너 ──────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("Agency 배너 목록 조회 — 소속 배너만 반환")
+    void getAgencyBanners_returnsOnlyOwnBanners() {
+        when(bannerRepository.findAllByAgencyId(AGENCY_ID)).thenReturn(List.of(sampleAgencyBanner(1L)));
+
+        List<BannerResult> results = bannerService.getAgencyBanners(AGENCY_ID);
+
+        assertEquals(1, results.size());
+        assertEquals("에이전시 배너", results.get(0).title());
+    }
+
+    @Test
+    @DisplayName("Agency 배너 생성 — agencyId 세팅 검증 + audit 기록")
+    void createAgencyBanner_savesWithAgencyIdAndAudit() {
+        CreateBannerCommand command = new CreateBannerCommand(
+                "에이전시 배너", "https://cdn.fandrops.com/img.jpg", "https://fandrops.com", 0, null, null);
+        when(s3ImageValidationPort.imageExists(any())).thenReturn(true);
+        when(bannerRepository.save(any(Banner.class))).thenReturn(sampleAgencyBanner(5L));
+
+        BannerResult result = bannerService.createAgencyBanner(command, AGENCY_ID, CLIENT_IP, TRACE_ID);
+
+        assertNotNull(result);
+        verify(bannerRepository).save(argThat(b -> AGENCY_ID.equals(b.getAgencyId())));
+        verify(auditLogPort).save(any(AuditLog.class));
+    }
+
+    @Test
+    @DisplayName("Agency 배너 생성 — S3 이미지 없으면 S3ImageNotFoundException")
+    void createAgencyBanner_imageNotFound_throwsS3ImageNotFoundException() {
+        CreateBannerCommand command = new CreateBannerCommand(
+                "배너", "https://cdn.fandrops.com/missing.jpg", "https://fandrops.com", 0, null, null);
+        when(s3ImageValidationPort.imageExists(any())).thenReturn(false);
+
+        assertThrows(S3ImageNotFoundException.class,
+                () -> bannerService.createAgencyBanner(command, AGENCY_ID, CLIENT_IP, TRACE_ID));
+        verify(bannerRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Agency 배너 생성 — 종료 시각이 시작 시각보다 이르면 IllegalArgumentException")
+    void createAgencyBanner_endBeforeStart_throwsIllegalArgumentException() {
+        LocalDateTime start = LocalDateTime.of(2025, 12, 31, 0, 0);
+        LocalDateTime end = LocalDateTime.of(2025, 1, 1, 0, 0);
+        CreateBannerCommand command = new CreateBannerCommand(
+                "배너", "https://img.jpg", "https://landing.com", 0, start, end);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> bannerService.createAgencyBanner(command, AGENCY_ID, CLIENT_IP, TRACE_ID));
+        verify(bannerRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Agency 배너 수정 — 소유권 불일치 시 BannerNotFoundException (ID enumeration 방지)")
+    void updateAgencyBanner_ownershipMismatch_throwsBannerNotFoundException() {
+        when(bannerRepository.findByIdAndAgencyId(1L, AGENCY_ID)).thenReturn(Optional.empty());
+        UpdateBannerCommand command = new UpdateBannerCommand("변경", null, null, null, null, null, null);
+
+        assertThrows(BannerNotFoundException.class,
+                () -> bannerService.updateAgencyBanner(1L, command, AGENCY_ID, CLIENT_IP, TRACE_ID));
+        verify(bannerRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Agency 배너 수정 성공 — 변경된 값으로 저장 + audit 기록")
+    void updateAgencyBanner_success_savesAndAudits() {
+        Banner banner = sampleAgencyBanner(1L);
+        when(bannerRepository.findByIdAndAgencyId(1L, AGENCY_ID)).thenReturn(Optional.of(banner));
+        when(bannerRepository.save(any(Banner.class))).thenReturn(banner);
+
+        bannerService.updateAgencyBanner(1L,
+                new UpdateBannerCommand("변경된 제목", null, null, null, null, null, null),
+                AGENCY_ID, CLIENT_IP, TRACE_ID);
+
+        assertEquals("변경된 제목", banner.getTitle());
+        verify(auditLogPort).save(any(AuditLog.class));
+    }
+
+    @Test
+    @DisplayName("Agency 배너 수정 — 종료 시각이 시작 시각보다 이르면 IllegalArgumentException")
+    void updateAgencyBanner_endBeforeStart_throwsIllegalArgumentException() {
+        Banner banner = Banner.builder()
+                .id(1L).bannerType(BannerType.MAIN).agencyId(AGENCY_ID)
+                .title("배너").imageUrl("https://img.jpg").landingUrl("https://landing.com")
+                .exposureOrder(1).isActive(true)
+                .startAt(LocalDateTime.of(2025, 6, 1, 0, 0))
+                .endAt(LocalDateTime.of(2025, 12, 31, 0, 0)).build();
+        when(bannerRepository.findByIdAndAgencyId(1L, AGENCY_ID)).thenReturn(Optional.of(banner));
+
+        UpdateBannerCommand command = new UpdateBannerCommand(
+                null, null, null, null, null,
+                Optional.of(LocalDateTime.of(2025, 12, 31, 0, 0)),
+                Optional.of(LocalDateTime.of(2025, 1, 1, 0, 0))); // end < start
+
+        assertThrows(IllegalArgumentException.class,
+                () -> bannerService.updateAgencyBanner(1L, command, AGENCY_ID, CLIENT_IP, TRACE_ID));
+        verify(bannerRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Agency 배너 삭제 — 소유권 불일치 시 BannerNotFoundException")
+    void deleteAgencyBanner_ownershipMismatch_throwsBannerNotFoundException() {
+        when(bannerRepository.findByIdAndAgencyId(99L, AGENCY_ID)).thenReturn(Optional.empty());
+
+        assertThrows(BannerNotFoundException.class,
+                () -> bannerService.deleteAgencyBanner(99L, AGENCY_ID, CLIENT_IP, TRACE_ID));
+        verify(bannerRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Agency 배너 삭제 — soft delete (is_active=false) + audit beforeJson이 실제 상태 반영")
+    void deleteAgencyBanner_success_setsIsActiveFalseAndAuditsCorrectBeforeJson() {
+        Banner banner = sampleAgencyBanner(1L);
+        when(bannerRepository.findByIdAndAgencyId(1L, AGENCY_ID)).thenReturn(Optional.of(banner));
+        when(bannerRepository.save(any(Banner.class))).thenReturn(banner);
+
+        bannerService.deleteAgencyBanner(1L, AGENCY_ID, CLIENT_IP, TRACE_ID);
+
+        assertFalse(banner.isActive());
+        verify(bannerRepository).save(banner);
+        verify(auditLogPort).save(argThat(log ->
+                log.getBeforeJson().contains("\"isActive\":true") &&
+                log.getAfterJson().contains("\"isActive\":false")));
+    }
+
+    @Test
+    @DisplayName("Agency 배너 삭제 — 이미 비활성인 배너 삭제 시 beforeJson이 false로 기록됨")
+    void deleteAgencyBanner_alreadyInactive_beforeJsonReflectsActualState() {
+        Banner inactiveBanner = Banner.builder()
+                .id(1L).bannerType(BannerType.MAIN).agencyId(AGENCY_ID)
+                .title("배너").imageUrl("https://img.jpg").landingUrl("https://landing.com")
+                .exposureOrder(1).isActive(false).build();
+        when(bannerRepository.findByIdAndAgencyId(1L, AGENCY_ID)).thenReturn(Optional.of(inactiveBanner));
+        when(bannerRepository.save(any(Banner.class))).thenReturn(inactiveBanner);
+
+        bannerService.deleteAgencyBanner(1L, AGENCY_ID, CLIENT_IP, TRACE_ID);
+
+        verify(auditLogPort).save(argThat(log ->
+                log.getBeforeJson().contains("\"isActive\":false")));
+    }
+
+    @Test
+    @DisplayName("배너 생성 — S3에 이미지가 없으면 S3ImageNotFoundException")
+    void createBanner_imageNotFound_throwsS3ImageNotFoundException() {
+        CreateBannerCommand command = new CreateBannerCommand(
+                "배너", "https://bucket.s3.ap-northeast-2.amazonaws.com/uploads/banners/missing.jpg",
+                "https://landing.com", 1, null, null);
+        when(s3ImageValidationPort.imageExists(command.imageUrl())).thenReturn(false);
+
+        assertThrows(S3ImageNotFoundException.class,
+                () -> bannerService.createBanner(command, ADMIN_ID, CLIENT_IP, TRACE_ID));
+        verify(bannerRepository, never()).save(any());
     }
 
     @Test

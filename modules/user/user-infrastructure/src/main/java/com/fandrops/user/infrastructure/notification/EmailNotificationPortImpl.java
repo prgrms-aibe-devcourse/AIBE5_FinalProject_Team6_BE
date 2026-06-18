@@ -56,6 +56,22 @@ public class EmailNotificationPortImpl implements EmailNotificationPort {
     }
 
     @Override
+    public void sendTempPasswordResetEmail(String toEmail, String loginId, String tempPassword) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(fromAddress);
+        message.setTo(toEmail);
+        message.setSubject("[FANDROPS] 임시 비밀번호가 재발급되었습니다");
+        message.setText(
+                "관리자에 의해 임시 비밀번호가 재발급되었습니다.\n\n"
+                + "아래 정보로 로그인하신 후 반드시 비밀번호를 변경해 주세요.\n\n"
+                + "로그인 ID: " + loginId + "\n"
+                + "임시 비밀번호: " + tempPassword + "\n\n"
+                + "로그인 페이지: " + frontendUrl + "/agency/login"
+        );
+        mailSender.send(message);
+    }
+
+    @Override
     public void sendApplicationRejectedEmail(String toEmail, String rejectReason) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(fromAddress);

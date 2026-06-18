@@ -44,6 +44,13 @@ public class RefreshTokenStoreImpl implements RefreshTokenStore {
     }
 
     @Override
+    public Optional<RefreshTokenEntry> find(String refreshToken) {
+        String value = redisTemplate.opsForValue().get(KEY_PREFIX + refreshToken);
+        return parseEntry(value);
+    }
+
+    @Override
+    @Deprecated
     public Optional<RefreshTokenEntry> getAndDelete(String refreshToken) {
         String value = redisTemplate.opsForValue().getAndDelete(KEY_PREFIX + refreshToken);
         return parseEntry(value);
