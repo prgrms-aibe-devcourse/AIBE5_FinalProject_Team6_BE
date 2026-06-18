@@ -243,7 +243,7 @@ ALB 없이 EC2-2를 추가해도 EC2-1(Nginx)이 SPOF로 남아 실제 고가용
 | 항목 | 값 |
 | --- | --- |
 | AMI | Amazon Linux 2023 |
-| Instance type | t3.micro (1 vCPU, 1GB RAM) |
+| Instance type | t3.small (2 vCPU, 2GB RAM) |
 | VPC | fandrops-prod VPC (동일) |
 | Subnet | Private Subnet (EC2-1과 동일 가용영역 권장) |
 | Security Group | EC2-1 SG에서 `:8080` inbound 허용 규칙 추가 |
@@ -282,7 +282,7 @@ After=network.target
 Type=simple
 User=fandrops
 EnvironmentFile=/etc/fandrops/fandrops-prod.conf
-ExecStart=/usr/bin/java -Xms256m -Xmx512m \
+ExecStart=/usr/bin/java -Xms256m -Xmx768m \
   -jar /opt/fandrops/app.jar \
   --server.port=8080 \
   --spring.profiles.active=prod
@@ -321,25 +321,43 @@ sudo nginx -t && sudo systemctl reload nginx
 
 ### 4-4. k6 분산 환경 검증 실행
 
+> **실행 방식:** k6는 **GitHub Actions runner**에서 실행한다 (`k6-actions-runner.md` 참고).  
+> EC2-1 Nginx upstream에 EC2-2가 추가되어 있으므로 `BASE_URL=https://api.fandrops.site`로 요청하면 두 서버로 자동 분산된다.  
+> EC2-2에서 직접 k6를 실행하지 않는다 — Spring Boot와 k6를 같은 인스턴스에서 실행하면 측정값이 오염된다.
+
+**EC2-1 SSM 세션에서 사전 준비 (Actions 실행 전):**
+
 ```bash
 # Redis AccessTicket 재적재 (분산 환경 실행 전)
+REDIS_HOST="master.fandrops-prod-redis.q7gdno.apn2.cache.amazonaws.com"
 for i in {1..2100}; do
-  redis-cli -h <REDIS_ENDPOINT> setex "access:ticket:1:$i" 86400 "test-ticket-token"
+  valkey-cli -h $REDIS_HOST --tls setex "access:ticket:1:$i" 86400 "test-ticket-token"
 done
 
-# Baseline과 동일 시나리오를 분산 환경에서 재실행
-k6 run --out experimental-prometheus-rw \
-  -e BASE_URL=http://localhost:8080 \
-  scenarios/01_order_concurrency.js
+# inventory 리셋
+mysql -u fandrops_admin -p<PW> -h <RDS> fandrops \
+  -e "UPDATE inventory SET available_qty=100, reserved_qty=0, total_qty=100, version=0 WHERE product_id=1;"
+```
 
-# 01 완료 후 Redis 재적재
+**GitHub Actions → Run k6 Load Test → 시나리오 01 실행:**
+
+```
+scenario: 01_order_concurrency
+confirm: yes
+```
+
+**01 완료 후 Redis 재적재, 시나리오 04 실행:**
+
+```bash
+# EC2-1 SSM 세션
 for i in {1..2100}; do
-  redis-cli -h <REDIS_ENDPOINT> setex "access:ticket:1:$i" 86400 "test-ticket-token"
+  valkey-cli -h $REDIS_HOST --tls setex "access:ticket:1:$i" 86400 "test-ticket-token"
 done
+```
 
-k6 run --out experimental-prometheus-rw \
-  -e BASE_URL=http://localhost:8080 \
-  scenarios/04_drop_spike.js
+```
+scenario: 04_drop_spike
+confirm: yes
 ```
 
 **확인 항목:**
@@ -358,19 +376,104 @@ k6 run --out experimental-prometheus-rw \
 | 5xx 에러율 | % | % | % |
 | SSE 메시지 유실 | 없음 | 간헐적 발생 | ⚠️ 예상된 한계 |
 
-### 4-6. EC2-2 Terminate
+### 4-6. EC2-2 Spring Boot 종료 (분산 실험 완료 후)
 
-실험 완료 후 즉시 EC2-2를 종료한다.
+분산 실험이 끝나면 EC2-2의 Spring Boot를 종료하고 Nginx upstream에서 제거한다.
 
 ```bash
-# EC2-1 Nginx upstream에서 EC2-2 제거
-sudo tee /etc/nginx/fandrops-active.conf <<'EOF'
+# EC2-2 SSM 세션 — Spring Boot 종료
+sudo systemctl stop fandrops
+
+# EC2-1 SSM 세션 — Nginx upstream에서 EC2-2 제거
+ACTIVE=$(cat /etc/fandrops/active-slot)
+PORT=$([ "$ACTIVE" = "blue" ] && echo 8081 || echo 8082)
+
+sudo tee /etc/nginx/fandrops-active.conf <<EOF
 upstream fandrops_backend {
-    server 127.0.0.1:8081;
+    server 127.0.0.1:$PORT;
     keepalive 32;
 }
 EOF
 sudo nginx -t && sudo systemctl reload nginx
+```
+
+---
+
+### 4-7. EC2-2 k6 runner 전환 — SLO 재검증 (최적화 완료 후)
+
+> **전제 조건:** 팀원 최적화 작업(s02 N+1 쿼리, s03 TossConfirmBody #318 등) 완료 후 진행.
+
+EC2-2에 k6를 설치하고 EC2-1(앱 서버)을 대상으로 SLO 재검증을 실행한다.  
+EC2-2(서울 리전)에서 실행하므로 Actions runner 방식의 150ms 네트워크 오버헤드 없이 정확한 레이턴시 측정이 가능하다.
+
+**k6 설치 (EC2-2 SSM 세션):**
+
+```bash
+sudo dnf install https://dl.k6.io/rpm/repo.rpm -y
+sudo dnf install k6 -y
+k6 version
+
+# k6 시나리오 디렉터리 구성
+sudo mkdir -p /opt/fandrops/k6
+cd /opt/fandrops/k6
+
+# seed 파일 S3 다운로드
+S3_BUCKET="fandrops-prod-storage-495264909330-ap-northeast-2-an"
+aws s3 cp s3://$S3_BUCKET/k6/tokens.csv /opt/fandrops/k6/seed/tokens.csv
+```
+
+**시나리오 파일 복사 (EC2-1 → EC2-2):**  
+EC2-1 SSM 세션에서 k6 시나리오 파일을 S3 경유로 EC2-2에 전달한다.
+
+```bash
+# EC2-1 SSM 세션
+aws s3 sync /opt/fandrops/k6/ s3://$S3_BUCKET/k6-scenarios/ --exclude "seed/*"
+
+# EC2-2 SSM 세션
+aws s3 sync s3://$S3_BUCKET/k6-scenarios/ /opt/fandrops/k6/
+```
+
+**EC2-1 Private IP 확인 (EC2-2에서 직접 타깃):**
+
+```bash
+# EC2-2 SSM 세션 — EC2-1 Private IP를 BASE_URL로 사용
+EC2_1_PRIVATE_IP="<EC2-1 Private IP>"  # AWS 콘솔에서 확인
+
+# 또는 Nginx 경유 (권장 — 실제 트래픽 경로와 동일)
+BASE_URL="https://api.fandrops.site"
+```
+
+**시나리오별 실행:**
+
+| 시나리오 | 실행 위치 | 이유 |
+|---|---|---|
+| s01 주문 동시성 (200VU) | EC2-2 k6 | 서울 리전, 레이턴시 SLO 검증 |
+| s02 피드 조회 (50VU) | EC2-2 k6 | 서울 리전, Read P95 < 120ms 검증 |
+| s03 결제 확인 (50VU) | EC2-2 k6 | 서울 리전, Write P95 < 300ms 검증 |
+| s04 드롭스 스파이크 (1000VU) | EC2-2 k6 | 서울 리전, 메모리 모니터링 필수 |
+| s05 SSE 대기열 (2100VU) | Actions runner | t3.small 2GB 메모리 한계 |
+| s06 통합 워크로드 (150VU) | EC2-2 k6 | 서울 리전, 종합 검증 |
+
+```bash
+# EC2-2 SSM 세션 — 실행 예시 (s02)
+cd /opt/fandrops/k6
+K6_PROMETHEUS_RW_TREND_STATS="p(95),p(99)" k6 run \
+  -e BASE_URL=https://api.fandrops.site \
+  scenarios/02_feed_read.js
+```
+
+> **s04 메모리 모니터링:** 1000VU 실행 중 `free -h`로 메모리 여유 확인. 300MB 미만 시 중단.
+
+---
+
+### 4-8. EC2-2 Terminate
+
+모든 재검증 완료 후 EC2-2를 종료한다.
+
+```bash
+# S3 k6-scenarios 임시 파일 정리
+S3_BUCKET="fandrops-prod-storage-495264909330-ap-northeast-2-an"
+aws s3 rm s3://$S3_BUCKET/k6-scenarios/ --recursive
 ```
 
 AWS 콘솔 → EC2-2 → Instance State → **Terminate**.
@@ -509,10 +612,12 @@ curl -s "http://admin:admin@localhost:3000/api/health"
 | 6/11 ✅ | Blue/Green EC2 적용 + cd.yml 수정 + 배포 테스트 완료 (PR #221, #222) |
 | 6/12~13 | EC2 k6 설치 + Wiremock Docker 기동 환경 구성 (#230) |
 | 6/12~13 | k6 Baseline 실행 (시나리오 01·02·03·04·05·06) + 수치 기록 (#231·#232) |
-| 6/13~14 | D 단기 실험 — EC2-2 기동 → 분산 검증 → terminate (#234) |
-| 6/14~18 | Baseline 미달 항목 튜닝 + 도메인 오너 피드백 전달 (#233) |
+| 6/13~17 | k6 Baseline 전 시나리오 완료 (01~06) |
+| 6/18~20 | Baseline 미달 항목 튜닝 + 도메인 오너 피드백 전달 (#233) |
 | 6/18~20 | #191 Grafana 커스텀 알람 활성화 + P0 Alert firing 실전 테스트 (#235·#236) |
-| 6/20~22 | 최종 SLO 수치 측정 + Grafana 스크린샷 보관 (#237) |
+| 6/19~ | D 단기 실험 — EC2-2 t3.small 기동 → 분산 검증(Phase 1) → k6 runner 전환(Phase 2) → terminate (#234) |
+| 6/20~22 | EC2-2 k6 runner로 최적화 후 SLO 재검증 (s01~s04·s06 EC2-2, s05 Actions runner) |
+| 6/22~25 | 최종 SLO 수치 측정 + Grafana 스크린샷 보관 (#237) |
 | 6/22~ | Phase 5 이행 — STAR 리포트 · 발표 자료 준비 (aws-phase5-runbook.md) |
 
 ---
@@ -544,7 +649,9 @@ curl -s "http://admin:admin@localhost:3000/api/health"
   - 05 SSE 대기열: OOM 크래시 — k6 runner 이관 후 재측정 필요
   - 06 통합 워크로드: t3.small 과부하 + 버그 — 재측정 필요
 - [x] k6 GitHub Actions runner 이관 완료 — EC2 CPU 경합 제거 (`k6-actions-runner.md`)
-- [ ] 재측정 완료 — 시나리오 03(#318 수정 후), 05·06(runner 실행 후)
+- [ ] 재측정 완료 — 시나리오 03(#318 수정 후), 05(Actions runner), 06(runner 실행 후)
+- [ ] D 단기 실험 완료 — EC2-2 t3.small 분산 검증(오버셀 0건·중복결제 0건) (#234)
+- [ ] EC2-2 k6 runner SLO 재검증 완료 — s01·s02·s03·s04·s06 서울 리전 측정
 - [ ] SLO 목표 달성 확인 (Write P95 < 300ms, Read P95 < 120ms, 5xx < 0.1%)
 - [x] Grafana 커스텀 메트릭 알람 활성화 (#191·#235) — 2026-06-18 완료 (fandrops-failed-order-p0, fandrops-outbox-pending-p1 정상 수집·Gmail 수신 확인)
 - [ ] 최종 SLO 수치 Grafana 스크린샷 보관
