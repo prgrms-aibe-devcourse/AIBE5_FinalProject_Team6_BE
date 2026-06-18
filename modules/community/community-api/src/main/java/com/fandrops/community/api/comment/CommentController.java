@@ -4,9 +4,12 @@ import com.fandrops.common.ApiResponse;
 import com.fandrops.community.api.CommunityControllerSupport;
 import com.fandrops.community.api.Principal;
 import com.fandrops.community.application.comment.CommentCreateCommand;
+import com.fandrops.community.application.comment.CommentListResult;
 import com.fandrops.community.application.comment.CommentResult;
 import com.fandrops.community.application.comment.CommentService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import org.springframework.core.env.Environment;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -41,6 +44,17 @@ public class CommentController extends CommunityControllerSupport {
                 feedId, artistId, principal.fanId(), principal.artistMemberId(), request.parentId(), request.content()));
         return ResponseEntity.status(201)
                 .body(ApiResponse.ok(Map.of("commentId", result.id()), traceId()));
+    }
+
+    // GET /api/v1/feeds/{feedId}/comments — 최상위 댓글 커서 페이징 + 대댓글 포함
+    @GetMapping
+    public ResponseEntity<ApiResponse<CommentListResult>> getComments(
+            @PathVariable Long feedId,
+            @RequestParam(required = false) String cursor,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(50) int size) {
+
+        CommentListResult result = commentService.getComments(feedId, cursor, size);
+        return ResponseEntity.ok(ApiResponse.ok(result, traceId()));
     }
 
 }

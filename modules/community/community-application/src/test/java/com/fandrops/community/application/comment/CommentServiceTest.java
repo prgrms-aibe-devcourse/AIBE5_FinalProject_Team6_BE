@@ -23,11 +23,14 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -173,6 +176,102 @@ class CommentServiceTest {
                     () -> commentService.createComment(
                             new CommentCreateCommand(1L, 10L, null, 5L, null, "최상위 댓글")));
             verify(commentRepository, never()).save(any());
+        }
+    }
+
+    @Nested
+    @DisplayName("getComments — 댓글 목록 커서 페이징")
+    class GetCommentsTest {
+
+        @Test
+        @DisplayName("cursor=null 첫 요청 — 최상위 댓글 + 대댓글 bulk 조회 후 포함 반환")
+        void firstPage_returnsTopLevelWithReplies() {
+            ArtistFeed feed = ArtistFeed.reconstruct(1L, 10L, 5L, "내용", 0, 0, LocalDateTime.now(clock));
+            Comment c1 = Comment.reconstruct(1L, 1L, 10L, 99L, null, null, "댓글1", LocalDateTime.now(clock));
+            Comment reply1 = Comment.reconstruct(3L, 1L, 10L, null, 5L, 1L, "답글1", LocalDateTime.now(clock));
+
+            when(feedRepository.findById(eq(1L))).thenReturn(Optional.of(feed));
+            when(commentRepository.findTopLevelByFeedId(eq(1L), isNull(), eq(21)))
+                    .thenReturn(List.of(c1));
+            when(commentRepository.findRepliesByParentIds(eq(List.of(1L)))).thenReturn(List.of(reply1));
+
+            CommentListResult result = commentService.getComments(1L, null, 20);
+
+            assertFalse(result.hasMore());
+            assertNull(result.nextCursor());
+            assertEquals(1, result.items().size());
+            assertEquals(1L, result.items().get(0).comment().id());
+            assertEquals(1, result.items().get(0).replies().size());
+            assertEquals(3L, result.items().get(0).replies().get(0).id());
+        }
+
+        @Test
+        @DisplayName("size+1 반환 — hasMore=true, nextCursor 설정")
+        void hasMore_setsNextCursor() {
+            ArtistFeed feed = ArtistFeed.reconstruct(1L, 10L, 5L, "내용", 0, 0, LocalDateTime.now(clock));
+            Comment c1 = Comment.reconstruct(1L, 1L, 10L, 99L, null, null, "댓글1", LocalDateTime.now(clock));
+            Comment c2 = Comment.reconstruct(2L, 1L, 10L, 99L, null, null, "댓글2", LocalDateTime.now(clock));
+            Comment c3 = Comment.reconstruct(3L, 1L, 10L, 99L, null, null, "댓글3", LocalDateTime.now(clock));
+
+            when(feedRepository.findById(eq(1L))).thenReturn(Optional.of(feed));
+            when(commentRepository.findTopLevelByFeedId(eq(1L), isNull(), eq(3)))
+                    .thenReturn(List.of(c1, c2, c3));
+            when(commentRepository.findRepliesByParentIds(anyList())).thenReturn(List.of());
+
+            CommentListResult result = commentService.getComments(1L, null, 2);
+
+            assertTrue(result.hasMore());
+            assertEquals("2", result.nextCursor());
+            assertEquals(2, result.items().size());
+        }
+
+        @Test
+        @DisplayName("대댓글 없는 최상위 댓글 — replies 빈 목록 반환")
+        void noReplies_returnsEmptyReplies() {
+            ArtistFeed feed = ArtistFeed.reconstruct(1L, 10L, 5L, "내용", 0, 0, LocalDateTime.now(clock));
+            Comment c1 = Comment.reconstruct(1L, 1L, 10L, 99L, null, null, "댓글1", LocalDateTime.now(clock));
+
+            when(feedRepository.findById(eq(1L))).thenReturn(Optional.of(feed));
+            when(commentRepository.findTopLevelByFeedId(eq(1L), isNull(), eq(21)))
+                    .thenReturn(List.of(c1));
+            when(commentRepository.findRepliesByParentIds(eq(List.of(1L)))).thenReturn(List.of());
+
+            CommentListResult result = commentService.getComments(1L, null, 20);
+
+            assertTrue(result.items().get(0).replies().isEmpty());
+        }
+
+        @Test
+        @DisplayName("피드 없음 → FeedNotFoundException")
+        void feedNotFound_throws() {
+            when(feedRepository.findById(eq(999L))).thenReturn(Optional.empty());
+
+            assertThrows(FeedNotFoundException.class,
+                    () -> commentService.getComments(999L, null, 20));
+            verifyNoInteractions(commentRepository);
+        }
+
+        @Test
+        @DisplayName("잘못된 cursor 형식 → IllegalArgumentException")
+        void invalidCursor_throws() {
+            ArtistFeed feed = ArtistFeed.reconstruct(1L, 10L, 5L, "내용", 0, 0, LocalDateTime.now(clock));
+            when(feedRepository.findById(eq(1L))).thenReturn(Optional.of(feed));
+
+            assertThrows(IllegalArgumentException.class,
+                    () -> commentService.getComments(1L, "abc", 20));
+        }
+
+        @Test
+        @DisplayName("숫자 cursor — 파싱 후 Repository에 전달")
+        void withCursor_passedToRepository() {
+            ArtistFeed feed = ArtistFeed.reconstruct(1L, 10L, 5L, "내용", 0, 0, LocalDateTime.now(clock));
+            when(feedRepository.findById(eq(1L))).thenReturn(Optional.of(feed));
+            when(commentRepository.findTopLevelByFeedId(eq(1L), eq(5L), eq(21))).thenReturn(List.of());
+            when(commentRepository.findRepliesByParentIds(anyList())).thenReturn(List.of());
+
+            commentService.getComments(1L, "5", 20);
+
+            verify(commentRepository).findTopLevelByFeedId(eq(1L), eq(5L), eq(21));
         }
     }
 }

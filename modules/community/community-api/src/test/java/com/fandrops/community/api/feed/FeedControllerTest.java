@@ -1,5 +1,6 @@
 package com.fandrops.community.api.feed;
 
+import com.fandrops.community.application.exception.ForbiddenException;
 import com.fandrops.community.application.feed.FeedListResult;
 import com.fandrops.community.application.feed.FeedService;
 import org.junit.jupiter.api.BeforeEach;
@@ -85,11 +86,11 @@ class FeedControllerTest {
         }
 
         @Test
-        @DisplayName("알 수 없는 role JWT → IllegalStateException")
-        void unknownRoleJwt_throwsIllegalState() {
+        @DisplayName("알 수 없는 role JWT → ForbiddenException (403)")
+        void unknownRoleJwt_throwsForbidden() {
             Authentication auth = mockAuth("1", "UNKNOWN_ROLE");
 
-            assertThrows(IllegalStateException.class,
+            assertThrows(ForbiddenException.class,
                     () -> feedController.getFeeds(10L, null, 20, auth, null, null));
         }
     }
