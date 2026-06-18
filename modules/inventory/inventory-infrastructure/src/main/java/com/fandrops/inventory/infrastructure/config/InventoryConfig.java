@@ -13,6 +13,7 @@ import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
 import org.redisson.config.Config;
 import org.redisson.config.SingleServerConfig;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -82,7 +83,7 @@ public class InventoryConfig {
     @Bean
     public InventoryCommandService inventoryCommandService(
             InventoryReadRepository inventoryReadRepository,
-            InventoryRepository inventoryRepository,
+            @Qualifier("inventoryAtomicRepository") InventoryRepository inventoryRepository,
             InventoryHistoryRepository inventoryHistoryRepository) {
         return new InventoryCommandService(inventoryReadRepository, inventoryRepository, inventoryHistoryRepository);
     }
