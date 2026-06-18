@@ -41,6 +41,7 @@ class S3PresignedUrlAdapterTest {
         properties.setRegion("ap-northeast-2");
         properties.setPresignedUrlExpiryMinutes(10);
         properties.setUploadPrefix("uploads/banners");
+        properties.setUploadProfileImagePrefix("uploads/profiles");
         adapter = new S3PresignedUrlAdapter(presigner, properties);
     }
 
@@ -101,6 +102,30 @@ class S3PresignedUrlAdapterTest {
         assertTrue(result.imageUrl().startsWith(
                 "https://test-bucket.s3.ap-northeast-2.amazonaws.com/uploads/banners/"),
                 "trailing slash 제거 후 정상 prefix여야 한다");
+    }
+
+    @Test
+    @DisplayName("generateForProfileImage — uploads/profiles/ prefix로 imageUrl 생성")
+    void generateForProfileImage_usesProfileImagePrefix() {
+        when(presigner.presignPutObject(any(PutObjectPresignRequest.class)).url().toString()).thenReturn("https://presigned");
+
+        PresignedUploadResult result = adapter.generateForProfileImage("image/jpeg", 1024L);
+
+        assertTrue(result.imageUrl().startsWith(
+                "https://test-bucket.s3.ap-northeast-2.amazonaws.com/uploads/profiles/"),
+                "프로필 이미지는 uploads/profiles/ prefix를 사용해야 한다");
+    }
+
+    @Test
+    @DisplayName("generate — uploads/banners/ prefix를 사용한다 (배너 전용)")
+    void generate_usesBannerPrefix() {
+        when(presigner.presignPutObject(any(PutObjectPresignRequest.class)).url().toString()).thenReturn("https://presigned");
+
+        PresignedUploadResult result = adapter.generate("image/jpeg", 1024L);
+
+        assertTrue(result.imageUrl().startsWith(
+                "https://test-bucket.s3.ap-northeast-2.amazonaws.com/uploads/banners/"),
+                "배너 이미지는 uploads/banners/ prefix를 사용해야 한다");
     }
 
     @Test

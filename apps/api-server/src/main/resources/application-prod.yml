@@ -85,3 +85,4 @@ fandrops:
     region: ap-northeast-2
     presigned-url-expiry-minutes: 10
     upload-prefix: uploads/banners
+    upload-profile-image-prefix: uploads/profiles
