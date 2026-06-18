@@ -4,7 +4,11 @@ import com.fandrops.common.ApiResponse;
 import com.fandrops.user.api.dto.ArtistMemberResponse;
 import com.fandrops.user.api.dto.CreateArtistMemberRequest;
 import com.fandrops.user.api.dto.UpdateArtistMemberRequest;
+import com.fandrops.user.api.dto.UpdateProfileImageRequest;
+import com.fandrops.user.api.dto.UploadPresignedUrlRequest;
+import com.fandrops.user.api.dto.UploadPresignedUrlResponse;
 import com.fandrops.user.application.dto.CreateArtistMemberCommand;
+import com.fandrops.user.application.dto.PresignedUploadResult;
 import com.fandrops.user.application.service.ArtistMemberService;
 import com.fandrops.user.domain.ArtistMember;
 import jakarta.servlet.http.HttpServletRequest;
@@ -88,5 +92,32 @@ public class ArtistMemberController extends UserControllerSupport {
         Long agencyId = resolveAgencyId(authentication);
         artistMemberService.deleteArtistMember(id, agencyId, resolveClientIp(httpRequest), traceId());
         return ResponseEntity.noContent().build();
+    }
+
+    @PreAuthorize("hasRole('AGENCY')")
+    @PostMapping("/api/v1/artist-members/{id}/profile-image/presigned-url")
+    public ResponseEntity<ApiResponse<UploadPresignedUrlResponse>> generateProfileImagePresignedUrl(
+            @PathVariable Long id,
+            @Valid @RequestBody UploadPresignedUrlRequest request,
+            Authentication authentication,
+            HttpServletRequest httpRequest) {
+        Long agencyId = resolveAgencyId(authentication);
+        PresignedUploadResult result = artistMemberService.generateProfileImagePresignedUrl(
+                id, agencyId, request.contentType(), request.contentLength(),
+                resolveClientIp(httpRequest), traceId());
+        return ResponseEntity.ok(ApiResponse.ok(UploadPresignedUrlResponse.from(result), traceId()));
+    }
+
+    @PreAuthorize("hasRole('AGENCY')")
+    @PatchMapping("/api/v1/artist-members/{id}/profile-image")
+    public ResponseEntity<ApiResponse<ArtistMemberResponse>> updateProfileImage(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateProfileImageRequest request,
+            Authentication authentication,
+            HttpServletRequest httpRequest) {
+        Long agencyId = resolveAgencyId(authentication);
+        ArtistMember updated = artistMemberService.updateProfileImageUrl(
+                id, request.imageUrl(), agencyId, resolveClientIp(httpRequest), traceId());
+        return ResponseEntity.ok(ApiResponse.ok(ArtistMemberResponse.from(updated), traceId()));
     }
 }

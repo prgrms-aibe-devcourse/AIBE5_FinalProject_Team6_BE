@@ -1,16 +1,26 @@
 package com.fandrops.user.application.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fandrops.user.application.constant.AllowedImageContentType;
 import com.fandrops.user.application.dto.CreateArtistMemberCommand;
+import com.fandrops.user.application.dto.PresignedUploadResult;
 import com.fandrops.user.application.exception.ArtistMemberNotFoundException;
 import com.fandrops.user.application.exception.ArtistNotFoundException;
 import com.fandrops.user.application.exception.DuplicateLoginIdException;
+import com.fandrops.user.application.exception.InvalidContentTypeException;
+import com.fandrops.user.application.exception.InvalidImageUrlException;
 import com.fandrops.user.application.port.AgencyAccountRepository;
 import com.fandrops.user.application.port.ArtistMemberRepository;
 import com.fandrops.user.application.port.ArtistProfileRepository;
 import com.fandrops.user.application.port.AuditLogPort;
+import com.fandrops.user.application.port.S3ImageValidationPort;
+import com.fandrops.user.application.port.S3PresignedUrlPort;
 import com.fandrops.user.domain.ArtistMember;
 import com.fandrops.user.domain.ArtistProfile;
 import com.fandrops.user.domain.AuditLog;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -18,27 +28,39 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.Map;
 
 @Service
 public class ArtistMemberService {
+
+    private static final Logger log = LoggerFactory.getLogger(ArtistMemberService.class);
 
     private final ArtistMemberRepository artistMemberRepository;
     private final AgencyAccountRepository agencyAccountRepository;
     private final ArtistProfileRepository artistProfileRepository;
     private final AuditLogPort auditLogPort;
     private final PasswordEncoder passwordEncoder;
+    private final S3PresignedUrlPort s3PresignedUrlPort;
+    private final S3ImageValidationPort s3ImageValidationPort;
+    private final ObjectMapper objectMapper;
 
     public ArtistMemberService(
             ArtistMemberRepository artistMemberRepository,
             AgencyAccountRepository agencyAccountRepository,
             ArtistProfileRepository artistProfileRepository,
             AuditLogPort auditLogPort,
-            PasswordEncoder passwordEncoder) {
+            PasswordEncoder passwordEncoder,
+            S3PresignedUrlPort s3PresignedUrlPort,
+            S3ImageValidationPort s3ImageValidationPort,
+            ObjectMapper objectMapper) {
         this.artistMemberRepository = artistMemberRepository;
         this.agencyAccountRepository = agencyAccountRepository;
         this.artistProfileRepository = artistProfileRepository;
         this.auditLogPort = auditLogPort;
         this.passwordEncoder = passwordEncoder;
+        this.s3PresignedUrlPort = s3PresignedUrlPort;
+        this.s3ImageValidationPort = s3ImageValidationPort;
+        this.objectMapper = objectMapper;
     }
 
     // Agency loginId와의 cross-table 중복 체크 후 ArtistMember 생성
@@ -80,9 +102,6 @@ public class ArtistMemberService {
             throw new DuplicateLoginIdException("이미 사용 중인 loginId입니다.");
         }
 
-        String afterJson = "{\"loginId\":" + escapeJson(saved.getLoginId())
-                + ",\"artistId\":" + saved.getArtistId() + "}";
-
         auditLogPort.save(AuditLog.builder()
                 .occurredAt(Instant.now())
                 .actorType("AGENCY")
@@ -91,7 +110,7 @@ public class ArtistMemberService {
                 .resourceType("ARTIST_MEMBER")
                 .resourceId(saved.getId())
                 .traceId(traceId)
-                .afterJson(afterJson)
+                .afterJson(toJson(Map.of("loginId", saved.getLoginId(), "artistId", saved.getArtistId())))
                 .clientIp(clientIp)
                 .build());
 
@@ -117,7 +136,7 @@ public class ArtistMemberService {
                 .resourceType("ARTIST_MEMBER")
                 .resourceId(memberId)
                 .traceId(traceId)
-                .afterJson("{\"memberName\":" + escapeJson(memberName) + "}")
+                .afterJson(toJson(Map.of("memberName", memberName)))
                 .clientIp(clientIp)
                 .build());
 
@@ -141,6 +160,56 @@ public class ArtistMemberService {
                 .build());
     }
 
+    public PresignedUploadResult generateProfileImagePresignedUrl(
+            Long memberId, Long agencyId, String contentType, long contentLength,
+            String clientIp, String traceId) {
+        if (!AllowedImageContentType.isAllowed(contentType)) {
+            throw new InvalidContentTypeException(contentType);
+        }
+        findMemberWithOwnership(memberId, agencyId);
+        PresignedUploadResult result = s3PresignedUrlPort.generate(contentType, contentLength);
+        try {
+            auditLogPort.save(AuditLog.builder()
+                    .occurredAt(Instant.now())
+                    .actorType("AGENCY")
+                    .actorId(agencyId)
+                    .action("ARTIST_MEMBER_PROFILE_IMAGE_PRESIGNED_URL_ISSUED")
+                    .resourceType("ARTIST_MEMBER")
+                    .resourceId(memberId)
+                    .traceId(traceId)
+                    .afterJson(toJson(Map.of("contentType", contentType, "contentLength", contentLength)))
+                    .clientIp(clientIp)
+                    .build());
+        } catch (Exception e) {
+            log.error("[AUDIT_FAIL] presigned URL 발급 로그 저장 실패 traceId={} agencyId={}", traceId, agencyId, e);
+        }
+        return result;
+    }
+
+    @Transactional
+    public ArtistMember updateProfileImageUrl(Long memberId, String imageUrl,
+                                              Long agencyId, String clientIp, String traceId) {
+        if (!s3ImageValidationPort.isOwnedUrl(imageUrl)) {
+            throw new InvalidImageUrlException(imageUrl);
+        }
+        ArtistMember member = findMemberWithOwnership(memberId, agencyId);
+        ArtistMember updated = artistMemberRepository.save(member.withProfileImageUrl(imageUrl));
+
+        auditLogPort.save(AuditLog.builder()
+                .occurredAt(Instant.now())
+                .actorType("AGENCY")
+                .actorId(agencyId)
+                .action("ARTIST_MEMBER_PROFILE_IMAGE_URL_CONFIRMED")
+                .resourceType("ARTIST_MEMBER")
+                .resourceId(memberId)
+                .traceId(traceId)
+                .afterJson(toJson(Map.of("profileImageUrl", imageUrl)))
+                .clientIp(clientIp)
+                .build());
+
+        return updated;
+    }
+
     private ArtistMember findMemberWithOwnership(Long memberId, Long actorId) {
         ArtistMember member = artistMemberRepository.findById(memberId)
                 .orElseThrow(() -> new ArtistMemberNotFoundException(
@@ -155,14 +224,11 @@ public class ArtistMemberService {
         return member;
     }
 
-    private static String escapeJson(String value) {
-        if (value == null) return "null";
-        return "\"" + value
-                .replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r")
-                .replace("\t", "\\t")
-                + "\"";
+    private String toJson(Map<String, Object> map) {
+        try {
+            return objectMapper.writeValueAsString(map);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException("afterJson 직렬화 실패", e);
+        }
     }
 }
