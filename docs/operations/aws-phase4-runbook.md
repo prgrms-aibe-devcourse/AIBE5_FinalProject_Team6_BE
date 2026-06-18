@@ -432,6 +432,8 @@ spring:
 
 ### 6-2. 활성화 절차
 
+> **✅ 완료** — 2026-06-18 (#235)
+
 PR 머지 + 배포 완료 후:
 
 ```
@@ -446,6 +448,56 @@ PR 머지 + 배포 완료 후:
 3. P0 Alert firing 테스트
    DB에 status=FAILED 주문 1건 수동 INSERT → 알람 발화 → Gmail 수신 확인
    테스트 후 INSERT 행 삭제
+```
+
+### 6-3. 모니터링 스택 재기동 절차
+
+> `compose.monitoring.yml`에 `restart: unless-stopped` 정책이 설정되어 있어 **EC2 재시작 및 일반 크래시는 자동 복구**된다.  
+> OOM 크래시 후 자동 재시작된 경우 `GMAIL_APP_PASSWORD`가 비어 있어 Gmail 알림만 동작하지 않는다 → `start-monitoring.sh` 수동 실행 필요.
+
+**자동 재기동 적용 범위:**
+
+| 상황 | 동작 |
+| --- | --- |
+| EC2 재시작 | ✅ 자동 재기동 (restart policy) |
+| 일반 컨테이너 크래시 | ✅ 자동 재기동 (restart policy) |
+| OOM 크래시 | ⚠️ 컨테이너는 자동 재시작되나 Gmail 알림 비활성 → 수동 스크립트 실행 필요 |
+
+> **OOM(Out Of Memory) 크래시란?**  
+> EC2 메모리(RAM)가 부족해지면 Linux OS가 강제로 프로세스를 종료한다. k6 부하 테스트처럼 메모리를 많이 쓰는 작업 중 Prometheus·Grafana가 종료 대상이 될 수 있다.  
+> OOM 크래시 후 `restart: unless-stopped` 정책으로 컨테이너는 자동 재시작되지만, 환경변수 `GMAIL_APP_PASSWORD`가 빈 값으로 올라와 Gmail 알림만 동작하지 않는다. Grafana 대시보드는 정상.
+
+**OOM 크래시 여부 확인:**
+
+```bash
+# 재시작 횟수가 1 이상이면 OOM 크래시가 있었던 것
+docker inspect fandrops-monitoring-grafana-1 --format '{{.RestartCount}}'
+```
+
+**OOM 크래시 후 수동 재기동 스크립트 (`/opt/fandrops-monitoring/start-monitoring.sh`):**
+
+```bash
+#!/bin/bash
+export GMAIL_APP_PASSWORD=$(aws ssm get-parameter \
+  --name "/fandrops/prod/gmail-app-password" \
+  --with-decryption \
+  --region ap-northeast-2 \
+  --query "Parameter.Value" \
+  --output text)
+
+docker compose -f /opt/fandrops-monitoring/compose.monitoring.yml up -d
+```
+
+- `GMAIL_APP_PASSWORD`는 SSM Parameter Store `/fandrops/prod/gmail-app-password` (SecureString)에 저장
+- EC2 IAM 역할(`fandrops-prod-ec2-role`)에 `ssm:GetParameter` + KMS Decrypt 권한 있음
+- 스크립트 실행: `sudo /opt/fandrops-monitoring/start-monitoring.sh`
+
+**컨테이너 상태 확인:**
+
+```bash
+docker ps | grep -E "prometheus|grafana"
+curl -s http://localhost:9090/-/healthy
+curl -s "http://admin:admin@localhost:3000/api/health"
 ```
 
 ---
@@ -477,6 +529,7 @@ PR 머지 + 배포 완료 후:
 | 6 | 2026-06-17 | DB reset 후 k6 실행해도 전부 409 | `updated_at` 미갱신 → OrderRecoveryScheduler(60초 주기, 30분 타임아웃)가 즉시 CANCEL | `UPDATE orders SET status='RESERVED', updated_at=NOW() WHERE ...` |
 | 7 | 2026-06-17 | 시나리오 05 OOM 크래시, 시나리오 06 피드 0% | k6와 앱 서버가 같은 t3.small에서 실행 → CPU/메모리 경합 | k6를 GitHub Actions runner로 이관 ([k6-actions-runner.md](./k6-actions-runner.md)) |
 | 8 | 2026-06-17 | inventory 리셋 후 50건 초과 시 주문 전부 실패 | `available_qty=200`으로 리셋했으나 `total_qty=50` 그대로 → invariant 위반 | 리셋 SQL에 `total_qty`도 포함: `SET available_qty=200, reserved_qty=0, total_qty=200` |
+| 9 | 2026-06-18 | Prometheus/Grafana 컨테이너 Exited (255) — 메트릭 수집 중단 | 시나리오 05 OOM 크래시 이후 19시간 미재기동 — docker compose가 restart policy 없이 기동됐음 | `start-monitoring.sh` 스크립트로 재기동 (§6-3). `GMAIL_APP_PASSWORD`는 SSM `/fandrops/prod/gmail-app-password`에 저장, EC2 역할로 읽어 주입 |
 
 ---
 
@@ -493,7 +546,7 @@ PR 머지 + 배포 완료 후:
 - [x] k6 GitHub Actions runner 이관 완료 — EC2 CPU 경합 제거 (`k6-actions-runner.md`)
 - [ ] 재측정 완료 — 시나리오 03(#318 수정 후), 05·06(runner 실행 후)
 - [ ] SLO 목표 달성 확인 (Write P95 < 300ms, Read P95 < 120ms, 5xx < 0.1%)
-- [ ] Grafana 커스텀 메트릭 알람 활성화 (#191)
+- [x] Grafana 커스텀 메트릭 알람 활성화 (#191·#235) — 2026-06-18 완료 (fandrops-failed-order-p0, fandrops-outbox-pending-p1 정상 수집·Gmail 수신 확인)
 - [ ] 최종 SLO 수치 Grafana 스크린샷 보관
 
 ---

@@ -14,6 +14,7 @@
 services:
   prometheus:
     image: prom/prometheus:v3.4.1
+    restart: unless-stopped
     ports:
       - "9090:9090"
     command:
@@ -28,6 +29,7 @@ services:
 
   grafana:
     image: grafana/grafana:12.0.1
+    restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
@@ -40,6 +42,7 @@ services:
       - GF_SMTP_PASSWORD=${GMAIL_APP_PASSWORD}
       - GF_SMTP_FROM_ADDRESS=xxjyj1022@gmail.com
       - GF_SMTP_FROM_NAME=FANDROPS Grafana
+      - GF_SERVER_ROOT_URL=http://api.fandrops.site:3000
     volumes:
       - ./infra/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
       - grafana_data:/var/lib/grafana
