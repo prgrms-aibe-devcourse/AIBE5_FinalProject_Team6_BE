@@ -1,6 +1,7 @@
 package com.fandrops.order.domain.port;
 
 import com.fandrops.order.domain.Product;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -12,4 +13,7 @@ public interface ProductRepository {
 
     /** dropsStartAt ≤ now ≤ dropsEndAt 조건 드롭스 상품 목록. artistId null이면 전체. */
     List<Product> findDropsProducts(Long artistId, Long cursor, int size);
+
+    /** dropsEndAt < now이고 ON_SALE 상태인 드롭스 상품 — 자동 SOLD_OUT 전이 대상 */
+    List<Product> findExpiredDrops(LocalDateTime now);
 }
