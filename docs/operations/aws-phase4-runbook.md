@@ -463,6 +463,17 @@ PR 머지 + 배포 완료 후:
 | 일반 컨테이너 크래시 | ✅ 자동 재기동 (restart policy) |
 | OOM 크래시 | ⚠️ 컨테이너는 자동 재시작되나 Gmail 알림 비활성 → 수동 스크립트 실행 필요 |
 
+> **OOM(Out Of Memory) 크래시란?**  
+> EC2 메모리(RAM)가 부족해지면 Linux OS가 강제로 프로세스를 종료한다. k6 부하 테스트처럼 메모리를 많이 쓰는 작업 중 Prometheus·Grafana가 종료 대상이 될 수 있다.  
+> OOM 크래시 후 `restart: unless-stopped` 정책으로 컨테이너는 자동 재시작되지만, 환경변수 `GMAIL_APP_PASSWORD`가 빈 값으로 올라와 Gmail 알림만 동작하지 않는다. Grafana 대시보드는 정상.
+
+**OOM 크래시 여부 확인:**
+
+```bash
+# 재시작 횟수가 1 이상이면 OOM 크래시가 있었던 것
+docker inspect fandrops-monitoring-grafana-1 --format '{{.RestartCount}}'
+```
+
 **OOM 크래시 후 수동 재기동 스크립트 (`/opt/fandrops-monitoring/start-monitoring.sh`):**
 
 ```bash
