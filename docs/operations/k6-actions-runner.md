@@ -274,7 +274,41 @@ limit_conn_zone $binary_remote_addr zone=fandrops_sse:10m;
 
 ---
 
-## 10. 테스트 완료 후 정리
+## 10. Actions runner vs EC2-2 k6 runner 역할 분리
+
+> **2026-06-19 이후 적용** — EC2-2 t3.small 기동 후 최적화 재검증 단계부터.
+
+### 배경
+
+Actions runner는 미국 리전에서 실행되어 서울 EC2까지 약 150ms 네트워크 오버헤드가 발생한다.  
+SLO 목표(Write P95 < 300ms, Read P95 < 120ms)가 네트워크 오버헤드만으로 초과되므로 레이턴시 SLO 검증에는 사용할 수 없다.
+
+### 역할 분리표
+
+| 시나리오 | 실행 위치 | 이유 |
+|---|---|---|
+| s01 주문 동시성 (200VU) | **EC2-2 k6** | 레이턴시 SLO 검증 — 네트워크 오버헤드 제거 필요 |
+| s02 피드 조회 (50VU) | **EC2-2 k6** | Read P95 < 120ms — 150ms 오버헤드로 달성 불가 |
+| s03 결제 확인 (50VU) | **EC2-2 k6** | Write P95 < 300ms — 서울 리전 측정 필요 |
+| s04 드롭스 스파이크 (1000VU) | **EC2-2 k6** | 레이턴시 + 오버셀 동시 검증. 메모리 모니터링 필수 |
+| s05 SSE 대기열 (2100VU) | **Actions runner** | t3.small 2GB 메모리 한계. 에러율·연결 수 기반 SLO라 레이턴시 무관 |
+| s06 통합 워크로드 (150VU) | **EC2-2 k6** | 레이턴시 SLO 종합 검증 |
+
+### Actions runner가 여전히 유효한 용도
+
+- **에러율 검증**: 오버셀 0건, 중복 결제 0건 — 응답 코드 기반, 레이턴시 무관
+- **s05 SSE 대기열**: 연결 수 기반 SLO, 2100VU는 EC2-2 메모리 초과
+- **분산 실험(§ 4-4)**: EC2-1 Nginx가 두 서버로 분산, Actions runner에서 실행
+
+### EC2-2 k6 실행 시 주의사항
+
+- EC2-2에 Spring Boot가 실행 중이면 안 됨 (§ 4-6에서 종료 후 진행)
+- s04 1000VU 실행 중 메모리 확인: `free -h` — 여유 300MB 미만 시 중단
+- Prometheus Remote Write 가능: EC2-1 Prometheus(`http://<EC2-1 PRIVATE IP>:9090/api/v1/write`)로 직접 전송 가능
+
+---
+
+## 11. 테스트 완료 후 정리
 
 ```bash
 # S3 seed 파일 삭제 (JWT·주문 정보 노출 방지)
