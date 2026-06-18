@@ -1,15 +1,23 @@
 package com.fandrops.user.application.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fandrops.user.application.dto.CreateArtistMemberCommand;
+import com.fandrops.user.application.dto.PresignedUploadResult;
 import com.fandrops.user.application.exception.ArtistMemberNotFoundException;
 import com.fandrops.user.application.exception.ArtistNotFoundException;
 import com.fandrops.user.application.exception.DuplicateLoginIdException;
+import com.fandrops.user.application.exception.InvalidContentTypeException;
+import com.fandrops.user.application.exception.InvalidImageUrlException;
 import com.fandrops.user.application.port.AgencyAccountRepository;
 import com.fandrops.user.application.port.ArtistMemberRepository;
 import com.fandrops.user.application.port.ArtistProfileRepository;
 import com.fandrops.user.application.port.AuditLogPort;
+import com.fandrops.user.application.port.S3ImageValidationPort;
+import com.fandrops.user.application.port.S3PresignedUrlPort;
 import com.fandrops.user.domain.ArtistMember;
 import com.fandrops.user.domain.ArtistProfile;
+
+import java.time.Instant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -36,18 +44,23 @@ class ArtistMemberServiceTest {
     @Mock ArtistProfileRepository artistProfileRepository;
     @Mock AuditLogPort auditLogPort;
     @Mock PasswordEncoder passwordEncoder;
+    @Mock S3PresignedUrlPort s3PresignedUrlPort;
+    @Mock S3ImageValidationPort s3ImageValidationPort;
 
     ArtistMemberService artistMemberService;
 
-    private static final Long ACTOR_ID   = 10L;
-    private static final String CLIENT_IP = "127.0.0.1";
-    private static final String TRACE_ID  = "test-trace";
+    private static final Long ACTOR_ID      = 10L;
+    private static final String CLIENT_IP   = "127.0.0.1";
+    private static final String TRACE_ID    = "test-trace";
+    private static final String VALID_IMAGE_URL =
+            "https://s3.fandrops-bucket.amazonaws.com/uploads/profile/img.jpg";
 
     @BeforeEach
     void setUp() {
         artistMemberService = new ArtistMemberService(
                 artistMemberRepository, agencyAccountRepository,
-                artistProfileRepository, auditLogPort, passwordEncoder);
+                artistProfileRepository, auditLogPort, passwordEncoder,
+                s3PresignedUrlPort, s3ImageValidationPort, new ObjectMapper());
     }
 
     // ── artistId 존재 검증 ────────────────────────────────────────────────────
@@ -152,7 +165,7 @@ class ArtistMemberServiceTest {
 
         assertEquals("hani", result.getLoginId());
         verify(artistMemberRepository).save(any(ArtistMember.class));
-        verify(auditLogPort).save(any());
+        verify(auditLogPort).save(argThat(log -> "ARTIST_MEMBER_CREATE".equals(log.getAction())));
     }
 
     // ── Read ─────────────────────────────────────────────────────────────────
@@ -277,6 +290,153 @@ class ArtistMemberServiceTest {
 
         assertThrows(ArtistMemberNotFoundException.class,
                 () -> artistMemberService.deleteArtistMember(1L, ACTOR_ID, CLIENT_IP, TRACE_ID));
+
+        verify(artistMemberRepository, never()).save(any());
+    }
+
+    // ── Profile Image Presigned URL ──────────────────────────────────────────
+
+    @Test
+    @DisplayName("프로필 이미지 Presigned URL 발급 성공 — S3 결과 반환")
+    void generateProfileImagePresignedUrl_success_returnsPresignedResult() {
+        when(artistMemberRepository.findById(1L)).thenReturn(Optional.of(dummyMember()));
+        when(artistProfileRepository.findById(1L)).thenReturn(Optional.of(dummyProfile()));
+        PresignedUploadResult expected = new PresignedUploadResult(
+                "https://s3.presigned.url", "https://cdn.fandrops.com/img.jpg",
+                Instant.now().plusSeconds(600));
+        when(s3PresignedUrlPort.generate("image/jpeg", 1024L)).thenReturn(expected);
+
+        PresignedUploadResult result = artistMemberService.generateProfileImagePresignedUrl(
+                1L, ACTOR_ID, "image/jpeg", 1024L, CLIENT_IP, TRACE_ID);
+
+        assertEquals(expected.presignedUrl(), result.presignedUrl());
+        verify(s3PresignedUrlPort).generate("image/jpeg", 1024L);
+        verify(auditLogPort).save(argThat(log ->
+                "ARTIST_MEMBER_PROFILE_IMAGE_PRESIGNED_URL_ISSUED".equals(log.getAction())));
+    }
+
+    @Test
+    @DisplayName("감사 로그 저장 실패해도 Presigned URL 정상 반환")
+    void generateProfileImagePresignedUrl_auditFails_stillReturnsResult() {
+        when(artistMemberRepository.findById(1L)).thenReturn(Optional.of(dummyMember()));
+        when(artistProfileRepository.findById(1L)).thenReturn(Optional.of(dummyProfile()));
+        PresignedUploadResult expected = new PresignedUploadResult(
+                "https://s3.presigned.url", VALID_IMAGE_URL,
+                Instant.now().plusSeconds(600));
+        when(s3PresignedUrlPort.generate("image/jpeg", 1024L)).thenReturn(expected);
+        doThrow(new RuntimeException("audit DB down")).when(auditLogPort).save(any());
+
+        PresignedUploadResult result = artistMemberService.generateProfileImagePresignedUrl(
+                1L, ACTOR_ID, "image/jpeg", 1024L, CLIENT_IP, TRACE_ID);
+
+        assertEquals(expected.presignedUrl(), result.presignedUrl());
+    }
+
+    @Test
+    @DisplayName("허용되지 않은 contentType — InvalidContentTypeException (소유권 검증 전 차단)")
+    void generateProfileImagePresignedUrl_invalidContentType_throwsInvalidContentTypeException() {
+        assertThrows(InvalidContentTypeException.class,
+                () -> artistMemberService.generateProfileImagePresignedUrl(
+                        1L, ACTOR_ID, "application/javascript", 1024L, CLIENT_IP, TRACE_ID));
+
+        verify(artistMemberRepository, never()).findById(anyLong());
+        verify(s3PresignedUrlPort, never()).generate(anyString(), anyLong());
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 멤버 Presigned URL 발급 — ArtistMemberNotFoundException")
+    void generateProfileImagePresignedUrl_memberNotFound_throwsNotFoundException() {
+        when(artistMemberRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThrows(ArtistMemberNotFoundException.class,
+                () -> artistMemberService.generateProfileImagePresignedUrl(
+                        99L, ACTOR_ID, "image/jpeg", 1024L, CLIENT_IP, TRACE_ID));
+
+        verify(s3PresignedUrlPort, never()).generate(anyString(), anyLong());
+    }
+
+    @Test
+    @DisplayName("타 Agency 소속 멤버 Presigned URL 발급 — ArtistMemberNotFoundException (소유권 불일치)")
+    void generateProfileImagePresignedUrl_wrongAgency_throwsNotFoundException() {
+        ArtistMember otherMember = ArtistMember.builder()
+                .id(1L).artistId(2L).loginId("hani").passwordHash("hash").memberName("하니").build();
+        ArtistProfile otherProfile = ArtistProfile.builder()
+                .id(2L).agencyId(99L).name("타 소속").build();
+        when(artistMemberRepository.findById(1L)).thenReturn(Optional.of(otherMember));
+        when(artistProfileRepository.findById(2L)).thenReturn(Optional.of(otherProfile));
+
+        assertThrows(ArtistMemberNotFoundException.class,
+                () -> artistMemberService.generateProfileImagePresignedUrl(
+                        1L, ACTOR_ID, "image/jpeg", 1024L, CLIENT_IP, TRACE_ID));
+
+        verify(s3PresignedUrlPort, never()).generate(anyString(), anyLong());
+    }
+
+    // ── Profile Image URL 확정 저장 ──────────────────────────────────────────
+
+    @Test
+    @DisplayName("프로필 이미지 URL 저장 성공 — profileImageUrl 세팅 후 저장 및 감사 로그")
+    void updateProfileImageUrl_success_savesUrlAndAudits() {
+        String validUrl = "https://s3.fandrops-bucket.amazonaws.com/uploads/profile/img.jpg";
+        ArtistMember existing = dummyMember();
+        ArtistMember withImage = existing.withProfileImageUrl(validUrl);
+        when(s3ImageValidationPort.isOwnedUrl(validUrl)).thenReturn(true);
+        when(artistMemberRepository.findById(1L)).thenReturn(Optional.of(existing));
+        when(artistProfileRepository.findById(1L)).thenReturn(Optional.of(dummyProfile()));
+        when(artistMemberRepository.save(any(ArtistMember.class))).thenReturn(withImage);
+
+        ArtistMember result = artistMemberService.updateProfileImageUrl(
+                1L, validUrl, ACTOR_ID, CLIENT_IP, TRACE_ID);
+
+        assertEquals(validUrl, result.getProfileImageUrl());
+        verify(artistMemberRepository).save(argThat(m -> validUrl.equals(m.getProfileImageUrl())));
+        verify(auditLogPort).save(argThat(log ->
+                "ARTIST_MEMBER_PROFILE_IMAGE_URL_CONFIRMED".equals(log.getAction())));
+    }
+
+    @Test
+    @DisplayName("허용되지 않는 도메인 이미지 URL — InvalidImageUrlException")
+    void updateProfileImageUrl_invalidDomain_throwsInvalidImageUrlException() {
+        String externalUrl = "https://attacker.com/img.jpg";
+        when(s3ImageValidationPort.isOwnedUrl(externalUrl)).thenReturn(false);
+
+        assertThrows(InvalidImageUrlException.class,
+                () -> artistMemberService.updateProfileImageUrl(
+                        1L, externalUrl, ACTOR_ID, CLIENT_IP, TRACE_ID));
+
+        verify(artistMemberRepository, never()).findById(anyLong());
+        verify(artistMemberRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 멤버 이미지 URL 저장 — ArtistMemberNotFoundException")
+    void updateProfileImageUrl_memberNotFound_throwsNotFoundException() {
+        String validUrl = "https://s3.fandrops-bucket.amazonaws.com/uploads/profile/img.jpg";
+        when(s3ImageValidationPort.isOwnedUrl(validUrl)).thenReturn(true);
+        when(artistMemberRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThrows(ArtistMemberNotFoundException.class,
+                () -> artistMemberService.updateProfileImageUrl(
+                        99L, validUrl, ACTOR_ID, CLIENT_IP, TRACE_ID));
+
+        verify(artistMemberRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("타 Agency 소속 멤버 이미지 URL 저장 — ArtistMemberNotFoundException (소유권 불일치)")
+    void updateProfileImageUrl_wrongAgency_throwsNotFoundException() {
+        String validUrl = "https://s3.fandrops-bucket.amazonaws.com/uploads/profile/img.jpg";
+        ArtistMember otherMember = ArtistMember.builder()
+                .id(1L).artistId(2L).loginId("hani").passwordHash("hash").memberName("하니").build();
+        ArtistProfile otherProfile = ArtistProfile.builder()
+                .id(2L).agencyId(99L).name("타 소속").build();
+        when(s3ImageValidationPort.isOwnedUrl(validUrl)).thenReturn(true);
+        when(artistMemberRepository.findById(1L)).thenReturn(Optional.of(otherMember));
+        when(artistProfileRepository.findById(2L)).thenReturn(Optional.of(otherProfile));
+
+        assertThrows(ArtistMemberNotFoundException.class,
+                () -> artistMemberService.updateProfileImageUrl(
+                        1L, validUrl, ACTOR_ID, CLIENT_IP, TRACE_ID));
 
         verify(artistMemberRepository, never()).save(any());
     }

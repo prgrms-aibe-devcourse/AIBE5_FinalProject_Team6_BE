@@ -22,13 +22,17 @@ public class S3ImageValidationAdapter implements S3ImageValidationPort {
     }
 
     @Override
+    public boolean isOwnedUrl(String imageUrl) {
+        if (imageUrl == null) return false;
+        return imageUrl.startsWith(baseUrl());
+    }
+
+    @Override
     public boolean imageExists(String imageUrl) {
-        String baseUrl = "https://%s.s3.%s.amazonaws.com/".formatted(
-                properties.getBucket(), properties.getRegion());
-        if (!imageUrl.startsWith(baseUrl)) {
+        if (!imageUrl.startsWith(baseUrl())) {
             return false; // 우리 버킷 외 URL은 유효하지 않은 배너 이미지 URL로 간주
         }
-        String key = imageUrl.substring(baseUrl.length());
+        String key = imageUrl.substring(baseUrl().length());
         try {
             s3Client.headObject(HeadObjectRequest.builder()
                     .bucket(properties.getBucket())
@@ -42,5 +46,9 @@ public class S3ImageValidationAdapter implements S3ImageValidationPort {
         } catch (SdkClientException e) {
             throw new S3OperationException("S3 이미지 확인 실패 (네트워크/자격증명 오류)", e);
         }
+    }
+
+    private String baseUrl() {
+        return "https://%s.s3.%s.amazonaws.com/".formatted(properties.getBucket(), properties.getRegion());
     }
 }
