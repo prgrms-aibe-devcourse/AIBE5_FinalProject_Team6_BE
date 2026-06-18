@@ -47,7 +47,12 @@ if [ "$HEALTH" != "UP" ]; then
 fi
 echo "✅ 헬스체크 통과: $NEW_SLOT (:$NEW_PORT)"
 
-# ── 5. Nginx upstream 전환 ───────────────────────────────────
+# ── 5. Nginx 설정 파일 동기화 ────────────────────────────────
+aws s3 cp "s3://$S3_BUCKET/deploy/nginx/fandrops-upstream.conf" /etc/nginx/conf.d/fandrops-upstream.conf
+aws s3 cp "s3://$S3_BUCKET/deploy/nginx/fandrops-location.conf" /etc/nginx/default.d/fandrops-location.conf
+echo "✅ Nginx 설정 파일 동기화 완료"
+
+# ── 6. Nginx upstream 전환 ───────────────────────────────────
 cat > "$NGINX_ACTIVE_CONF" << EOF
 upstream fandrops_backend {
     server 127.0.0.1:$NEW_PORT;
@@ -68,10 +73,10 @@ ROLLBACK
 systemctl reload nginx
 echo "✅ Nginx → :$NEW_PORT ($NEW_SLOT)"
 
-# ── 6. 구 슬롯 Graceful Shutdown ────────────────────────────
+# ── 7. 구 슬롯 Graceful Shutdown ────────────────────────────
 systemctl stop "fandrops-$OLD_SLOT" || true
 echo "✅ 구 슬롯 종료: $OLD_SLOT (:$OLD_PORT)"
 
-# ── 7. 슬롯 기록 갱신 ───────────────────────────────────────
+# ── 8. 슬롯 기록 갱신 ───────────────────────────────────────
 echo "$NEW_SLOT" > "$ACTIVE_SLOT_FILE"
 echo "✅ 배포 완료. Active: $NEW_SLOT (:$NEW_PORT)"
