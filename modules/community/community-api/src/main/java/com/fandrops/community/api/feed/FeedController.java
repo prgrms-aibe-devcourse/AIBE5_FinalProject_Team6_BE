@@ -69,6 +69,33 @@ public class FeedController extends CommunityControllerSupport {
         return ResponseEntity.ok(ApiResponse.ok(result, traceId()));
     }
 
+    // GET /api/v1/artists/{artistId}/feeds/{feedId} — 피드 단건 상세 조회
+    @GetMapping("/{feedId}")
+    public ResponseEntity<ApiResponse<FeedResult>> getFeed(
+            @PathVariable Long artistId,
+            @PathVariable Long feedId,
+            Authentication authentication,
+            @RequestHeader(value = "X-Fan-Id", required = false) Long fanIdHeader,
+            @RequestHeader(value = "X-Artist-Member-Id", required = false) Long artistMemberIdHeader) {
+
+        Long viewerFanId = (fanIdHeader != null && isLocalProfile()) ? fanIdHeader : null;
+        Long viewerArtistMemberId = (artistMemberIdHeader != null && isLocalProfile()) ? artistMemberIdHeader : null;
+        if (viewerFanId == null && viewerArtistMemberId == null
+                && authentication != null && authentication.isAuthenticated()
+                && !"anonymousUser".equals(authentication.getPrincipal())) {
+            if (hasArtistOrAgencyRole(authentication)) {
+                viewerArtistMemberId = Long.parseLong(authentication.getName());
+            } else if (hasFanRole(authentication)) {
+                viewerFanId = Long.parseLong(authentication.getName());
+            } else {
+                throw new IllegalStateException("지원하지 않는 role: " + authentication.getAuthorities());
+            }
+        }
+
+        FeedResult result = feedService.getFeed(feedId, viewerFanId, viewerArtistMemberId);
+        return ResponseEntity.ok(ApiResponse.ok(result, traceId()));
+    }
+
     // DELETE /api/v1/artists/{artistId}/feeds/{feedId} — 피드 삭제 (작성자 아티스트 멤버만)
     @DeleteMapping("/{feedId}")
     public ResponseEntity<Void> deleteFeed(
