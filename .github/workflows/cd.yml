@@ -50,6 +50,13 @@ jobs:
           aws s3 cp .github/scripts/bluegreen-deploy.sh \
             s3://${{ secrets.S3_BUCKET }}/deploy/bluegreen-deploy.sh
 
+      - name: Nginx 설정 → S3 업로드
+        run: |
+          aws s3 cp nginx/fandrops-upstream.conf \
+            s3://${{ secrets.S3_BUCKET }}/deploy/nginx/fandrops-upstream.conf
+          aws s3 cp nginx/fandrops-location.conf \
+            s3://${{ secrets.S3_BUCKET }}/deploy/nginx/fandrops-location.conf
+
       - name: Blue/Green 배포 (SSM RunCommand)
         run: |
           BUCKET="${{ secrets.S3_BUCKET }}"

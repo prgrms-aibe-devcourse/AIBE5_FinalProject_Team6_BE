@@ -774,3 +774,97 @@ curl -s -X POST http://localhost:8090/__admin/mappings \
 UPDATE inventory SET available_qty=200, reserved_qty=0, total_qty=200, version=0 WHERE product_id=1;
 ```
 **교훈**: inventory reset SQL은 항상 `available_qty + reserved_qty = total_qty` 불변식을 유지해야 함.
+
+---
+
+## 트러블슈팅 이력 (2026-06-18) — Actions runner 첫 실행
+
+### 8. IAM S3 GetObject 권한 누락 → seed 파일 다운로드 403
+
+**현상**: Actions runner에서 `aws s3 cp s3://<BUCKET>/k6/tokens.csv` 실행 시 `An error occurred (403) Forbidden`.  
+**원인**: `fandrops-github-actions-role`에 `k6/*` prefix에 대한 `s3:GetObject` 권한 없음. 기존 정책은 `deploy/*`만 허용.  
+**해결**: IAM 인라인 정책 `fandrops-k6-seed-policy` 추가.
+```json
+{
+  "Effect": "Allow",
+  "Action": "s3:GetObject",
+  "Resource": "arn:aws:s3:::<BUCKET>/k6/*"
+}
+```
+
+---
+
+### 9. Nginx 502 Bad Gateway — `proxy_pass` 포트 하드코딩
+
+**현상**: k6 모든 요청 502 반환. `curl http://localhost/api/v1/...` → 502.  
+**원인**: `/etc/nginx/default.d/fandrops-location.conf`에 `proxy_pass http://localhost:8080` 하드코딩. CD 배포 시 active 슬롯이 green(:8082)으로 전환되었으나 location.conf는 8080 그대로 유지.  
+**진단**: `cat /etc/nginx/fandrops-active.conf` → `server 127.0.0.1:8082` (정상), `cat /etc/nginx/default.d/fandrops-location.conf` → `localhost:8080` (하드코딩 확인).  
+**임시 해결**: `sudo sed -i 's/localhost:8080/localhost:8082/g' /etc/nginx/default.d/fandrops-location.conf && sudo nginx -s reload`  
+**근본 해결**: CD 파이프라인에 nginx 설정 파일 동기화 단계 추가 (트러블슈팅 12 참고).
+
+---
+
+### 10. Nginx `"upstream" directive is not allowed here`
+
+**현상**: `sudo nginx -t` → `"upstream" directive is not allowed here in /etc/nginx/default.d/fandrops-location.conf:1`.  
+**원인**: `fandrops-location.conf` 첫 줄의 `include /etc/nginx/fandrops-active.conf`가 `default.d/`(server context)에서 로드됨. `fandrops-active.conf`의 `upstream` 블록은 `http` context에서만 허용.  
+**해결**:
+1. `/etc/nginx/conf.d/fandrops-upstream.conf` 신규 생성 (http context) — `include` + zone 정의 포함
+2. `/etc/nginx/default.d/fandrops-location.conf`에서 `include` 줄 제거
+3. repo `nginx/fandrops-location.conf`도 동일하게 수정
+
+```nginx
+# /etc/nginx/conf.d/fandrops-upstream.conf
+include /etc/nginx/fandrops-active.conf;
+limit_req_zone  $binary_remote_addr zone=fandrops_order:10m   rate=5r/s;
+...
+```
+
+---
+
+### 11. `zero size shared memory zone "fandrops_order"`
+
+**현상**: nginx -t → `nginx: [emerg] zero size shared memory zone "fandrops_order"`.  
+**원인**: `nginx/fandrops-zones.conf`(repo)가 한 번도 EC2에 배포된 적 없음. `limit_req zone=fandrops_order` 지시어는 있으나 `limit_req_zone` 정의가 없어 크기가 0.  
+**해결**: 트러블슈팅 10에서 생성한 `conf.d/fandrops-upstream.conf`에 zone 정의 포함. nginx -t 통과.
+
+---
+
+### 12. CD 파이프라인 nginx 설정 파일 drift
+
+**현상**: CD 배포 후 nginx 설정이 repo와 달라 수동 수정 필요. 매 배포 시 재발 가능.  
+**원인**: `bluegreen-deploy.sh`가 `fandrops-active.conf`(포트)만 갱신. `fandrops-location.conf`·`fandrops-upstream.conf`는 배포 대상에 없어 EC2 설정이 repo와 diverge.  
+**해결**:
+- `nginx/fandrops-upstream.conf` 신규 추가
+- `nginx/fandrops-location.conf`에서 `include` 줄 제거
+- `cd.yml`: nginx 설정 파일 S3 업로드 단계 추가
+- `bluegreen-deploy.sh`: step 5에 S3 → EC2 nginx 동기화 추가
+
+이후 배포마다 nginx 설정이 repo 기준으로 자동 동기화됨.
+
+---
+
+### 13. JWT 403 — tokens.csv 서명 secret 불일치
+
+**현상**: k6 100% 403 응답. 응답 body 없음(Spring Security filter 단에서 차단).  
+**원인**: S3의 `tokens.csv`가 이전 테스트용 secret으로 서명됨. 앱 서버는 실제 운영 `JWT_SECRET`으로 검증 → 서명 불일치 → 403.  
+**진단 과정**:
+1. `curl .../actuator/health` → 200 (앱 정상)
+2. 인증 없는 공개 엔드포인트 → 200 (Nginx 정상)
+3. Bearer 토큰 포함 요청 → 403, body 없음 → JWT 검증 실패 확인
+4. EC2 `/etc/fandrops/fandrops-prod.conf`에서 `JWT_SECRET` 확인 → tokens.csv 서명 secret과 불일치 확인
+5. 올바른 secret으로 fan_id 1~2100 JWT 재생성 → S3 재업로드 → 정상
+
+> ⚠️ `JWT_SECRET`은 `/etc/fandrops/fandrops-prod.conf`에만 보관. 코드·커밋에 절대 기록 금지.
+
+**tokens.csv 만료 일정**: 7일 유효기간 → **2026-06-25까지** 재생성 필요.
+
+---
+
+### 14. k6 exit code 99 → Actions job 실패 표시
+
+**현상**: k6 p(95)=216ms > threshold 120ms → exit 99 → Actions job 빨간불. 인프라 정상인데 전체 실패처럼 보임.  
+**원인**: k6 threshold 미달 시 exit 99 반환. GitHub Actions는 exit 0 이외를 job 실패로 처리.  
+**해결**: `run-k6.yml` k6 실행 단계에 exit code 분기 추가.
+- exit 99: job 성공 + `::warning::` 배너 (SLO 미달 경고)
+- 그 외 non-zero: job 실패 (실제 오류)
