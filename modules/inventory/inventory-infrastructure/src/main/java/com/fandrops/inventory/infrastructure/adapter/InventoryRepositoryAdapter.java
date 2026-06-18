@@ -1,6 +1,7 @@
 package com.fandrops.inventory.infrastructure.adapter;
 
 import com.fandrops.inventory.domain.Inventory;
+import com.fandrops.inventory.domain.port.InventoryReadRepository;
 import com.fandrops.inventory.domain.port.InventoryRepository;
 import com.fandrops.inventory.infrastructure.persistence.InventoryJpaEntity;
 import com.fandrops.inventory.infrastructure.persistence.InventoryJpaRepository;
@@ -10,7 +11,7 @@ import java.util.List;
 import java.util.Optional;
 
 @RequiredArgsConstructor
-public class InventoryRepositoryAdapter implements InventoryRepository {
+public class InventoryRepositoryAdapter implements InventoryReadRepository, InventoryRepository {
 
     private final InventoryJpaRepository jpaRepository;
 

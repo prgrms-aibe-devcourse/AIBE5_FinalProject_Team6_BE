@@ -14,6 +14,7 @@ import com.fandrops.inventory.domain.exception.InvalidInventoryStateException;
 import com.fandrops.inventory.domain.exception.OutOfStockException;
 import com.fandrops.inventory.domain.exception.ReserveFailedException;
 import com.fandrops.inventory.domain.port.InventoryHistoryRepository;
+import com.fandrops.inventory.domain.port.InventoryReadRepository;
 import com.fandrops.inventory.domain.port.InventoryRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
@@ -22,11 +23,14 @@ import org.springframework.transaction.annotation.Transactional;
 /** 재고 예약·확정·복원·증가를 단일 TX에서 처리하는 application 서비스. */
 public class InventoryCommandService {
 
+    private final InventoryReadRepository inventoryReadRepository;
     private final InventoryRepository inventoryRepository;
     private final InventoryHistoryRepository inventoryHistoryRepository;
 
-    public InventoryCommandService(InventoryRepository inventoryRepository,
+    public InventoryCommandService(InventoryReadRepository inventoryReadRepository,
+                                   InventoryRepository inventoryRepository,
                                    InventoryHistoryRepository inventoryHistoryRepository) {
+        this.inventoryReadRepository = inventoryReadRepository;
         this.inventoryRepository = inventoryRepository;
         this.inventoryHistoryRepository = inventoryHistoryRepository;
     }
@@ -102,7 +106,7 @@ public class InventoryCommandService {
 
     @Transactional(readOnly = true)
     public Map<Long, Inventory> getInventoryByProductIds(List<Long> productIds) {
-        return inventoryRepository.findByProductIdIn(productIds).stream()
+        return inventoryReadRepository.findByProductIdIn(productIds).stream()
                 .collect(Collectors.toMap(Inventory::getProductId, i -> i));
     }
 
@@ -127,7 +131,7 @@ public class InventoryCommandService {
     }
 
     private Inventory findByProductId(Long productId) {
-        return inventoryRepository.findByProductId(productId)
+        return inventoryReadRepository.findByProductId(productId)
                 .orElseThrow(() -> new InventoryNotFoundException(productId));
     }
 }
