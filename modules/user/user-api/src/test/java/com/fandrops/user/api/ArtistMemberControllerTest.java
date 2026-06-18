@@ -6,6 +6,8 @@ import com.fandrops.user.api.dto.UpdateProfileImageRequest;
 import com.fandrops.user.api.dto.UploadPresignedUrlRequest;
 import com.fandrops.user.application.dto.PresignedUploadResult;
 import com.fandrops.user.application.exception.ArtistMemberNotFoundException;
+import com.fandrops.user.application.exception.InvalidContentTypeException;
+import com.fandrops.user.application.exception.InvalidImageUrlException;
 import com.fandrops.user.application.service.ArtistMemberService;
 import com.fandrops.user.domain.ArtistMember;
 import jakarta.servlet.http.HttpServletRequest;
@@ -198,6 +200,20 @@ class ArtistMemberControllerTest {
                         authentication, httpRequest));
     }
 
+    @Test
+    @DisplayName("허용되지 않은 contentType Presigned URL 발급 → InvalidContentTypeException 전파")
+    void generateProfileImagePresignedUrl_invalidContentType_propagatesException() {
+        givenAuthenticated();
+        when(artistMemberService.generateProfileImagePresignedUrl(
+                eq(1L), anyLong(), anyString(), anyLong(), anyString(), anyString()))
+                .thenThrow(new InvalidContentTypeException("application/javascript"));
+
+        assertThrows(InvalidContentTypeException.class,
+                () -> controller.generateProfileImagePresignedUrl(
+                        1L, new UploadPresignedUrlRequest("application/javascript", 1024L),
+                        authentication, httpRequest));
+    }
+
     // ── Profile Image URL 확정 저장 ──────────────────────────────────────────
 
     @Test
@@ -231,6 +247,20 @@ class ArtistMemberControllerTest {
         assertThrows(ArtistMemberNotFoundException.class,
                 () -> controller.updateProfileImage(
                         99L, new UpdateProfileImageRequest("https://cdn.fandrops.com/img.jpg"),
+                        authentication, httpRequest));
+    }
+
+    @Test
+    @DisplayName("허용되지 않는 도메인 URL 이미지 저장 → InvalidImageUrlException 전파")
+    void updateProfileImage_invalidUrl_propagatesInvalidImageUrlException() {
+        givenAuthenticated();
+        when(artistMemberService.updateProfileImageUrl(
+                eq(1L), anyString(), anyLong(), anyString(), anyString()))
+                .thenThrow(new InvalidImageUrlException("https://attacker.com/img.jpg"));
+
+        assertThrows(InvalidImageUrlException.class,
+                () -> controller.updateProfileImage(
+                        1L, new UpdateProfileImageRequest("https://attacker.com/img.jpg"),
                         authentication, httpRequest));
     }
 }
