@@ -1,6 +1,7 @@
 package com.fandrops.inventory.infrastructure.config;
 
 import com.fandrops.inventory.application.InventoryCommandService;
+import com.fandrops.inventory.application.InventoryQueryService;
 import com.fandrops.inventory.domain.port.InventoryHistoryRepository;
 import com.fandrops.inventory.domain.port.InventoryReadRepository;
 import com.fandrops.inventory.domain.port.InventoryRepository;
@@ -78,6 +79,11 @@ public class InventoryConfig {
     public InventoryHistoryRepositoryAdapter inventoryHistoryRepositoryAdapter(
             InventoryHistoryJpaRepository jpaRepository) {
         return new InventoryHistoryRepositoryAdapter(jpaRepository);
+    }
+
+    @Bean
+    public InventoryQueryService inventoryQueryService(InventoryHistoryRepository inventoryHistoryRepository) {
+        return new InventoryQueryService(inventoryHistoryRepository);
     }
 
     @Bean

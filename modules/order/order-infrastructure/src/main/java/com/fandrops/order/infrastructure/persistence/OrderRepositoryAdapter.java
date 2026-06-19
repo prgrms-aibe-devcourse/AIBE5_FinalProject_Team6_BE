@@ -57,6 +57,17 @@ public class OrderRepositoryAdapter implements OrderRepository {
                 .toList();
     }
 
+    @Override
+    public List<Order> findByAgency(Long agencyId, Long artistId, Long cursor, int size) {
+        List<Long> ids = jpaRepository.findOrderIdsByAgency(agencyId, artistId, cursor, size);
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        return jpaRepository.findByIdInOrderByIdDesc(ids).stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
     private Order toDomain(OrderEntity entity) {
         List<OrderItem> items = entity.getItems().stream()
                 .map(i -> new OrderItem(i.getProductId(), i.getQuantity(), i.getPrice()))

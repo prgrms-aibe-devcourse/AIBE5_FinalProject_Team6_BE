@@ -106,6 +106,16 @@ public class OrderService {
         return new OrderListResponse(items, nextCursor);
     }
 
+    @Transactional(readOnly = true)
+    public OrderListResponse getAgencyOrders(Long agencyId, Long artistId, Long cursor, int size) {
+        List<Order> orders = orderRepository.findByAgency(agencyId, artistId, cursor, size);
+        List<OrderListItemResponse> items = orders.stream()
+                .map(OrderListItemResponse::from)
+                .toList();
+        Long nextCursor = orders.size() == size ? orders.get(orders.size() - 1).getId() : null;
+        return new OrderListResponse(items, nextCursor);
+    }
+
     @Transactional
     public void markAsFailed(Long orderId) {
         Order order = orderRepository.findById(orderId)

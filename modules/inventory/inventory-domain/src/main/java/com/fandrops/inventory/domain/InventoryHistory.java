@@ -48,4 +48,11 @@ public class InventoryHistory {
         return of(inventoryId, changeType, deltaQty, qtyBefore, qtyAfter,
                 referenceId, refType, LocalDateTime.now());
     }
+
+    public static InventoryHistory reconstitute(Long id, Long inventoryId, InventoryChangeType changeType,
+                                                int deltaQty, int qtyBefore, int qtyAfter,
+                                                Long referenceId, InventoryRefType refType, LocalDateTime changedAt) {
+        return new InventoryHistory(id, inventoryId, changeType, deltaQty, qtyBefore, qtyAfter,
+                referenceId, refType, changedAt);
+    }
 }

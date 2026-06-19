@@ -41,6 +41,7 @@ Gradle 모듈·담당자: [architecture.md § 도메인 오너십](../architectu
 | F06-01~03 | `/payments/*`, webhook | `payment` |
 | F07-01~02 | `/fans/me/artists`, `/activities`, `/orders`, `/payments` | `community` · `order` · `payment` |
 | F08-02 | `/admin/monitoring` | platform |
+| FE#20 | `GET /agency/orders` (Agency 주문 목록), `GET /agency/inventory/history` (재고 이력) | `order` · `inventory` |
 
 ---
 
@@ -64,7 +65,7 @@ Gradle 모듈·담당자: [architecture.md § 도메인 오너십](../architectu
 | `/auth/*`, `/fans/me` (계정), `/b2b/apply`, `/admin/artist-applications` | `user` | 표지민 |
 | `/queue/*` | `payment` | 장성재 |
 | `/artists/*`, `/spaces/*`, `/feeds/*`, `/comments/*`, `/lives/*`, 행사·스케줄·출석·투표 | `community` | 정환철 |
-| `/products/*`, `/cart/*`, `/orders/*`, `/fans/me/orders` | `order` · `inventory` | 형성빈 |
+| `/products/*`, `/cart/*`, `/orders/*`, `/fans/me/orders`, `/agency/orders`, `/agency/inventory/history` | `order` · `inventory` | 형성빈 |
 | `/banners/main`, `/admin/main-banners` | `user` | 표지민 (F04-03) |
 | `/payments/*`, `/fans/me/payments/*` | `payment` | 장성재 |
 | `/internal/inventory/*` | `inventory` (포트) | 형성빈 |
@@ -194,6 +195,56 @@ Agency 계정이 자신의 메인 배너를 직접 관리. `banner.agency_id = �
 1. `POST /agency/uploads` → `presignedUrl`, `imageUrl`
 2. 클라이언트가 `presignedUrl`로 직접 S3 PUT
 3. `POST /agency/banners { imageUrl: ... }` ← PUT 완료 후에만 유효
+
+---
+
+## Agency Order & Inventory (FE #20)
+
+`order-api` · `inventory-api` · 담당: **형성빈**  
+AgencyApp Order Management / Inventory History 화면용. Agency JWT(`sub` = agencyId)로 소유권 scoping. MVP F-ID 표 미등재 항목이나 FE 요청(AIBE5_FinalProject_Team6_FE #20)으로 추가.
+
+| Method | Endpoint | Auth | 설명 | Query Params | Response |
+| --- | --- | --- | --- | --- | --- |
+| GET | `/agency/orders` | Agency / Admin | 소속 아티스트 주문 목록 (cursor-based) | `artistId`(선택), `cursor`(선택, 이전 페이지 마지막 orderId), `size`(기본 20, 최대 100) | `{ items: [OrderListItem], nextCursor }` |
+| GET | `/agency/inventory/history` | Agency / Admin | 소속 아티스트 재고 이력 (cursor-based) | `artistId`(선택), `productId`(선택), `cursor`(선택, 이전 페이지 마지막 historyId), `size`(기본 20, 최대 100) | `{ items: [InventoryHistoryItem], nextCursor }` |
+
+**`OrderListItem` 필드**
+
+| 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| `orderId` | Long | 주문 ID (cursor key) |
+| `status` | String | 주문 상태 (`RESERVED` / `PAID` / `COMPLETED` / `CANCELLED` 등) |
+| `totalAmount` | int | 결제 금액 |
+| `createdAt` | ISO 8601 | 주문 생성 일시 |
+
+**`InventoryHistoryItem` 필드**
+
+| 필드 | 타입 | 설명 |
+| --- | --- | --- |
+| `historyId` | Long | 이력 ID (cursor key) |
+| `inventoryId` | Long | 재고 ID |
+| `changeType` | String | `RESERVE` / `RELEASE` / `DECREASE` / `INCREASE` / `COMPENSATE` |
+| `deltaQty` | int | 변경 수량 |
+| `qtyBefore` | int | 변경 전 available_qty |
+| `qtyAfter` | int | 변경 후 available_qty |
+| `referenceId` | Long? | 연관 주문 ID 등 |
+| `refType` | String | `ORDER` 등 |
+| `changedAt` | ISO 8601 | 변경 일시 |
+
+**소유권 필터링 구조**
+
+`orders → order_item → product → artist_profile.agency_id` / `inventory_history → inventory → product → artist_profile.agency_id` — native SQL 크로스 모듈 조인 (`artist_profile`은 user 인프라 모듈 소유).
+
+**인증**
+
+| 상황 | 처리 |
+| --- | --- |
+| `profile=local` + `X-Agency-Id` 헤더 | 헤더값 사용 (개발 편의) |
+| 그 외 | JWT `sub` → agencyId |
+| 미인증 / 토큰 없음 | `400` `INVALID_REQUEST` |
+
+**페이지네이션**  
+최신순(`id DESC`) cursor-based. `nextCursor`가 `null`이면 마지막 페이지. 다음 페이지 요청: `?cursor={nextCursor}&size={size}`.
 
 ---
 

@@ -20,5 +20,21 @@ public interface OrderJpaRepository extends JpaRepository<OrderEntity, Long> {
     @Query("SELECT o FROM OrderEntity o WHERE o.fanId = :fanId AND (:cursor IS NULL OR o.id < :cursor) ORDER BY o.id DESC LIMIT :size")
     List<OrderEntity> findByFanIdCursor(@Param("fanId") Long fanId, @Param("cursor") Long cursor, @Param("size") int size);
 
+    @Query(value = """
+            SELECT DISTINCT o.id FROM orders o
+            JOIN order_item oi ON oi.order_id = o.id
+            JOIN product p ON p.id = oi.product_id
+            JOIN artist_profile ap ON ap.id = p.artist_id
+            WHERE ap.agency_id = :agencyId
+              AND (:artistId IS NULL OR p.artist_id = :artistId)
+              AND (:cursor IS NULL OR o.id < :cursor)
+            ORDER BY o.id DESC
+            LIMIT :size
+            """, nativeQuery = true)
+    List<Long> findOrderIdsByAgency(@Param("agencyId") Long agencyId, @Param("artistId") Long artistId,
+                                    @Param("cursor") Long cursor, @Param("size") int size);
+
+    List<OrderEntity> findByIdInOrderByIdDesc(List<Long> ids);
+
     long countByStatus(OrderStatus status);
 }
