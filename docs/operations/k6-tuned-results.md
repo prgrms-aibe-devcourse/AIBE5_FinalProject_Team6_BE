@@ -384,7 +384,8 @@ GitHub Actions → **Run k6 Load Test** → `scenario: 05` → `confirm: yes`
 - **정환철**: `GET /api/v1/artists/{id}/feeds` SecurityConfig에서 ROLE_FAN 허용 추가 필요.
 - **장성재**: Wiremock stub에 임의 tossPaymentKey 패턴(REGEX) 추가 필요.
 - **지영재**: `06_workload_model.js` payment check 조건에 429 허용 추가 (`r.status === 200 || r.status === 201 || r.status === 429`). queue join에도 rate limit 429 발생 여부 확인 후 필요 시 동일 수정.
-- 블로커 2건 수정 + check 조건 수정 후 재측정 예정.
+- **형성빈**: `POST /api/v1/orders` (15%) 구간에서 `vuToken = null`로 인해 실제 HTTP 요청이 발생하지 않음. 재측정 전 vuToken 초기화 로직 추가 또는 tokens.csv 토큰으로 대체 필요.
+- 블로커 2건 + check 조건 + vuToken 초기화 수정 후 재측정 예정.
 
 ### 피드백 반영 내용 (전체)
 
