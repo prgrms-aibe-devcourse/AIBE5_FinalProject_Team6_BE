@@ -705,17 +705,62 @@ done
 
 ### 결과 (베이스라인)
 
+> **실행일**: 2026-06-19  
+> **결과**: ❌ k6 exit 99 (threshold failure) — 베이스라인 미확정, 블로커 2건
+
 | 지표 | 결과 | 목표 | 상태 |
 |---|---|---|---|
-| Write P95 | — | < 300ms | 미측정 |
-| Read P95 | — | < 120ms | 미측정 |
-| 에러율 | — | < 0.1% | 미측정 |
-| 오버셀 | — | 0건 | 미측정 |
-| 처리량 | — | — | — |
+| Write P95 | 측정 불가 | < 300ms | ❌ 블로커로 의미없음 |
+| Read P95 | 측정 불가 | < 120ms | ❌ 블로커로 의미없음 |
+| 에러율 | ~65% | < 0.1% | ❌ 임계 초과 |
+| 오버셀 | 미확인 | 0건 | — |
+| 총 iterations | 544,907 | — | — |
+
+**워크로드 실제 분포** (Prometheus `max_over_time[2h]`)
+
+| 구간 | 카운터 | 비율 |
+|---|---|---|
+| wl_feed | 326,464 | 60% ✅ |
+| wl_queue | 109,494 | 20% ✅ |
+| wl_order | 81,632 | 15% ✅ |
+| wl_payment | 27,317 | 5% ✅ |
+
+### 블로커 분석
+
+#### 블로커 1: Feed 403 — ROLE_FAN 권한 없음 (담당: 정환철)
+
+```
+GET /api/v1/artists/1/feeds
+→ 403 {"code":"FORBIDDEN","message":"지원하지 않는 role: [ROLE_FAN]"}
+```
+
+- **영향**: 전체 트래픽 60%가 100% 실패 → 에러율 65%+
+- **원인**: `SecurityConfig`에서 `/api/v1/artists/*/feeds` 엔드포인트에 `ROLE_FAN` 접근 권한이 누락됨
+- **확인**: `curl -H "Authorization: Bearer <fan_token>" https://api.fandrops.site/api/v1/artists/1/feeds` → 403
+- **수정 필요**: SecurityConfig 또는 해당 컨트롤러의 `@PreAuthorize`에 `ROLE_FAN` 허용 추가
+
+#### 블로커 2: Payment 400 — Wiremock 스텁 미매칭 (담당: 장성재)
+
+```
+POST /api/v1/payments/toss/confirm  body: tossPaymentKey="wl-{orderId}-{iter}"
+→ 400 Bad Request (Wiremock stub miss)
+```
+
+- **원인**: s06 결제 구간이 생성하는 `tossPaymentKey` 형식(`wl-N-N`)이 Wiremock 등록 스텁과 불일치
+- **수정 필요**: Wiremock stub에 임의 `tossPaymentKey` 패턴 허용 (`"matchingType": "REGEX"` 또는 wildcard stub 추가)
+
+#### 참고: Payment 429 — Rate Limiting (정상 동작)
+
+- `POST /api/v1/payments/toss/confirm` → 429 Too Many Requests
+- Rate limiter 정상 작동. s06에서는 check에서 200/201만 허용하므로 429도 실패로 집계됨
+- s06 시나리오 check 조건 수정 필요: `r.status === 200 || r.status === 201 || r.status === 429`
 
 ### 오너 피드백 (전체)
 
-> 측정 후 작성
+> **정환철**: `GET /api/v1/artists/{id}/feeds` SecurityConfig에서 ROLE_FAN 허용 추가 필요.  
+> **장성재**: Wiremock stub에 임의 tossPaymentKey 패턴(REGEX) 추가 필요.  
+> **지영재**: `06_workload_model.js` payment check 조건에 429 허용 추가 (`r.status === 200 || r.status === 201 || r.status === 429`). queue join에도 rate limit 429 발생 여부 확인 후 필요 시 동일 수정.  
+> 블로커 2건 수정 + check 조건 수정 후 재측정 예정.
 
 ---
 
@@ -728,4 +773,4 @@ done
 | 03 결제 확인 | 1.54s | 0.00% | — | ✅ SLO 달성 |
 | 04 드롭스 스파이크 | 266.24ms (전체) / 640ms (성공) | 99.98%\* | 0건 ✅ | ✅ P95 SLO 달성 |
 | 05 SSE 대기열 | 213ms (p95) | 100%\* | — | ❌ 에러율 100%, retryable:true 누락 |
-| 06 통합 워크로드 | — | — | — | 미측정 |
+| 06 통합 워크로드 | 측정 불가 | ~65%❌ | — | ❌ 블로커 2건: feed ROLE_FAN 403, Wiremock 400 |
