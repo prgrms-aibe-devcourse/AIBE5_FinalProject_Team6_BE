@@ -122,21 +122,6 @@ fandrops.queue.advance-batch-size=300
 fandrops.queue.scheduler.interval-ms=1000
 ```
 
-### 실행 명령어
-
-```bash
-cd /opt/fandrops/k6
-ACTIVE=$(cat /etc/fandrops/active-slot)
-PORT=$([ "$ACTIVE" = "blue" ] && echo 8081 || echo 8082)
-K6_PROMETHEUS_RW_TREND_STATS="p(95),p(99)" k6 run \
-  -e BASE_URL=http://localhost:$PORT \
-  -e FAN_POOL_SIZE=200 \
-  --out experimental-prometheus-rw \
-  scenarios/01_order_concurrency.js
-```
-
-> `K6_PROMETHEUS_RW_TREND_STATS="p(95),p(99)"` — Prometheus에 p95/p99 게이지 메트릭 기록. 미설정 시 p99만 내보냄.
-
 ### 사후 처리 (04 실행 전 필수)
 
 주문 성공 시 `access:ticket:1:{fanId}` 키가 삭제되므로, **04 실행 전에 반드시 Redis 재적재** 필요.
@@ -224,17 +209,6 @@ Read SLO(P95 < 120ms)는 쓰기 SLO(300ms)보다 엄격하다. 이 엔드포인�
 - 50 VU가 2분간 `/api/v1/artists/1/feeds` 지속 호출
 - VU별 JWT 토큰은 `tokens.csv`에서 순환 분배
 - 응답에 `data.items` 배열 포함 여부 체크
-
-### 실행 명령어
-
-```bash
-cd /opt/fandrops/k6
-ACTIVE=$(cat /etc/fandrops/active-slot)
-PORT=$([ "$ACTIVE" = "blue" ] && echo 8081 || echo 8082)
-k6 run -e BASE_URL=http://localhost:$PORT \
-  --out experimental-prometheus-rw \
-  scenarios/02_feed_read.js
-```
 
 ### 사후 처리
 
@@ -327,18 +301,6 @@ TOSS_API_BASE_URL=http://localhost:8090
 
 # 3. DB: RESERVED 상태 주문 seed (fan_id=1~50, product_id=1, amount=15000)
 # seed/orders.json 파일 준비
-```
-
-### 실행 명령어
-
-```bash
-cd /opt/fandrops/k6
-ACTIVE=$(cat /etc/fandrops/active-slot)
-PORT=$([ "$ACTIVE" = "blue" ] && echo 8081 || echo 8082)
-k6 run -e BASE_URL=http://localhost:$PORT \
-  -e ORDERS_JSON="$(cat seed/orders.json)" \
-  --out experimental-prometheus-rw \
-  scenarios/03_payment_confirm.js
 ```
 
 ### 사후 처리 (재실행 시 필수)
@@ -438,17 +400,6 @@ done
 
 > ⚠️ **시나리오 05(SSE) 실행 후 시나리오 04를 실행하면 Redis 티켓이 UUID로 오염되어 전원 403 실패** — 반드시 04 먼저 실행. 상세: [이슈 #304](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/issues/304)
 
-### 실행 명령어
-
-```bash
-cd /opt/fandrops/k6
-ACTIVE=$(cat /etc/fandrops/active-slot)
-PORT=$([ "$ACTIVE" = "blue" ] && echo 8081 || echo 8082)
-K6_PROMETHEUS_RW_TREND_STATS="p(95),p(99)" k6 run -e BASE_URL=http://localhost:$PORT --out experimental-prometheus-rw scenarios/04_drop_spike.js
-```
-
-> `K6_PROMETHEUS_RW_TREND_STATS="p(95),p(99)"` — Prometheus에 p95/p99 게이지 메트릭 기록. 미설정 시 p99만 내보냄.
-
 ### 사후 처리 (06 실행 전 필수)
 
 04 완료 후 inventory와 Redis가 소진 상태. 06 실행 전 반드시 초기화.
@@ -547,15 +498,6 @@ sudo nginx -t && sudo nginx -s reload
 
 # JVM FD 한계 확인
 ulimit -n  # ≥ 8192 필요
-```
-
-### 실행 명령어
-
-```bash
-cd /opt/fandrops/k6
-ACTIVE=$(cat /etc/fandrops/active-slot)
-PORT=$([ "$ACTIVE" = "blue" ] && echo 8081 || echo 8082)
-K6_PROMETHEUS_RW_TREND_STATS="p(95),p(99)" k6 run -e BASE_URL=http://localhost:$PORT --out experimental-prometheus-rw scenarios/05_sse_queue.js
 ```
 
 ### 결과 (2026-06-17, 1회차 — **공식 베이스라인**)
@@ -661,20 +603,6 @@ done
 docker run -d --name wiremock -p 8090:8080 \
   -v $(pwd)/infra/k6/wiremock/mappings:/home/wiremock/mappings \
   wiremock/wiremock:3.3.1 --global-response-templating
-```
-
-### 실행 명령어
-
-```bash
-cd /opt/fandrops/k6
-ACTIVE=$(cat /etc/fandrops/active-slot)
-PORT=$([ "$ACTIVE" = "blue" ] && echo 8081 || echo 8082)
-k6 run -e BASE_URL=http://localhost:$PORT \
-  -e PRODUCT_ID=1 \
-  -e ARTIST_ID=1 \
-  -e ORDERS_JSON="$(cat seed/orders.json)" \
-  --out experimental-prometheus-rw \
-  scenarios/06_workload_model.js
 ```
 
 ### 사후 처리 (전체 테스트 완료 후)
