@@ -36,5 +36,34 @@ public interface OrderJpaRepository extends JpaRepository<OrderEntity, Long> {
 
     List<OrderEntity> findByIdInOrderByIdDesc(List<Long> ids);
 
+    @Query(value = """
+            SELECT
+                o.id                                                                AS orderId,
+                o.status                                                            AS status,
+                o.total_amount                                                      AS totalAmount,
+                o.created_at                                                        AS createdAt,
+                MAX(ap.id)                                                          AS artistId,
+                MAX(ap.name)                                                        AS artistName,
+                (SELECT p2.name FROM order_item oi2
+                 JOIN product p2 ON p2.id = oi2.product_id
+                 WHERE oi2.order_id = o.id
+                 ORDER BY oi2.id ASC LIMIT 1)                                       AS firstProductName,
+                COUNT(oi.id)                                                        AS itemCount
+            FROM orders o
+            JOIN order_item oi ON oi.order_id = o.id
+            JOIN product p ON p.id = oi.product_id
+            JOIN artist_profile ap ON ap.id = p.artist_id
+            WHERE ap.agency_id = :agencyId
+              AND (:artistId IS NULL OR p.artist_id = :artistId)
+              AND (:cursor IS NULL OR o.id < :cursor)
+            GROUP BY o.id, o.status, o.total_amount, o.created_at
+            ORDER BY o.id DESC
+            LIMIT :size
+            """, nativeQuery = true)
+    List<AgencyOrderSummaryRow> findAgencyOrderSummaryRows(@Param("agencyId") Long agencyId,
+                                                           @Param("artistId") Long artistId,
+                                                           @Param("cursor") Long cursor,
+                                                           @Param("size") int size);
+
     long countByStatus(OrderStatus status);
 }

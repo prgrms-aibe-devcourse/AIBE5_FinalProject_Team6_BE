@@ -2,7 +2,7 @@ package com.fandrops.inventory.application;
 
 import com.fandrops.inventory.application.dto.InventoryHistoryItem;
 import com.fandrops.inventory.application.dto.InventoryHistoryListResponse;
-import com.fandrops.inventory.domain.InventoryHistory;
+import com.fandrops.inventory.domain.InventoryHistorySummary;
 import com.fandrops.inventory.domain.port.InventoryHistoryRepository;
 import java.util.List;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,12 +18,12 @@ public class InventoryQueryService {
     @Transactional(readOnly = true)
     public InventoryHistoryListResponse getAgencyInventoryHistory(
             Long agencyId, Long artistId, Long productId, Long cursor, int size) {
-        List<InventoryHistory> histories =
-                inventoryHistoryRepository.findByAgency(agencyId, artistId, productId, cursor, size);
-        List<InventoryHistoryItem> items = histories.stream()
+        List<InventoryHistorySummary> summaries =
+                inventoryHistoryRepository.findAgencySummaries(agencyId, artistId, productId, cursor, size);
+        List<InventoryHistoryItem> items = summaries.stream()
                 .map(InventoryHistoryItem::from)
                 .toList();
-        Long nextCursor = histories.size() == size ? histories.get(histories.size() - 1).getId() : null;
+        Long nextCursor = summaries.size() == size ? summaries.get(summaries.size() - 1).id() : null;
         return new InventoryHistoryListResponse(items, nextCursor);
     }
 }

@@ -2,7 +2,7 @@ package com.fandrops.order.api;
 
 import com.fandrops.order.api.dto.ApiResponse;
 import com.fandrops.order.application.OrderService;
-import com.fandrops.order.application.dto.OrderListResponse;
+import com.fandrops.order.application.dto.AgencyOrderListResponse;
 import java.util.Arrays;
 import java.util.UUID;
 import org.slf4j.MDC;
@@ -31,7 +31,7 @@ public class AgencyOrderController {
     }
 
     @GetMapping("/orders")
-    public ResponseEntity<ApiResponse<OrderListResponse>> getAgencyOrders(
+    public ResponseEntity<ApiResponse<AgencyOrderListResponse>> getAgencyOrders(
             Authentication authentication,
             @RequestHeader(value = "X-Agency-Id", required = false) Long agencyIdHeader,
             @RequestParam(required = false) Long artistId,
@@ -41,7 +41,7 @@ public class AgencyOrderController {
         Long agencyId = resolveAgencyId(authentication, agencyIdHeader);
         int pageSize = Math.min(size, MAX_PAGE_SIZE);
         String traceId = MDC.get("traceId") != null ? MDC.get("traceId") : UUID.randomUUID().toString();
-        OrderListResponse response = orderService.getAgencyOrders(agencyId, artistId, cursor, pageSize);
+        AgencyOrderListResponse response = orderService.getAgencyOrders(agencyId, artistId, cursor, pageSize);
         return ResponseEntity.ok(ApiResponse.ok(response, traceId));
     }
 

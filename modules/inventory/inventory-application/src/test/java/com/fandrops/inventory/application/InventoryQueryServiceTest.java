@@ -2,7 +2,7 @@ package com.fandrops.inventory.application;
 
 import com.fandrops.inventory.application.dto.InventoryHistoryListResponse;
 import com.fandrops.inventory.domain.InventoryChangeType;
-import com.fandrops.inventory.domain.InventoryHistory;
+import com.fandrops.inventory.domain.InventoryHistorySummary;
 import com.fandrops.inventory.domain.InventoryRefType;
 import com.fandrops.inventory.domain.port.InventoryHistoryRepository;
 import org.junit.jupiter.api.DisplayName;
@@ -34,9 +34,10 @@ class InventoryQueryServiceTest {
     private static final Long ARTIST_ID = 10L;
     private static final Long PRODUCT_ID = 100L;
 
-    private InventoryHistory makeHistory(Long id) {
-        return InventoryHistory.reconstitute(id, 1L, InventoryChangeType.DECREASE,
-                1, 10, 9, 1L, InventoryRefType.ORDER, LocalDateTime.now());
+    private InventoryHistorySummary makeSummary(Long id) {
+        return new InventoryHistorySummary(id, 1L, InventoryChangeType.DECREASE,
+                1, 10, 9, 1L, InventoryRefType.ORDER, LocalDateTime.now(),
+                PRODUCT_ID, "테스트 상품");
     }
 
     @Nested
@@ -46,9 +47,9 @@ class InventoryQueryServiceTest {
         @Test
         @DisplayName("결과가 size와 같으면 nextCursor = 마지막 historyId")
         void returnsNextCursorWhenFullPage() {
-            List<InventoryHistory> histories = List.of(makeHistory(5L), makeHistory(3L), makeHistory(1L));
-            given(inventoryHistoryRepository.findByAgency(AGENCY_ID, ARTIST_ID, PRODUCT_ID, null, 3))
-                    .willReturn(histories);
+            List<InventoryHistorySummary> summaries = List.of(makeSummary(5L), makeSummary(3L), makeSummary(1L));
+            given(inventoryHistoryRepository.findAgencySummaries(AGENCY_ID, ARTIST_ID, PRODUCT_ID, null, 3))
+                    .willReturn(summaries);
 
             InventoryHistoryListResponse response =
                     sut.getAgencyInventoryHistory(AGENCY_ID, ARTIST_ID, PRODUCT_ID, null, 3);
@@ -60,9 +61,9 @@ class InventoryQueryServiceTest {
         @Test
         @DisplayName("결과가 size보다 작으면 nextCursor = null (마지막 페이지)")
         void returnsNullCursorWhenLastPage() {
-            List<InventoryHistory> histories = List.of(makeHistory(5L), makeHistory(3L));
-            given(inventoryHistoryRepository.findByAgency(AGENCY_ID, null, null, null, 3))
-                    .willReturn(histories);
+            List<InventoryHistorySummary> summaries = List.of(makeSummary(5L), makeSummary(3L));
+            given(inventoryHistoryRepository.findAgencySummaries(AGENCY_ID, null, null, null, 3))
+                    .willReturn(summaries);
 
             InventoryHistoryListResponse response =
                     sut.getAgencyInventoryHistory(AGENCY_ID, null, null, null, 3);
@@ -74,7 +75,7 @@ class InventoryQueryServiceTest {
         @Test
         @DisplayName("결과가 없으면 빈 items와 nextCursor = null")
         void returnsEmptyWhenNoResults() {
-            given(inventoryHistoryRepository.findByAgency(AGENCY_ID, ARTIST_ID, PRODUCT_ID, null, 20))
+            given(inventoryHistoryRepository.findAgencySummaries(AGENCY_ID, ARTIST_ID, PRODUCT_ID, null, 20))
                     .willReturn(List.of());
 
             InventoryHistoryListResponse response =
@@ -85,13 +86,14 @@ class InventoryQueryServiceTest {
         }
 
         @Test
-        @DisplayName("InventoryHistoryItem 필드가 도메인 객체로부터 올바르게 매핑된다")
+        @DisplayName("InventoryHistoryItem 필드가 InventoryHistorySummary로부터 올바르게 매핑된다")
         void itemFieldsMappedCorrectly() {
             LocalDateTime changedAt = LocalDateTime.of(2026, 6, 19, 12, 0, 0);
-            InventoryHistory history = InventoryHistory.reconstitute(
-                    7L, 2L, InventoryChangeType.RESERVE, 5, 100, 95, 99L, InventoryRefType.ORDER, changedAt);
-            given(inventoryHistoryRepository.findByAgency(AGENCY_ID, null, null, null, 20))
-                    .willReturn(List.of(history));
+            InventoryHistorySummary summary = new InventoryHistorySummary(
+                    7L, 2L, InventoryChangeType.RESERVE, 5, 100, 95,
+                    99L, InventoryRefType.ORDER, changedAt, 200L, "한정판 굿즈");
+            given(inventoryHistoryRepository.findAgencySummaries(AGENCY_ID, null, null, null, 20))
+                    .willReturn(List.of(summary));
 
             InventoryHistoryListResponse response =
                     sut.getAgencyInventoryHistory(AGENCY_ID, null, null, null, 20);
@@ -106,6 +108,8 @@ class InventoryQueryServiceTest {
             assertEquals(99L, item.referenceId());
             assertEquals("ORDER", item.refType());
             assertEquals(changedAt, item.changedAt());
+            assertEquals(200L, item.productId());
+            assertEquals("한정판 굿즈", item.productName());
         }
     }
 }

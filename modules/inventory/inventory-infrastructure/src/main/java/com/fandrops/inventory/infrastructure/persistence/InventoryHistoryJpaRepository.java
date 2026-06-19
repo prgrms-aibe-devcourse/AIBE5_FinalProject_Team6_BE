@@ -30,4 +30,34 @@ public interface InventoryHistoryJpaRepository extends JpaRepository<InventoryHi
             @Param("productId") Long productId,
             @Param("cursor") Long cursor,
             @Param("size") int size);
+
+    @Query(value = """
+            SELECT ih.id          AS id,
+                   ih.inventory_id AS inventoryId,
+                   ih.change_type  AS changeType,
+                   ih.qty_delta    AS qtyDelta,
+                   ih.qty_before   AS qtyBefore,
+                   ih.qty_after    AS qtyAfter,
+                   ih.reference_id AS referenceId,
+                   ih.ref_type     AS refType,
+                   ih.created_at   AS createdAt,
+                   p.id            AS productId,
+                   p.name          AS productName
+            FROM inventory_history ih
+            JOIN inventory inv ON inv.id = ih.inventory_id
+            JOIN product p ON p.id = inv.product_id
+            JOIN artist_profile ap ON ap.id = p.artist_id
+            WHERE ap.agency_id = :agencyId
+              AND (:artistId IS NULL OR p.artist_id = :artistId)
+              AND (:productId IS NULL OR inv.product_id = :productId)
+              AND (:cursor IS NULL OR ih.id < :cursor)
+            ORDER BY ih.id DESC
+            LIMIT :size
+            """, nativeQuery = true)
+    List<InventoryHistorySummaryRow> findAgencySummaryRows(
+            @Param("agencyId") Long agencyId,
+            @Param("artistId") Long artistId,
+            @Param("productId") Long productId,
+            @Param("cursor") Long cursor,
+            @Param("size") int size);
 }

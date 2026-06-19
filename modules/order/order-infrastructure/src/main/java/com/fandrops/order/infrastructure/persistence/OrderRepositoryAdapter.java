@@ -1,5 +1,6 @@
 package com.fandrops.order.infrastructure.persistence;
 
+import com.fandrops.order.domain.AgencyOrderSummary;
 import com.fandrops.order.domain.Order;
 import com.fandrops.order.domain.OrderItem;
 import com.fandrops.order.domain.OrderStatus;
@@ -65,6 +66,18 @@ public class OrderRepositoryAdapter implements OrderRepository {
         }
         return jpaRepository.findByIdInOrderByIdDesc(ids).stream()
                 .map(this::toDomain)
+                .toList();
+    }
+
+    @Override
+    public List<AgencyOrderSummary> findAgencyOrderSummaries(Long agencyId, Long artistId, Long cursor, int size) {
+        return jpaRepository.findAgencyOrderSummaryRows(agencyId, artistId, cursor, size).stream()
+                .map(r -> new AgencyOrderSummary(
+                        r.getOrderId(), r.getStatus(),
+                        r.getTotalAmount() != null ? r.getTotalAmount() : 0,
+                        r.getCreatedAt(), r.getArtistId(), r.getArtistName(),
+                        r.getFirstProductName(),
+                        r.getItemCount() != null ? r.getItemCount().intValue() : 0))
                 .toList();
     }
 

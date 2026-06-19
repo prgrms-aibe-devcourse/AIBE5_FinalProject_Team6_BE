@@ -1,6 +1,6 @@
 package com.fandrops.inventory.application.dto;
 
-import com.fandrops.inventory.domain.InventoryHistory;
+import com.fandrops.inventory.domain.InventoryHistorySummary;
 import java.time.LocalDateTime;
 
 public record InventoryHistoryItem(
@@ -12,19 +12,16 @@ public record InventoryHistoryItem(
         int qtyAfter,
         Long referenceId,
         String refType,
-        LocalDateTime changedAt
+        LocalDateTime changedAt,
+        Long productId,
+        String productName
 ) {
-    public static InventoryHistoryItem from(InventoryHistory h) {
+    public static InventoryHistoryItem from(InventoryHistorySummary s) {
         return new InventoryHistoryItem(
-                h.getId(),
-                h.getInventoryId(),
-                h.getChangeType().name(),
-                h.getDeltaQty(),
-                h.getQtyBefore(),
-                h.getQtyAfter(),
-                h.getReferenceId(),
-                h.getRefType().name(),
-                h.getChangedAt()
+                s.id(), s.inventoryId(), s.changeType().name(),
+                s.deltaQty(), s.qtyBefore(), s.qtyAfter(),
+                s.referenceId(), s.refType().name(), s.changedAt(),
+                s.productId(), s.productName()
         );
     }
 }

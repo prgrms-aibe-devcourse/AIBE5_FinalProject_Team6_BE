@@ -1,10 +1,13 @@
 package com.fandrops.order.application;
 
+import com.fandrops.order.application.dto.AgencyOrderListItemResponse;
+import com.fandrops.order.application.dto.AgencyOrderListResponse;
 import com.fandrops.order.application.dto.CreateOrderCommand;
 import com.fandrops.order.application.dto.CreateOrderResult;
 import com.fandrops.order.application.dto.OrderDetailResponse;
 import com.fandrops.order.application.dto.OrderListItemResponse;
 import com.fandrops.order.application.dto.OrderListResponse;
+import com.fandrops.order.domain.AgencyOrderSummary;
 import com.fandrops.order.domain.Order;
 import com.fandrops.order.domain.OrderItem;
 import com.fandrops.order.domain.OrderStatus;
@@ -107,13 +110,13 @@ public class OrderService {
     }
 
     @Transactional(readOnly = true)
-    public OrderListResponse getAgencyOrders(Long agencyId, Long artistId, Long cursor, int size) {
-        List<Order> orders = orderRepository.findByAgency(agencyId, artistId, cursor, size);
-        List<OrderListItemResponse> items = orders.stream()
-                .map(OrderListItemResponse::from)
+    public AgencyOrderListResponse getAgencyOrders(Long agencyId, Long artistId, Long cursor, int size) {
+        List<AgencyOrderSummary> summaries = orderRepository.findAgencyOrderSummaries(agencyId, artistId, cursor, size);
+        List<AgencyOrderListItemResponse> items = summaries.stream()
+                .map(AgencyOrderListItemResponse::from)
                 .toList();
-        Long nextCursor = orders.size() == size ? orders.get(orders.size() - 1).getId() : null;
-        return new OrderListResponse(items, nextCursor);
+        Long nextCursor = summaries.size() == size ? summaries.get(summaries.size() - 1).orderId() : null;
+        return new AgencyOrderListResponse(items, nextCursor);
     }
 
     @Transactional
