@@ -342,11 +342,42 @@ BASE_URL=http://10.0.1.114:8081 k6 run \
 
 ### 피드백 반영 내용 (장성재, 지영재)
 
-> (장성재, 지영재 작성)
+**지영재 — 원인 조사 완료 (2026-06-20)**
 
-| 항목 | 변경 전 | 변경 내용 | 적용 기술 |
-|---|---|---|---|
-| — | — | — | — |
+EC2-1 SSM 접속으로 Nginx·OS 설정값 직접 확인:
+
+| 항목 | 실측값 | 판정 |
+|---|---|---|
+| Nginx `worker_connections` | 4,096 | ✅ 무관 |
+| OS `ulimit -n` | 65,535 | ✅ 무관 |
+| Nginx master FD limit | 65,535 | ✅ 무관 |
+
+**429 실제 원인**: `SseEmitterRegistry.registerOrReject()` — `emitters.size() >= 2000` 초과 시 `SseCapacityExceededException` → 429. k6는 SSE 연결을 브라우저처럼 유지하지 않고 첫 청크 수신 후 빠르게 반복 연결하는데, Spring은 클라이언트 disconnect를 `onTimeout`(60s) 전까지 감지하지 못해 stale emitter가 누적되어 2,000 한도를 초과함.
+
+**해결 방향 (장성재 구현 필요)**: `SseEmitterRegistry`에 `sendHeartbeat()` 추가 — 5초 주기로 SSE comment 전송, `IOException` 발생 시 즉시 emitter 제거. `IllegalStateException`(이미 완료된 emitter에 write 시 발생)도 함께 catch 필요.
+
+```java
+// SseEmitterRegistry
+public void sendHeartbeat() {
+    for (Map.Entry<String, SseEmitter> entry : emitters.entrySet()) {
+        try {
+            entry.getValue().send(SseEmitter.event().comment("heartbeat"));
+        } catch (IOException | IllegalStateException e) {
+            emitters.remove(entry.getKey());
+        }
+    }
+}
+
+// QueueAdvanceScheduler
+@Scheduled(fixedDelayString = "${fandrops.queue.scheduler.heartbeat-ms:5000}")
+public void heartbeat() {
+    registry.sendHeartbeat();
+}
+```
+
+**장성재 — 피드백 반영 내용**
+
+> (장성재 작성)
 
 ### 실행 방법
 
@@ -389,11 +420,18 @@ GitHub Actions → **Run k6 Load Test** → `scenario: 05` → `confirm: yes`
 
 ### 피드백 반영 내용 (전체)
 
-> (담당자 작성)
+**지영재 — 완료 (2026-06-20)**
 
 | 항목 | 변경 전 | 변경 내용 | 적용 기술 |
 |---|---|---|---|
-| — | — | — | — |
+| payment check 조건 | `200 \| 201` | `200 \| 201 \| 429` 추가 | k6 check |
+| queue join check 조건 | `200 \| 201 \| 409` | `429` 추가 | k6 check |
+
+> rate limit 정상 응답(429)을 check 실패로 집계하던 문제 수정. `06_workload_model.js` line 92·120.
+
+**정환철, 장성재, 형성빈 — 피드백 반영 내용**
+
+> (담당자 작성)
 
 ### 사전 준비
 
