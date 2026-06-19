@@ -14,7 +14,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
-import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -118,7 +117,7 @@ public class FeedCacheAdapter implements FeedCachePort {
                 List<byte[]> toDelete = new ArrayList<>();
                 try (Cursor<byte[]> cursor = connection.scan(options)) {
                     cursor.forEachRemaining(toDelete::add);
-                } catch (IOException e) {
+                } catch (Exception e) {
                     log.warn("[FeedCache] scan error pattern={}", pattern, e);
                 }
                 if (!toDelete.isEmpty()) {
