@@ -1,6 +1,6 @@
 package com.fandrops.order.api;
 
-import com.fandrops.order.api.dto.ApiResponse;
+import com.fandrops.common.ApiResponse;
 import com.fandrops.order.application.OrderService;
 import com.fandrops.order.application.dto.AgencyOrderListResponse;
 import java.util.Arrays;

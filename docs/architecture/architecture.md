@@ -83,6 +83,19 @@ fandrops/
 - `order-api` → `payment-infrastructure`
 - `domain` → domain (타 모듈 직접 참조)
 
+### MVP 한시적 예외 — 크로스 모듈 native SQL JOIN
+
+아래 native SQL은 `artist_profile`(`user` 모듈 소유 테이블)을 `order`·`inventory` 인프라에서 직접 조인한다.  
+단일 JVM 모놀리스이므로 런타임 오류는 없지만, `user` 모듈 스키마 변경 시 무음으로 깨질 수 있다.
+
+| 쿼리 위치 | 참조 테이블 | 허용 조건 |
+| --- | --- | --- |
+| `OrderJpaRepository.findAgencyOrderSummaryRows` | `artist_profile.agency_id` | `idx_artist_profile_agency` 인덱스 존재 (V11) |
+| `InventoryHistoryJpaRepository.findAgencySummaryRows` | `artist_profile.agency_id` | 동일 |
+
+**해소 조건**: `product.agency_id` 역정규화 또는 포트 호출로 교체 시 이 예외 삭제.  
+추적 이슈: GitHub Issue #348 (order·inventory → artist_profile 크로스 조인 해소)
+
 ### 검증
 
 ```bash
