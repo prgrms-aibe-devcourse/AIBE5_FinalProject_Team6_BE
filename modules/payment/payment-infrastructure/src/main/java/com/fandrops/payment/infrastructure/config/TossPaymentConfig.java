@@ -50,6 +50,7 @@ public class TossPaymentConfig {
 
         HttpClient httpClient = HttpClient.newBuilder()
                 .connectTimeout(tossProperties.getConnectTimeout())
+                .version(HttpClient.Version.HTTP_1_1)
                 .build();
         JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(httpClient);
         factory.setReadTimeout(tossProperties.getReadTimeout());
