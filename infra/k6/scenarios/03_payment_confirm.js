@@ -1,7 +1,11 @@
 /**
  * 결제 확인 흐름 — Wiremock 기반 Toss PG 모킹
  * 목표: POST /payments/toss/confirm P95 < 3s, error rate < 1%
- * 파라미터: 장성재 확정 (2026-06-05)
+ * 파라미터: 장성재 확정 (2026-06-05) / executor 변경: 지영재 (2026-06-19)
+ *
+ * executor: shared-iterations (vus:50, iterations:500)
+ *   - ramping-vus는 orderId가 VU당 재사용되어 2번째 iteration부터 전량 409 실패
+ *   - shared-iterations + iterationInTest 인덱싱으로 iteration마다 고유 orderId 보장
  *
  * 사전 준비:
  *   1. Wiremock 기동 (infra/k6/wiremock/mappings/ stub 4종 자동 로드):
@@ -9,19 +13,19 @@
  *        -v $(pwd)/infra/k6/wiremock/mappings:/home/wiremock/mappings \
  *        wiremock/wiremock:3.3.1 --global-response-templating
  *   2. TOSS_API_BASE_URL=http://localhost:8090 으로 앱 서버 재기동
- *   3. DB seed: orders id=1..50 (status=RESERVED, product_id=1, total_amount=15000, fan_id=1..50)
+ *   3. DB seed: RESERVED 주문 500건 (product_id=1, total_amount=15000)
  *   4. tokens.csv: infra/k6/seed/tokens.csv (fan_id 1~2100 JWT)
  *   5. 실행 — SCENARIO 선택:
  *      # 성공만 (기본)
- *      k6 run -e ORDERS_JSON="$(cat seed/orders.json)" scenarios/03_payment_confirm.js
+ *      BASE_URL=http://10.0.1.114:8081 k6 run -e ORDERS_JSON="$(cat seed/orders.json)" scenarios/03_payment_confirm.js
  *
  *      # 특정 시나리오 단일 실행
- *      k6 run -e SCENARIO=timeout   -e ORDERS_JSON="$(cat seed/orders.json)" scenarios/03_payment_confirm.js
- *      k6 run -e SCENARIO=balance-error -e ORDERS_JSON="$(cat seed/orders.json)" scenarios/03_payment_confirm.js
- *      k6 run -e SCENARIO=server-error  -e ORDERS_JSON="$(cat seed/orders.json)" scenarios/03_payment_confirm.js
+ *      BASE_URL=http://10.0.1.114:8081 k6 run -e SCENARIO=timeout   -e ORDERS_JSON="$(cat seed/orders.json)" scenarios/03_payment_confirm.js
+ *      BASE_URL=http://10.0.1.114:8081 k6 run -e SCENARIO=balance-error -e ORDERS_JSON="$(cat seed/orders.json)" scenarios/03_payment_confirm.js
+ *      BASE_URL=http://10.0.1.114:8081 k6 run -e SCENARIO=server-error  -e ORDERS_JSON="$(cat seed/orders.json)" scenarios/03_payment_confirm.js
  *
  *      # 혼합 부하 (성공 70% / 타임아웃 10% / 잔액부족 10% / 서버오류 10%)
- *      k6 run -e SCENARIO=mixed -e ORDERS_JSON="$(cat seed/orders.json)" scenarios/03_payment_confirm.js
+ *      BASE_URL=http://10.0.1.114:8081 k6 run -e SCENARIO=mixed -e ORDERS_JSON="$(cat seed/orders.json)" scenarios/03_payment_confirm.js
  *
  * SCENARIO → Wiremock stub 라우팅 (paymentKey prefix 기반):
  *   success      → toss-confirm-success.json      (200 즉시)
@@ -33,12 +37,13 @@
  */
 import http from 'k6/http';
 import { check } from 'k6';
+import exec from 'k6/execution';
 import { SharedArray } from 'k6/data';
 import papaparse from 'https://jslib.k6.io/papaparse/5.1.1/index.js';
 import { BASE_URL, authHeaders } from '../lib/auth.js';
 import { PAYMENT_THRESHOLDS } from '../lib/thresholds.js';
 
-// pre-seeded RESERVED 주문 픽스처 (VU별 orderId 중복 없이 분배)
+// pre-seeded RESERVED 주문 픽스처 (iterationInTest 기반 — iteration마다 고유 orderId 보장)
 const ORDERS = JSON.parse(__ENV.ORDERS_JSON || '[{"orderId":1,"amount":15000,"fanId":1}]');
 
 // SCENARIO: success | timeout | balance-error | server-error | mixed
@@ -63,30 +68,26 @@ function resolvePrefix() {
 export const options = {
   scenarios: {
     payment_confirm: {
-      executor: 'ramping-vus',
-      startVUs: 0,
-      stages: [
-        { target: 50, duration: '30s' },
-        { target: 50, duration: '2m' },
-        { target: 0, duration: '10s' },
-      ],
-      gracefulRampDown: '10s',
+      executor: 'shared-iterations',
+      vus: 50,
+      iterations: 500,
+      maxDuration: '5m',
     },
   },
   thresholds: PAYMENT_THRESHOLDS,
 };
 
 export default function () {
-  const order = ORDERS[(__VU - 1) % ORDERS.length];
-  const fanId = order.fanId || __VU;
+  const order = ORDERS[exec.scenario.iterationInTest % ORDERS.length];
+  const fanId = order.fanId || exec.scenario.iterationInTest + 1;
   const token = userTokens[(fanId - 1) % userTokens.length].token;
   const prefix = resolvePrefix();
-  // prefix가 Wiremock stub 라우팅 키 — 멱등키 충돌 방지를 위해 __ITER 포함
-  const tossPaymentKey = `${prefix}-${order.orderId}-${__ITER}`;
+  // prefix가 Wiremock stub 라우팅 키 — orderId가 iteration마다 고유하므로 충돌 없음
+  const orderPaymentKey = `${prefix}-${order.orderId}-${exec.scenario.iterationInTest}`;
 
   const res = http.post(
     `${BASE_URL}/api/v1/payments/toss/confirm`,
-    JSON.stringify({ tossPaymentKey, orderId: order.orderId, amount: order.amount }),
+    JSON.stringify({ orderPaymentKey, orderId: order.orderId, amount: order.amount }),
     { headers: authHeaders(token) },
   );
 
