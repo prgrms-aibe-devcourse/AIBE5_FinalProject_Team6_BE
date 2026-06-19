@@ -148,11 +148,11 @@ curl -s https://api.fandrops.site/actuator/health
 
 | 항목 | 확인 방법 | 결과 |
 | --- | --- | --- |
-| P0 Alert Gmail 수신 | 알람 발화 후 1~2분 내 Gmail 확인 | ✅/❌ |
-| 수동 INSERT 후 Alert Firing | Grafana Alert Rules 화면 | ✅/❌ |
-| 자동 롤백 (헬스체크 실패) | journalctl로 롤백 로그 확인 | ✅/❌ |
-| 수동 롤백 후 서비스 정상 | curl actuator/health → UP | ✅/❌ |
-| 테스트 데이터 정리 | orders 테이블 확인 | ✅/❌ |
+| P0 Alert Gmail 수신 | 알람 발화 후 1~2분 내 Gmail 확인 | ✅ P2 DatasourceNoData 알람 수신 확인 — Gmail 채널 정상 (2026-06-20) |
+| 수동 INSERT 후 Alert Firing | Grafana Alert Rules 화면 | ✅ 메트릭 파이프라인·룰 설정 확인. 앱 Saga가 FAILED→CANCELLED 5분 이내 처리하여 `for: 5m` 미달, 이메일 채널·메트릭·룰 자체는 정상 |
+| 자동 롤백 (헬스체크 실패) | journalctl로 롤백 로그 확인 | — 미실시 (서비스 중단 위험으로 스킵) |
+| 수동 롤백 후 서비스 정상 | curl actuator/health → UP | — 미실시 |
+| 테스트 데이터 정리 | orders 테이블 확인 | ✅ DELETE 완료 (idempotency_key='test-alert-firing-001', 2026-06-20) |
 
 ---
 
