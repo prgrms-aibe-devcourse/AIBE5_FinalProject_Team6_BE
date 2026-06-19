@@ -25,7 +25,7 @@ cp "/tmp/api-server.jar" "$JAR_DIR/$NEW_SLOT.jar"
 chown fandrops:fandrops "$JAR_DIR/$NEW_SLOT.jar"
 
 # ── 3. 새 슬롯 기동 ─────────────────────────────────────────
-systemctl start "fandrops-$NEW_SLOT"
+systemctl restart "fandrops-$NEW_SLOT"
 
 # ── 4. 헬스체크 (최대 60초) ─────────────────────────────────
 HEALTH="DOWN"
