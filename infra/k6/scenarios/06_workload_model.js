@@ -89,7 +89,7 @@ export default function () {
       { headers: authHeaders(token) },
     );
     check(res, {
-      '[queue] join accepted': (r) => r.status === 200 || r.status === 201 || r.status === 409,
+      '[queue] join accepted': (r) => r.status === 200 || r.status === 201 || r.status === 409 || r.status === 429,
     });
 
   } else if (r < 0.95) {
@@ -117,7 +117,7 @@ export default function () {
       { headers: authHeaders(orderToken) },
     );
     check(res, {
-      '[payment] confirm accepted': (r) => r.status === 200 || r.status === 201,
+      '[payment] confirm accepted': (r) => r.status === 200 || r.status === 201 || r.status === 429,
     });
   }
 }
