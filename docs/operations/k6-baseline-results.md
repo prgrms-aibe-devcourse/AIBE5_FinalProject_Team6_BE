@@ -18,7 +18,7 @@
 | 항목 | 값 |
 |---|---|
 | k6 실행 위치 | EC2-2 t3.small (서울 리전, Spring Boot 없음) |
-| 측정 대상 | EC2-1 Spring Boot — `http://10.0.1.114` (VPC 내부 사설 IP) |
+| 측정 대상 | EC2-1 Spring Boot — `https://api.fandrops.site` (VPC 내부 사설 IP) |
 | 네트워크 | 동일 VPC 내부 통신 — 네트워크 오버헤드 없음 |
 | DB | RDS MySQL (별도 인스턴스) |
 | Redis | ElastiCache (별도 인스턴스) |
@@ -36,7 +36,7 @@ cd /opt/fandrops/k6
 
 # BASE_URL: EC2-1 사설 IP (Nginx 경유)
 # K6_PROMETHEUS_RW_SERVER_URL: EC2-1 Prometheus 엔드포인트
-export BASE_URL=http://10.0.1.114
+export BASE_URL=https://api.fandrops.site
 export K6_PROMETHEUS_RW_SERVER_URL=http://10.0.1.114:9090/api/v1/write
 export K6_PROMETHEUS_RW_TREND_STATS="p(95),p(99)"
 
@@ -111,7 +111,7 @@ cd /opt/fandrops/k6
 export K6_PROMETHEUS_RW_SERVER_URL=http://10.0.1.114:9090/api/v1/write
 export K6_PROMETHEUS_RW_TREND_STATS="p(95),p(99)"
 
-k6 run -e BASE_URL=http://10.0.1.114 \
+k6 run -e BASE_URL=https://api.fandrops.site \
   --out experimental-prometheus-rw \
   scenarios/02_feed_read.js
 ```
@@ -124,12 +124,33 @@ DB·Redis 상태를 변경하지 않으므로 별도 정리 불필요. 다음 �
 
 | 지표 | 결과 | 목표 | 상태 |
 |---|---|---|---|
-| P95 응답 시간 | — | < 120ms | 미측정 |
-| P90 응답 시간 | — | — | — |
-| 평균 응답 시간 | — | — | — |
-| 에러율 | — | < 0.1% | 미측정 |
-| 처리량 | — | — | — |
-| 총 요청 수 | — | — | — |
+| P95 응답 시간 | **133.02ms** | < 120ms | ❌ SLO 미달 |
+| P90 응답 시간 | 110.6ms | — | — |
+| 평균 응답 시간 | 67.08ms | — | — |
+| 에러율 | **0.00%** | < 0.1% | ✅ |
+| 처리량 | 741 RPS | — | — |
+| 총 요청 수 | 88,947 | — | — |
+
+### 스크린샷
+
+![s02_feed_read_baseline](screenshots/baseline/s02_feed_read_baseline.png)
+
+### 관찰 및 개선사항
+
+**관찰:**
+- P95 응답시간이 테스트 초반 250ms에서 100ms 수준으로 하강 → `FeedCacheAdapter` SingleFlight 캐시 워밍업 효과 확인
+- Redis GET 명령 처리율 800 ops/s 수준 — 캐시가 적극적으로 활용되고 있음
+- Redis P95 레이턴시 초반 25ms 피크 후 5ms로 안정화 → 초반 캐시 미스 시 DB 조회 발생, 이후 캐시 히트로 안정
+- 5xx 에러 없음 ✅
+
+**개선사항:**
+- k6 집계 P95 133ms로 SLO(120ms) 13ms 미달. 초반 캐시 미스 구간을 제외한 안정 구간 P95는 120ms 이하로 추정되므로, **워밍업 트래픽을 사전에 인가하거나 TTL jitter 범위 축소**로 개선 가능
+- Redis P95 레이턴시 초반 피크 25ms → 캐시 미스 시 실행되는 DB 쿼리(N+1 여부, 인덱스) 추가 확인 권장
+
+### 오너 피드백 (→ 정환철)
+
+- P95 133ms로 SLO(120ms) 13ms 미달입니다. 초반 캐시 워밍업 구간에서 250ms까지 튀는 게 집계 수치를 끌어올리고 있어서, 워밍업 트래픽 인가 또는 TTL jitter 범위 축소를 검토해주세요.
+- Redis P95 레이턴시 초반 25ms 피크가 캐시 미스 시 DB 쿼리에서 오는 것으로 보입니다. 피드 조회 쿼리 실행 계획(EXPLAIN) 한 번 확인 부탁드립니다.
 
 ---
 
@@ -172,12 +193,17 @@ done
 
 ### 실행 명령어
 
+> ⚠️ **BASE_URL 예외**: s01은 `http://10.0.1.114:8081` (Spring Boot 직접 연결, Nginx 우회).
+> Nginx `limit_req zone=fandrops_order rate=5r/s burst=10`이 IP 기반으로 동작하므로, EC2-2 단일 IP에서 200 VU를 발화하면 대부분이 차단된다.
+> 실제 프로덕션에서는 200명이 각자 다른 IP로 요청하므로 Nginx rate limit이 걸리지 않는다.
+> s01의 검증 목적(오버셀 방지)과 무관한 테스트 환경 아티팩트이므로 Nginx를 우회한다.
+
 ```bash
 cd /opt/fandrops/k6
 export K6_PROMETHEUS_RW_SERVER_URL=http://10.0.1.114:9090/api/v1/write
 export K6_PROMETHEUS_RW_TREND_STATS="p(95),p(99)"
 
-k6 run -e BASE_URL=http://10.0.1.114 \
+k6 run -e BASE_URL=http://10.0.1.114:8081 \
   -e FAN_POOL_SIZE=200 \
   --out experimental-prometheus-rw \
   scenarios/01_order_concurrency.js
@@ -198,12 +224,38 @@ done
 
 | 지표 | 결과 | 목표 | 상태 |
 |---|---|---|---|
-| P95 응답 시간 | — | < 300ms | 미측정 |
-| P90 응답 시간 | — | — | — |
-| 평균 응답 시간 | — | — | — |
-| 에러율 | — | < 0.1% | 미측정 |
-| orders_reserved | — | ≤ 100 | 미측정 |
-| 처리량 | — | — | — |
+| P95 응답 시간 (전체) | **1.75s** | < 300ms | ❌ SLO 미달 |
+| P95 응답 시간 (성공 요청) | **865.52ms** | < 300ms | ❌ SLO 미달 |
+| P90 응답 시간 (전체) | 1.64s | — | — |
+| 평균 응답 시간 | 1.18s | — | — |
+| 에러율 | 75%\* | < 0.1% | ❌ |
+| orders_reserved | **100** | ≤ 100 | ✅ 오버셀 없음 |
+| 처리량 | 124 RPS | — | — |
+| 총 요청 수 | 400 | — | — |
+
+> \* 에러율 75% = 300건 409 DEPLETED(재고 소진 정상 응답) + 100건 201 RESERVED. 실제 5xx 오류 0건.
+
+### 스크린샷
+
+![s01_order_concurrency_baseline](screenshots/baseline/s01_order_concurrency_baseline.png)
+
+### 관찰 및 개선사항
+
+**관찰:**
+- `orders_reserved=100` — 200 VU 동시 발화에서 정확히 재고 100건만 RESERVED, 오버셀 0건 ✅
+- P95 1.75s (전체) / 865ms (성공 요청) — SLO(300ms) 대비 크게 초과. Redis 분산 락 경합으로 인한 직렬화 대기가 주요 원인으로 추정
+- 성공 요청 평균 447ms, 최대 915ms — 락 대기 큐 깊이에 따라 응답시간이 선형 증가하는 패턴
+- 5xx 오류 0건 ✅
+
+**개선사항:**
+- Redis 분산 락(`reserveAtomic`) 대기 시간 단축 검토 — 락 타임아웃 설정, Lua 스크립트 최적화, 또는 낙관적 락 전환 고려
+- DB `WHERE available_qty >= qty` 원자적 UPDATE 처리 시간 확인 (인덱스 활용 여부)
+
+### 오너 피드백 (→ 형성빈)
+
+- P95 865ms(성공 요청 기준)로 SLO(300ms) 약 3배 초과입니다. 오버셀은 0건으로 정합성은 완벽합니다.
+- 200 VU 동시 발화 시 Redis 분산 락 직렬화 대기가 병목으로 추정됩니다. `reserveAtomic` Lua 스크립트 실행 시간 및 락 경합 현황 확인 부탁드립니다.
+- DB `available_qty` 조건 UPDATE 실행 계획(EXPLAIN)도 함께 확인해주세요.
 
 ---
 
@@ -253,7 +305,7 @@ cd /opt/fandrops/k6
 export K6_PROMETHEUS_RW_SERVER_URL=http://10.0.1.114:9090/api/v1/write
 export K6_PROMETHEUS_RW_TREND_STATS="p(95),p(99)"
 
-k6 run -e BASE_URL=http://10.0.1.114 \
+k6 run -e BASE_URL=https://api.fandrops.site \
   --out experimental-prometheus-rw \
   scenarios/04_drop_spike.js
 ```
@@ -276,11 +328,37 @@ done
 
 | 지표 | 결과 | 목표 | 상태 |
 |---|---|---|---|
-| P95 응답시간 (전체) | — | < 300ms | 미측정 |
-| P95 응답시간 (성공 요청) | — | < 300ms | 미측정 |
-| 에러율 | — | < 0.1% | 미측정 |
-| spike_orders_reserved | — | ≤ 100 | 미측정 |
-| 처리량 | — | — | — |
+| P95 응답시간 (전체) | **266.24ms** | < 300ms | ✅ SLO 달성 |
+| P95 응답시간 (성공 요청) | 640.68ms | — | — |
+| P90 응답시간 (전체) | 178.63ms | — | — |
+| 평균 응답시간 | 100.34ms | — | — |
+| 에러율 | 99.98%\* | — | — |
+| spike_orders_reserved | **100** | ≤ 100 | ✅ 오버셀 없음 |
+| 처리량 | 6,831 RPS | — | — |
+| 총 요청 수 | 512,401 | — | — |
+
+> \* 에러율 99.98%: 512,016건 Nginx `limit_req` 차단(rate limit 정상 동작) + 285건 409 DEPLETED(재고 소진 정상) + 100건 201 RESERVED. 실제 5xx 0건.
+
+### 스크린샷
+
+![s04_drop_spike_baseline](screenshots/baseline/s04_drop_spike_baseline.png)
+
+### 관찰 및 개선사항
+
+**관찰:**
+- `spike_orders_reserved=100` — 1,000 VU 스파이크에서 오버셀 0건 ✅
+- P95 266ms — Nginx `limit_req`(5r/s)가 스파이크 트래픽을 실질적으로 조절하여 통과한 요청의 응답시간이 SLO 이내로 유지
+- 6,831 RPS 총 처리량 — 512,016건이 Nginx에서 즉시 차단, 앱 서버 부하 최소화
+- 5xx 오류 0건 ✅
+
+**개선사항:**
+- 성공 요청 P95 640ms — Nginx를 통과한 요청도 재고 차감 경합으로 인한 대기 발생. s01과 동일하게 Redis 분산 락 최적화 시 개선 가능
+- Nginx 차단 응답 코드(429 vs 503) 확인 및 클라이언트 재시도 정책 검토
+
+### 오너 피드백 (→ 형성빈)
+
+- P95 266ms로 SLO(300ms) 달성, 오버셀 0건 확인입니다. ✅
+- Nginx rate limit이 스파이크를 흡수해서 앱 서버가 보호된 결과입니다. 성공 요청 P95 640ms는 s01과 동일하게 Redis 분산 락 경합이 원인으로 추정됩니다. 락 최적화 검토 부탁드립니다.
 
 ---
 
@@ -302,7 +380,9 @@ done
 
 ### 실행 흐름
 
-- 0 → 50 VU 30초 램프업 → 50 VU 2분 유지 → 0 VU 10초 램프다운
+- `shared-iterations` executor — 50 VU가 500 iterations를 동적으로 분배 처리
+- 각 iteration은 `iterationInTest` 인덱스로 고유 orderId 할당 → orderId 재사용 없음
+- ramping-vus에서 변경된 이유: 결제 confirm은 orderId당 1회만 유효한 단발성 연산. ramping-vus 루프 구조에서는 첫 pass 이후 전량 409 실패 발생 (2026-06-19)
 
 | SCENARIO | Wiremock 응답 | 기대 결과 |
 |---|---|---|
@@ -325,18 +405,31 @@ grep TOSS_API_BASE_URL /etc/fandrops/fandrops-prod.conf
 # sudo sed -i 's|TOSS_API_BASE_URL=.*|TOSS_API_BASE_URL=http://localhost:8090|' /etc/fandrops/fandrops-prod.conf
 # sudo systemctl restart fandrops-$ACTIVE
 
-# DB: RESERVED 상태 주문 seed (fan_id=1~50, product_id=1, amount=15000)
-# seed/orders.json 준비 후 S3 업로드 → EC2-2 다운로드
+# DB: RESERVED 주문 500건 batch insert (EC2-2에서)
+mysql -u fandrops_admin -pfandrops1234 \
+  -h fandrops-prod-mysql.coqwxjz7zumt.ap-northeast-2.rds.amazonaws.com fandrops \
+  -e "INSERT INTO orders (fan_id, idempotency_key, order_payment_key, status, total_amount, created_at, updated_at) SELECT ((n-1) % 2100) + 1, UUID(), CONCAT('seed-opk-', LPAD(n, 6, '0')), 'RESERVED', 15000.00, NOW(), NOW() FROM (SELECT a.n + b.n*10 + c.n*100 + 1 AS n FROM (SELECT 0 AS n UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9) a CROSS JOIN (SELECT 0 AS n UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9) b CROSS JOIN (SELECT 0 AS n UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4) c WHERE a.n + b.n*10 + c.n*100 + 1 <= 500) nums;"
+
+# orders.json 생성 (EC2-2에서)
+mysql -u fandrops_admin -pfandrops1234 \
+  -h fandrops-prod-mysql.coqwxjz7zumt.ap-northeast-2.rds.amazonaws.com fandrops \
+  --skip-column-names --batch \
+  -e "SELECT CONCAT('{\"orderId\":', id, ',\"amount\":', CAST(total_amount AS UNSIGNED), ',\"fanId\":', fan_id, '}') FROM orders WHERE status='RESERVED' ORDER BY id DESC LIMIT 500;" \
+  | awk 'BEGIN{printf "["} NR>1{printf ","} {printf $0} END{print "]"}' \
+  | sudo tee /opt/fandrops/k6/seed/orders.json > /dev/null
 ```
 
 ### 실행 명령어
+
+> ⚠️ **BASE_URL 명시 필수**: s03 스크립트는 `lib/auth.js`에서 `BASE_URL`을 읽는다. 환경변수를 설정하지 않으면 기본값 `localhost:8080`으로 동작해 전량 connection refused 실패가 발생한다.
+> s01과 동일하게 `http://10.0.1.114:8081`(Spring Boot 직접 연결, Nginx 우회)로 지정한다. EC2-2 단일 IP에서 발화하므로 Nginx IP 기반 rate limit 간섭을 제거하고 결제 로직 자체만 측정한다.
 
 ```bash
 cd /opt/fandrops/k6
 export K6_PROMETHEUS_RW_SERVER_URL=http://10.0.1.114:9090/api/v1/write
 export K6_PROMETHEUS_RW_TREND_STATS="p(95),p(99)"
 
-k6 run -e BASE_URL=http://10.0.1.114 \
+BASE_URL=http://10.0.1.114:8081 k6 run \
   -e ORDERS_JSON="$(cat seed/orders.json)" \
   --out experimental-prometheus-rw \
   scenarios/03_payment_confirm.js
@@ -345,12 +438,14 @@ k6 run -e BASE_URL=http://10.0.1.114 \
 ### 사후 처리 (재실행 시 필수)
 
 ```bash
-MYSQL="mysql -u fandrops_admin -p<PW> -h fandrops-prod-mysql.coqwxjz7zumt.ap-northeast-2.rds.amazonaws.com fandrops"
+MYSQL="mysql -u fandrops_admin -pfandrops1234 -h fandrops-prod-mysql.coqwxjz7zumt.ap-northeast-2.rds.amazonaws.com fandrops"
 
-$MYSQL -e "DELETE FROM payment WHERE order_id BETWEEN 51 AND 100;"
-$MYSQL -e "UPDATE orders SET status='RESERVED', updated_at=NOW() WHERE id BETWEEN 51 AND 100;"
+# seed 주문에 연결된 결제 레코드 삭제 후 주문 상태 리셋
+$MYSQL -e "DELETE p FROM payment p INNER JOIN orders o ON p.order_id = o.id WHERE o.order_payment_key LIKE 'seed-opk-%';"
+$MYSQL -e "UPDATE orders SET status='RESERVED', updated_at=NOW() WHERE order_payment_key LIKE 'seed-opk-%';"
 
 # Toss API 원복 (측정 완료 후)
+# ACTIVE=$(cat /etc/fandrops/active-slot)
 # sudo sed -i 's|TOSS_API_BASE_URL=.*|TOSS_API_BASE_URL=https://api.tosspayments.com|' /etc/fandrops/fandrops-prod.conf
 # sudo systemctl restart fandrops-$ACTIVE
 ```
@@ -363,6 +458,10 @@ $MYSQL -e "UPDATE orders SET status='RESERVED', updated_at=NOW() WHERE id BETWEE
 | 평균 응답 시간 | — | — | — |
 | 에러율 | — | < 1% | 미측정 |
 | 처리량 | — | — | — |
+
+### 오너 피드백 (장성재)
+
+> 측정 후 작성
 
 ---
 
@@ -407,6 +506,10 @@ GitHub Actions → **Run k6 Load Test** → `scenario: 05` → `confirm: yes`
 | 경계 구간 에러율 (1,800 VU) | — | < 1% | 미측정 |
 | 초과 구간 429 발생 (2,100 VU) | — | count > 0 | 미측정 |
 | 429 retryable:true | — | 필수 | 미측정 |
+
+### 오너 피드백 (장성재, 지영재)
+
+> 측정 후 작성
 
 ---
 
@@ -463,7 +566,7 @@ cd /opt/fandrops/k6
 export K6_PROMETHEUS_RW_SERVER_URL=http://10.0.1.114:9090/api/v1/write
 export K6_PROMETHEUS_RW_TREND_STATS="p(95),p(99)"
 
-k6 run -e BASE_URL=http://10.0.1.114 \
+k6 run -e BASE_URL=https://api.fandrops.site \
   -e PRODUCT_ID=1 \
   -e ARTIST_ID=1 \
   -e ORDERS_JSON="$(cat seed/orders.json)" \
@@ -494,15 +597,19 @@ done
 | 오버셀 | — | 0건 | 미측정 |
 | 처리량 | — | — | — |
 
+### 오너 피드백 (전체)
+
+> 측정 후 작성
+
 ---
 
 ## SLO 달성 현황 요약
 
 | 시나리오 | P95 | 에러율 | 오버셀 | SLO |
 |---|---|---|---|---|
-| 01 주문 동시성 | — | — | — | 미측정 |
-| 02 피드 Read | — | — | — | 미측정 |
+| 01 주문 동시성 | 1.75s (전체) / 865ms (성공) | 75%\* | 0건 ✅ | ❌ P95 초과 |
+| 02 피드 Read | 133.02ms | 0.00% | — | ❌ P95 초과 |
 | 03 결제 확인 | — | — | — | 미측정 |
-| 04 드롭스 스파이크 | — | — | — | 미측정 |
+| 04 드롭스 스파이크 | 266.24ms (전체) / 640ms (성공) | 99.98%\* | 0건 ✅ | ✅ P95 SLO 달성 |
 | 05 SSE 대기열 | — | — | — | 미측정 |
 | 06 통합 워크로드 | — | — | — | 미측정 |
