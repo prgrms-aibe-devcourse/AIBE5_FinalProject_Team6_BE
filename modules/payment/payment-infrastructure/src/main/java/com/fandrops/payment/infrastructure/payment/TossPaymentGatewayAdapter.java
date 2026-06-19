@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -30,7 +31,11 @@ class TossPaymentGatewayAdapter implements TossPaymentPort {
 
     @Override
     public TossConfirmResult confirm(String tossPaymentKey, long amount, String orderPaymentKey) {
-        TossConfirmBody body = new TossConfirmBody(tossPaymentKey, amount, orderPaymentKey);
+        Map<String, Object> body = Map.of(
+                "paymentKey", tossPaymentKey,
+                "amount", amount,
+                "orderId", orderPaymentKey
+        );
         try {
             TossSuccessBody response = tossRestClient.post()
                     .uri(CONFIRM_PATH)
@@ -64,8 +69,6 @@ class TossPaymentGatewayAdapter implements TossPaymentPort {
             }
         }
     }
-
-    record TossConfirmBody(String paymentKey, long amount, String orderId) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     record TossSuccessBody(String status, String method, String approvedAt) {}
