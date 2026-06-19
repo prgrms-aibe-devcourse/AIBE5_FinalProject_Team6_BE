@@ -584,6 +584,10 @@ ulimit -n  # ≥ 8192 확인
 
 GitHub Actions → **Run k6 Load Test** → `scenario: 05` → `confirm: yes`
 
+### 스크린샷
+
+![s05_sse_queue_baseline](screenshots/baseline/s05_sse_queue_baseline.png)
+
 ### 결과 (베이스라인)
 
 | 지표 | 결과 | 목표 | 상태 |
@@ -610,6 +614,12 @@ GitHub Actions → **Run k6 Load Test** → `scenario: 05` → `confirm: yes`
 - 429 응답 body에 `"retryable": true` 추가 필요 — `docs/api/api-contract.md` 계약 이행
 - SSE 연결 허용 임계값 확인 — 대기열 최대 동시 연결 수 설정(Redis 기반)이 1,000 VU 이하로 설정돼 있는지 점검
 - Nginx `worker_connections` 및 `ulimit -n` 설정값 실제 확인 필요 (사전 준비 항목)
+
+**Grafana 메트릭 한계 및 개선 방향:**
+- 현재 Grafana P95(`GET /api/v1/queue/stream/{productId}`) = 4.97ms — Micrometer `http.server.requests` 타이머가 SSE 스트림 셋업 시간만 측정하므로 클라이언트 체감 연결 지속시간과 무관
+- 5xx 에러율 패널은 s05 실패 원인이 429라 수치가 0에 가까워 의미 없음 → 생략
+- **재측정 시 권장**: SSE 핸들러에 연결 시작~종료 duration을 측정하는 커스텀 Micrometer 타이머 추가(담당: 장성재) → Grafana에서 실제 연결 지속시간 P95 확인 가능
+- 이번 베이스라인 Grafana 스크린샷: **JVM 힙 패널만** 기록. 429 수치는 Actions 로그 k6 출력 기준
 
 ### 오너 피드백 (→ 장성재, 지영재)
 
