@@ -467,10 +467,30 @@ $MYSQL -e "UPDATE orders SET status='RESERVED', updated_at=NOW() WHERE order_pay
 
 | 지표 | 결과 | 목표 | 상태 |
 |---|---|---|---|
-| P95 응답 시간 | — | < 3,000ms | 미측정 |
-| 평균 응답 시간 | — | — | — |
-| 에러율 | — | < 1% | 미측정 |
-| 처리량 | — | — | — |
+| P95 응답 시간 | **1.54s** | < 3,000ms | ✅ SLO 달성 |
+| P90 응답 시간 | 1.33s | — | — |
+| 평균 응답 시간 | 895.05ms | — | — |
+| 최대 응답 시간 | 3.03s | — | — |
+| 에러율 | **0.00%** | < 1% | ✅ |
+| 처리량 | 54.4 RPS | — | — |
+| 총 요청 수 | 500 | — | — |
+| 실행 시간 | 9.2s | — | — |
+
+### 스크린샷
+
+![s03_payment_confirm_baseline](screenshots/baseline/s03_payment_confirm_baseline.png)
+
+### 관찰 및 개선사항
+
+**관찰:**
+- P95 1.54s로 SLO(3,000ms) 달성, 에러율 0.00% — 500건 전체 성공 ✅
+- 평균 895ms — Wiremock success 시나리오 즉시 응답 기준으로 안정적 처리
+- 최대 3.03s — SLO 경계(3,000ms)에 0.03s 초과한 단일 케이스. Wiremock timeout 시나리오(5초 지연 설정) 중 한 건이 경계에 걸린 것으로 추정
+- 50 VU 동시 처리에서 54.4 RPS — 9.2초 내 500건 완료, 결제 확인 시나리오로서 충분한 처리량
+
+**개선사항:**
+- 최대 3.03s가 SLO 경계 0.03s 초과 — Wiremock timeout 설정(5초 지연)과 앱 `toss.api.read-timeout` 설정 정합성 확인 권장. `앱 타임아웃 < SLO(3s)` 조건이어야 P95 기준 안전 여유 확보 가능
+- 현재 success(기본) 단일 시나리오 측정. mixed 시나리오(70/10/10/10 비율) 별도 실행 시 에러 응답 유형별 응답시간 분포 파악 가능 — PG 장애 대응 기준선 마련에 유용
 
 ### 트러블슈팅
 
@@ -523,9 +543,11 @@ $MYSQL -e "UPDATE orders SET status='RESERVED', updated_at=NOW() WHERE order_pay
 - **원인**: `bluegreen-deploy.sh` 3단계 `systemctl start "fandrops-$NEW_SLOT"` — 이미 실행 중인 서비스에 `start`는 no-op. 헬스체크가 `/actuator/health`(항상 200)만 확인하므로 구 jar 프로세스로도 통과 → Nginx가 구 jar를 서비스하는 슬롯으로 전환됨.
 - **해결**: `systemctl start` → `systemctl restart` 1줄 수정 (PR #353). `restart`는 실행 여부와 무관하게 프로세스를 재시작해 항상 신규 jar을 반영함.
 
-### 오너 피드백 (장성재)
+### 오너 피드백 (→ 장성재)
 
-> 측정 후 작성
+- P95 1.54s, 에러율 0.00%로 SLO 달성 완료입니다. ✅
+- 최대 3.03s가 SLO 경계(3,000ms)에 0.03s 초과한 케이스가 있습니다. `toss.api.read-timeout` 설정값과 Wiremock timeout 시나리오(5초 지연) 설정을 비교해 앱 타임아웃이 SLO보다 충분히 작게 잡혀있는지 확인 부탁드립니다. `앱 readTimeout < SLO(3s)` 조건이어야 P95 기준 여유가 생깁니다.
+- mixed 시나리오(success 70% / timeout 10% / balance-error 10% / server-error 10%) 별도 실행으로 에러 유형별 응답시간 분포를 기록해 두면 PG 장애 대응 기준선이 됩니다.
 
 ---
 
@@ -673,7 +695,7 @@ done
 |---|---|---|---|---|
 | 01 주문 동시성 | 1.75s (전체) / 865ms (성공) | 75%\* | 0건 ✅ | ❌ P95 초과 |
 | 02 피드 Read | 133.02ms | 0.00% | — | ❌ P95 초과 |
-| 03 결제 확인 | — | — | — | 미측정 |
+| 03 결제 확인 | 1.54s | 0.00% | — | ✅ SLO 달성 |
 | 04 드롭스 스파이크 | 266.24ms (전체) / 640ms (성공) | 99.98%\* | 0건 ✅ | ✅ P95 SLO 달성 |
 | 05 SSE 대기열 | — | — | — | 미측정 |
 | 06 통합 워크로드 | — | — | — | 미측정 |
