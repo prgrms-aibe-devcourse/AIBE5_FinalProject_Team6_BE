@@ -219,6 +219,30 @@ class ArtistProfileServiceTest {
                 () -> artistProfileService.listByAgencyId(10L, "invalid", 20));
     }
 
+    @Test
+    @DisplayName("size=1 최솟값 경계 — size+1=2 요청, hasMore=true 이면 nextCursor 정상 반환")
+    void listByAgencyId_sizeOne_hasMoreTrue() {
+        when(artistProfileRepository.findByAgencyId(10L, null, 2))
+                .thenReturn(List.of(dummyProfile(1L, 500L), dummyProfile(2L, 300L)));
+
+        ArtistProfileListResult result = artistProfileService.listByAgencyId(10L, null, 1);
+
+        assertEquals(1, result.items().size());
+        assertTrue(result.hasMore());
+        assertEquals("1", result.nextCursor());
+        verify(artistProfileRepository).findByAgencyId(10L, null, 2);
+    }
+
+    @Test
+    @DisplayName("size=100 최댓값 경계 — repository에 101개 요청")
+    void listByAgencyId_maxSize_requestsSizePlusOne() {
+        when(artistProfileRepository.findByAgencyId(10L, null, 101)).thenReturn(List.of());
+
+        artistProfileService.listByAgencyId(10L, null, 100);
+
+        verify(artistProfileRepository).findByAgencyId(10L, null, 101);
+    }
+
     // ── 헬퍼 ─────────────────────────────────────────────────────────────────
 
     private ArtistProfile dummyProfile(Long id, long fanCount) {

@@ -33,8 +33,8 @@ public interface ArtistProfileJpaRepository extends JpaRepository<ArtistProfileJ
 
     @Query("SELECT a FROM ArtistProfileJpaEntity a " +
            "WHERE a.agencyId = :agencyId " +
-           "AND (a.fanCount < (SELECT c.fanCount FROM ArtistProfileJpaEntity c WHERE c.id = :cursorId) " +
-           "OR (a.fanCount = (SELECT c.fanCount FROM ArtistProfileJpaEntity c WHERE c.id = :cursorId) AND a.id > :cursorId)) " +
+           "AND (a.fanCount < (SELECT c.fanCount FROM ArtistProfileJpaEntity c WHERE c.id = :cursorId AND c.agencyId = :agencyId) " +
+           "OR (a.fanCount = (SELECT c.fanCount FROM ArtistProfileJpaEntity c WHERE c.id = :cursorId AND c.agencyId = :agencyId) AND a.id > :cursorId)) " +
            "ORDER BY a.fanCount DESC, a.id ASC")
     List<ArtistProfileJpaEntity> findByAgencyIdAfterCursor(@Param("agencyId") Long agencyId, @Param("cursorId") Long cursorId, Pageable pageable);
 }

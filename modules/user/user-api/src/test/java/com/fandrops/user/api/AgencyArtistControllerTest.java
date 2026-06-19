@@ -1,5 +1,7 @@
 package com.fandrops.user.api;
 
+import com.fandrops.common.ApiResponse;
+import com.fandrops.user.api.dto.ArtistProfileListResponse;
 import com.fandrops.user.application.dto.ArtistProfileListResult;
 import com.fandrops.user.application.service.ArtistProfileService;
 import com.fandrops.user.domain.ArtistProfile;
@@ -17,7 +19,7 @@ import org.springframework.security.core.Authentication;
 import java.time.LocalDateTime;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -49,29 +51,37 @@ class AgencyArtistControllerTest {
     }
 
     @Test
-    @DisplayName("Agency 소속 아티스트 목록 조회 → 200 OK + 소속 아티스트 반환")
+    @DisplayName("Agency 소속 아티스트 목록 조회 → 200 OK, items 2건 반환")
     void list_success_returns200WithAgencyArtists() {
         givenAuthenticated(20L);
         ArtistProfileListResult stubResult = new ArtistProfileListResult(
                 List.of(dummyProfile(1L, 20L), dummyProfile(2L, 20L)), null, false);
         when(artistProfileService.listByAgencyId(20L, null, 20)).thenReturn(stubResult);
 
-        ResponseEntity<?> response = controller.list(null, 20, authentication);
+        ResponseEntity<ApiResponse<ArtistProfileListResponse>> response =
+                controller.list(null, 20, authentication);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
+        ArtistProfileListResponse body = response.getBody().data();
+        assertEquals(2, body.items().size());
+        assertFalse(body.hasMore());
+        assertNull(body.nextCursor());
         verify(artistProfileService).listByAgencyId(20L, null, 20);
     }
 
     @Test
-    @DisplayName("Agency 소속 아티스트 없을 때 → 200 OK, 빈 목록 반환")
-    void list_emptyList_returns200() {
+    @DisplayName("Agency 소속 아티스트 없을 때 → 200 OK, 빈 items 반환")
+    void list_emptyList_returns200WithEmptyItems() {
         givenAuthenticated(20L);
         ArtistProfileListResult stubResult = new ArtistProfileListResult(List.of(), null, false);
         when(artistProfileService.listByAgencyId(20L, null, 20)).thenReturn(stubResult);
 
-        ResponseEntity<?> response = controller.list(null, 20, authentication);
+        ResponseEntity<ApiResponse<ArtistProfileListResponse>> response =
+                controller.list(null, 20, authentication);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertTrue(response.getBody().data().items().isEmpty());
+        assertFalse(response.getBody().data().hasMore());
     }
 
     @Test
@@ -99,15 +109,44 @@ class AgencyArtistControllerTest {
     }
 
     @Test
-    @DisplayName("hasMore=true 일 때 → nextCursor 포함 응답")
-    void list_hasMore_returnsNextCursor() {
+    @DisplayName("size=0 → 1로 clamp")
+    void list_zeroSize_clampsToOne() {
+        givenAuthenticated(20L);
+        ArtistProfileListResult stubResult = new ArtistProfileListResult(List.of(), null, false);
+        when(artistProfileService.listByAgencyId(20L, null, 1)).thenReturn(stubResult);
+
+        controller.list(null, 0, authentication);
+
+        verify(artistProfileService).listByAgencyId(20L, null, 1);
+    }
+
+    @Test
+    @DisplayName("size 음수 → 1로 clamp")
+    void list_negativeSize_clampsToOne() {
+        givenAuthenticated(20L);
+        ArtistProfileListResult stubResult = new ArtistProfileListResult(List.of(), null, false);
+        when(artistProfileService.listByAgencyId(20L, null, 1)).thenReturn(stubResult);
+
+        controller.list(null, -5, authentication);
+
+        verify(artistProfileService).listByAgencyId(20L, null, 1);
+    }
+
+    @Test
+    @DisplayName("hasMore=true 일 때 → nextCursor·hasMore 필드 검증")
+    void list_hasMore_returnsNextCursorInBody() {
         givenAuthenticated(20L);
         ArtistProfileListResult stubResult = new ArtistProfileListResult(
                 List.of(dummyProfile(1L, 20L)), "1", true);
         when(artistProfileService.listByAgencyId(20L, null, 1)).thenReturn(stubResult);
 
-        ResponseEntity<?> response = controller.list(null, 1, authentication);
+        ResponseEntity<ApiResponse<ArtistProfileListResponse>> response =
+                controller.list(null, 1, authentication);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
+        ArtistProfileListResponse body = response.getBody().data();
+        assertEquals(1, body.items().size());
+        assertTrue(body.hasMore());
+        assertEquals("1", body.nextCursor());
     }
 }

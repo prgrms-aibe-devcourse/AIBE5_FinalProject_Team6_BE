@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 @PreAuthorize("hasRole('AGENCY')")
 public class AgencyArtistController extends UserControllerSupport {
 
+    private static final int DEFAULT_PAGE_SIZE = 20;
     private static final int MAX_PAGE_SIZE = 100;
 
     private final ArtistProfileService artistProfileService;

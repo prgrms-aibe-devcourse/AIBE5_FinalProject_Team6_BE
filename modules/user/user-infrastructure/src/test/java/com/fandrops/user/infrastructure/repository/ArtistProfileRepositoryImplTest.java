@@ -115,4 +115,36 @@ class ArtistProfileRepositoryImplTest {
 
         assertTrue(result.isEmpty());
     }
+
+    // ── findByAgencyId ────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("findByAgencyId — cursorId null → 첫 페이지 쿼리 호출, 커서 쿼리 미호출")
+    void findByAgencyId_noCursor_callsFirstPageQuery() {
+        when(jpaRepository.findAllByAgencyIdOrderByFanCountDescIdAsc(eq(10L), any()))
+                .thenReturn(List.of(buildEntity(1L, 500L), buildEntity(2L, 300L)));
+
+        List<ArtistProfile> result = repository.findByAgencyId(10L, null, 5);
+
+        assertEquals(2, result.size());
+        ArgumentCaptor<PageRequest> captor = ArgumentCaptor.forClass(PageRequest.class);
+        verify(jpaRepository).findAllByAgencyIdOrderByFanCountDescIdAsc(eq(10L), captor.capture());
+        assertEquals(5, captor.getValue().getPageSize());
+        verify(jpaRepository, never()).findByAgencyIdAfterCursor(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("findByAgencyId — cursorId 있음 → 커서 쿼리 호출, 첫 페이지 쿼리 미호출")
+    void findByAgencyId_withCursor_callsCursorQuery() {
+        when(jpaRepository.findByAgencyIdAfterCursor(eq(10L), eq(2L), any()))
+                .thenReturn(List.of(buildEntity(3L, 100L)));
+
+        List<ArtistProfile> result = repository.findByAgencyId(10L, 2L, 5);
+
+        assertEquals(1, result.size());
+        ArgumentCaptor<PageRequest> captor = ArgumentCaptor.forClass(PageRequest.class);
+        verify(jpaRepository).findByAgencyIdAfterCursor(eq(10L), eq(2L), captor.capture());
+        assertEquals(5, captor.getValue().getPageSize());
+        verify(jpaRepository, never()).findAllByAgencyIdOrderByFanCountDescIdAsc(any(), any());
+    }
 }
