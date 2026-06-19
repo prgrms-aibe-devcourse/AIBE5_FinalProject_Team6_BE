@@ -490,6 +490,39 @@ $MYSQL -e "UPDATE orders SET status='RESERVED', updated_at=NOW() WHERE order_pay
 - **원인 2**: k6 스크립트가 `tossPaymentKey` 누락 → `tossPaymentKey: must not be blank`
 - **해결**: `PaymentConfirmRequest` DTO 확인 후 두 필드 모두 전송. `tossPaymentKey`(Wiremock 라우팅용) + `orderPaymentKey`(DB 주문 조회용) 분리.
 
+**[2026-06-19] JDK HttpClient h2c 업그레이드 — Wiremock body 빈값 → 전체 403**
+
+- **현상**: 400 해결 후 재실행 시 전체 403 반환. Wiremock 로그에 요청은 수신되나 body가 비어있고 JSONPath 매칭 전체 실패.
+- **Wiremock 로그 증거**:
+  ```
+  "Connection": "Upgrade, HTTP2-Settings"
+  "Upgrade": "h2c"
+  "body": ""
+  json string can not be null or empty
+  ```
+- **원인**: JDK HttpClient(Java 21) 기본값이 `HTTP_2`. cleartext HTTP URL(`http://10.0.1.47:8090`)로 요청 시 HTTP/1.1 → HTTP/2 cleartext(h2c) 업그레이드를 시도하는 `Upgrade: h2c` 헤더를 전송. Wiremock/Jetty가 h2c 업그레이드 핸드셰이크 과정에서 request body를 읽지 못해 empty body 수신 → JSONPath stub 매칭 실패 → Wiremock 404 → `RestClientResponseException` → Spring `/error` forward → `anyRequest().denyAll()` → **HTTP 403**.
+- **근본 원인 체인**: `JDK HttpClient h2c` → `Wiremock body=""` → `Wiremock 404` → `unhandled exception` → `/error endpoint` → `denyAll()` → `403`
+- **해결**: `TossPaymentConfig.java` JDK HttpClient 빌더에 `.version(HttpClient.Version.HTTP_1_1)` 추가 (1줄 수정).
+  - **프로덕션 영향 없음**: 실제 TossPayments API는 HTTPS. HTTPS HTTP/2는 `Upgrade: h2c`가 아닌 TLS ALPN으로 협상되므로 h2c 문제 자체가 발생하지 않음. HTTP_1_1 강제로 TLS HTTPS에서 HTTP/2 멀티플렉싱을 포기하나, 결제 confirm은 저빈도 단건 요청이라 성능 영향 없음.
+- **추가 조치**: EC2-2 Security Group(sg-0fbc632fa599e1e64)에 TCP:8090 인바운드 규칙(10.0.0.0/16) 누락 확인 및 추가. EC2-1 → EC2-2:8090 연결 차단이 1차 트리거였음.
+
+**[2026-06-19] jar 배포 후 401 전체 실패 — 해결**
+
+- **현상**: `TossPaymentConfig.java` 수정 후 수동 빌드한 `blue.jar` 배포 이후 모든 인증 엔드포인트에서 401 반환. `/actuator/health`는 200 정상.
+- **응답 특징**: `WWW-Authenticate: Basic realm="Realm"` + `Set-Cookie: JSESSIONID=...` — Spring Security 기본 HTTP Basic 인증 폴백 상태.
+- **원인 1 — blue.jar 빌드 누락**: SSM으로 EC2-1에 접속해 blue.jar 내부를 확인한 결과 `ApiSecurityConfig.class` 미포함, `LocalSecurityConfig.class`만 존재. 동시 기동 중이던 green.jar에는 `ApiSecurityConfig.class` 정상 포함. 수동 빌드 시 불완전한 상태로 jar가 생성된 것으로 추정. Spring이 `SecurityFilterChain` 빈을 찾지 못해 기본 HTTP Basic 인증으로 폴백 → 401.
+- **원인 2 — bluegreen-deploy.sh `systemctl start` no-op**: `TossPaymentConfig` fix를 커밋 후 CD 파이프라인이 정상 완료(conclusion: success)했으나 blue 서비스가 갱신되지 않음. 확인 결과 `bluegreen-deploy.sh` 3단계가 `systemctl start`로 되어 있어 이미 실행 중인 슬롯에는 no-op 처리됨. 헬스체크가 `/actuator/health`만 확인하므로 구 jar 상태에서도 통과 → 신규 jar 미반영.
+- **해결**:
+  - `TossPaymentConfig.java` HTTP_1_1 fix를 커밋·PR #351 머지 후 CD 실행
+  - CD 완료 후 `systemctl restart fandrops-blue` 수동 실행 → 새 jar 로드 → 8081 200 정상 확인
+  - `bluegreen-deploy.sh` `systemctl start` → `systemctl restart` 수정 (PR #353, Closes #352)
+
+**[2026-06-19] bluegreen-deploy.sh systemctl start no-op — 해결**
+
+- **현상**: CD 파이프라인이 conclusion: success로 완료됐으나 배포 대상 슬롯(blue)의 서비스가 재시작되지 않음. jar 타임스탬프(11:40 신규)와 프로세스 기동 시각(10:59:25 구) 불일치 확인.
+- **원인**: `bluegreen-deploy.sh` 3단계 `systemctl start "fandrops-$NEW_SLOT"` — 이미 실행 중인 서비스에 `start`는 no-op. 헬스체크가 `/actuator/health`(항상 200)만 확인하므로 구 jar 프로세스로도 통과 → Nginx가 구 jar를 서비스하는 슬롯으로 전환됨.
+- **해결**: `systemctl start` → `systemctl restart` 1줄 수정 (PR #353). `restart`는 실행 여부와 무관하게 프로세스를 재시작해 항상 신규 jar을 반영함.
+
 ### 오너 피드백 (장성재)
 
 > 측정 후 작성
