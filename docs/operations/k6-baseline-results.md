@@ -467,10 +467,30 @@ $MYSQL -e "UPDATE orders SET status='RESERVED', updated_at=NOW() WHERE order_pay
 
 | 지표 | 결과 | 목표 | 상태 |
 |---|---|---|---|
-| P95 응답 시간 | — | < 3,000ms | 미측정 |
-| 평균 응답 시간 | — | — | — |
-| 에러율 | — | < 1% | 미측정 |
-| 처리량 | — | — | — |
+| P95 응답 시간 | **1.54s** | < 3,000ms | ✅ SLO 달성 |
+| P90 응답 시간 | 1.33s | — | — |
+| 평균 응답 시간 | 895.05ms | — | — |
+| 최대 응답 시간 | 3.03s | — | — |
+| 에러율 | **0.00%** | < 1% | ✅ |
+| 처리량 | 54.4 RPS | — | — |
+| 총 요청 수 | 500 | — | — |
+| 실행 시간 | 9.2s | — | — |
+
+### 스크린샷
+
+![s03_payment_confirm_baseline](screenshots/baseline/s03_payment_confirm_baseline.png)
+
+### 관찰 및 개선사항
+
+**관찰:**
+- P95 1.54s로 SLO(3,000ms) 달성, 에러율 0.00% — 500건 전체 성공 ✅
+- 평균 895ms — Wiremock success 시나리오 즉시 응답 기준으로 안정적 처리
+- 최대 3.03s — SLO 경계(3,000ms)에 0.03s 초과한 단일 케이스. Wiremock timeout 시나리오(5초 지연 설정) 중 한 건이 경계에 걸린 것으로 추정
+- 50 VU 동시 처리에서 54.4 RPS — 9.2초 내 500건 완료, 결제 확인 시나리오로서 충분한 처리량
+
+**개선사항:**
+- 최대 3.03s가 SLO 경계 0.03s 초과 — Wiremock timeout 설정(5초 지연)과 앱 `toss.api.read-timeout` 설정 정합성 확인 권장. `앱 타임아웃 < SLO(3s)` 조건이어야 P95 기준 안전 여유 확보 가능
+- 현재 success(기본) 단일 시나리오 측정. mixed 시나리오(70/10/10/10 비율) 별도 실행 시 에러 응답 유형별 응답시간 분포 파악 가능 — PG 장애 대응 기준선 마련에 유용
 
 ### 트러블슈팅
 
@@ -523,9 +543,11 @@ $MYSQL -e "UPDATE orders SET status='RESERVED', updated_at=NOW() WHERE order_pay
 - **원인**: `bluegreen-deploy.sh` 3단계 `systemctl start "fandrops-$NEW_SLOT"` — 이미 실행 중인 서비스에 `start`는 no-op. 헬스체크가 `/actuator/health`(항상 200)만 확인하므로 구 jar 프로세스로도 통과 → Nginx가 구 jar를 서비스하는 슬롯으로 전환됨.
 - **해결**: `systemctl start` → `systemctl restart` 1줄 수정 (PR #353). `restart`는 실행 여부와 무관하게 프로세스를 재시작해 항상 신규 jar을 반영함.
 
-### 오너 피드백 (장성재)
+### 오너 피드백 (→ 장성재)
 
-> 측정 후 작성
+- P95 1.54s, 에러율 0.00%로 SLO 달성 완료입니다. ✅
+- 최대 3.03s가 SLO 경계(3,000ms)에 0.03s 초과한 케이스가 있습니다. `toss.api.read-timeout` 설정값과 Wiremock timeout 시나리오(5초 지연) 설정을 비교해 앱 타임아웃이 SLO보다 충분히 작게 잡혀있는지 확인 부탁드립니다. `앱 readTimeout < SLO(3s)` 조건이어야 P95 기준 여유가 생깁니다.
+- mixed 시나리오(success 70% / timeout 10% / balance-error 10% / server-error 10%) 별도 실행으로 에러 유형별 응답시간 분포를 기록해 두면 PG 장애 대응 기준선이 됩니다.
 
 ---
 
@@ -562,18 +584,48 @@ ulimit -n  # ≥ 8192 확인
 
 GitHub Actions → **Run k6 Load Test** → `scenario: 05` → `confirm: yes`
 
+### 스크린샷
+
+![s05_sse_queue_baseline](screenshots/baseline/s05_sse_queue_baseline.png)
+
 ### 결과 (베이스라인)
 
 | 지표 | 결과 | 목표 | 상태 |
 |---|---|---|---|
-| 정상 구간 에러율 (1,000 VU) | — | < 0.1% | 미측정 |
-| 경계 구간 에러율 (1,800 VU) | — | < 1% | 미측정 |
-| 초과 구간 429 발생 (2,100 VU) | — | count > 0 | 미측정 |
-| 429 retryable:true | — | 필수 | 미측정 |
+| 정상 구간 에러율 (1,000 VU) | **100%** | < 0.1% | ❌ SLO 미달 |
+| 경계 구간 에러율 (1,800 VU) | **100%** | < 1% | ❌ SLO 미달 |
+| 초과 구간 429 발생 (2,100 VU) | count=1,500,379 | count > 0 | ✅ |
+| 429 retryable:true | **0%** (0/1,500,379) | 필수 | ❌ API 계약 위반 |
+| 총 요청 수 | 1,804,265 | — | — |
+| 처리량 | 5,113 RPS | — | — |
+| http_req_duration p95 | 213.19ms | — | — |
 
-### 오너 피드백 (장성재, 지영재)
+> k6 수치 기준. Grafana Remote Write 미연결(Actions runner). 429 수치는 k6 로그로 기록.
 
-> 측정 후 작성
+### 관찰 및 개선사항
+
+**관찰:**
+- normal_load(1,000 VU)·boundary(1,800 VU) 구간 에러율 100% — SSE 연결 자체가 전혀 성립하지 않음 ❌
+- 전체 1,804,265건 중 1,500,379건(83%)이 429 응답, 303,886건이 기타 unexpected status
+- 429가 정상 구간(1,000 VU)에서도 발생하는 것으로 추정 — 대기열 진입 임계값이 VU 수보다 낮게 설정되어 있거나 Rate Limit이 전체 IP 기준으로 동작 중인 것으로 추정
+- overflow 구간 429 count > 0 달성 ✅ — 그러나 응답 body에 `retryable:true` 미포함으로 API 계약 위반 ❌
+
+**개선사항:**
+- 429 응답 body에 `"retryable": true` 추가 필요 — `docs/api/api-contract.md` 계약 이행
+- SSE 연결 허용 임계값 확인 — 대기열 최대 동시 연결 수 설정(Redis 기반)이 1,000 VU 이하로 설정돼 있는지 점검
+- Nginx `worker_connections` 및 `ulimit -n` 설정값 실제 확인 필요 (사전 준비 항목)
+
+**Grafana 메트릭 한계 및 개선 방향:**
+- 현재 Grafana P95(`GET /api/v1/queue/stream/{productId}`) = 4.97ms — Micrometer `http.server.requests` 타이머가 SSE 스트림 셋업 시간만 측정하므로 클라이언트 체감 연결 지속시간과 무관
+- 5xx 에러율 패널은 s05 실패 원인이 429라 수치가 0에 가까워 의미 없음 → 생략
+- **재측정 시 권장**: SSE 핸들러에 연결 시작~종료 duration을 측정하는 커스텀 Micrometer 타이머 추가(담당: 장성재) → Grafana에서 실제 연결 지속시간 P95 확인 가능
+- 이번 베이스라인 Grafana 스크린샷: **JVM 힙 패널만** 기록. 429 수치는 Actions 로그 k6 출력 기준
+
+### 오너 피드백 (→ 장성재, 지영재)
+
+- normal_load 1,000 VU 구간부터 에러율 100%입니다. SSE 연결 자체가 성립하지 않는 상태로 SLO 달성 불가입니다. ❌
+- 장성재: 429 응답 body에 `"retryable": true` 누락 — `api-contract.md` API 계약 위반입니다. 대기열 초과 응답 핸들러에 필드 추가 부탁드립니다.
+- 지영재(자체): Nginx `worker_connections` · `ulimit -n` 실제 설정값 확인 및 SSE 동시 연결 허용 범위 점검 필요. 1,000 VU 정상 구간에서 429가 발생하는 원인이 Nginx 설정인지 앱 레벨 제한인지 구분이 선행돼야 합니다.
 
 ---
 
@@ -653,17 +705,63 @@ done
 
 ### 결과 (베이스라인)
 
+> **실행일**: 2026-06-19  
+> **결과**: ❌ k6 exit 99 (threshold failure) — 베이스라인 미확정, 블로커 2건
+
 | 지표 | 결과 | 목표 | 상태 |
 |---|---|---|---|
-| Write P95 | — | < 300ms | 미측정 |
-| Read P95 | — | < 120ms | 미측정 |
-| 에러율 | — | < 0.1% | 미측정 |
-| 오버셀 | — | 0건 | 미측정 |
-| 처리량 | — | — | — |
+| Write P95 | 측정 불가 | < 300ms | ❌ 블로커로 의미없음 |
+| Read P95 | 측정 불가 | < 120ms | ❌ 블로커로 의미없음 |
+| 에러율 | ~65% | < 0.1% | ❌ 임계 초과 |
+| 오버셀 | 미확인 | 0건 | — |
+| 총 iterations | 544,907 | — | — |
+
+**워크로드 실제 분포** (Prometheus `max_over_time[2h]`)
+
+| 구간 | 카운터 | 비율 |
+|---|---|---|
+| wl_feed | 326,464 | 60% ✅ |
+| wl_queue | 109,494 | 20% ✅ |
+| wl_order | 81,632 | 15% ✅ |
+| wl_payment | 27,317 | 5% ✅ |
+
+### 블로커 분석
+
+#### 블로커 1: Feed 403 — ROLE_FAN 권한 없음 (담당: 정환철)
+
+```
+GET /api/v1/artists/1/feeds
+→ 403 {"code":"FORBIDDEN","message":"지원하지 않는 role: [ROLE_FAN]"}
+```
+
+- **영향**: 전체 트래픽 60%가 100% 실패 → 에러율 65%+
+- **원인**: `SecurityConfig`에서 `/api/v1/artists/*/feeds` 엔드포인트에 `ROLE_FAN` 접근 권한이 누락됨
+- **확인**: `curl -H "Authorization: Bearer <fan_token>" https://api.fandrops.site/api/v1/artists/1/feeds` → 403
+- **수정 필요**: SecurityConfig 또는 해당 컨트롤러의 `@PreAuthorize`에 `ROLE_FAN` 허용 추가
+
+#### 블로커 2: Payment 400 — Wiremock 스텁 미매칭 (담당: 장성재)
+
+```
+POST /api/v1/payments/toss/confirm  body: tossPaymentKey="wl-{orderId}-{iter}"
+→ 400 Bad Request (Wiremock stub miss)
+```
+
+- **원인**: s06 결제 구간이 생성하는 `tossPaymentKey` 형식(`wl-N-N`)이 Wiremock 등록 스텁과 불일치
+- **수정 필요**: Wiremock stub에 임의 `tossPaymentKey` 패턴 허용 (`"matchingType": "REGEX"` 또는 wildcard stub 추가)
+
+#### 참고: Payment 429 — Rate Limiting (정상 동작)
+
+- `POST /api/v1/payments/toss/confirm` → 429 Too Many Requests
+- Rate limiter 정상 작동. s06에서는 check에서 200/201만 허용하므로 429도 실패로 집계됨
+- s06 시나리오 check 조건 수정 필요: `r.status === 200 || r.status === 201 || r.status === 429`
 
 ### 오너 피드백 (전체)
 
-> 측정 후 작성
+> **정환철**: `GET /api/v1/artists/{id}/feeds` SecurityConfig에서 ROLE_FAN 허용 추가 필요.  
+> **장성재**: Wiremock stub에 임의 tossPaymentKey 패턴(REGEX) 추가 필요.  
+> **지영재**: `06_workload_model.js` payment check 조건에 429 허용 추가 (`r.status === 200 || r.status === 201 || r.status === 429`). queue join에도 rate limit 429 발생 여부 확인 후 필요 시 동일 수정.  
+> **형성빈**: `POST /api/v1/orders` (15%) 구간에서 `vuToken = null`로 인해 실제 HTTP 요청이 발생하지 않음. 스크립트 주석(첫 번째 iteration — accessToken 획득)과 달리 초기화 로직이 default function에 없어 주문 검증이 사실상 미실시된 상태. 재측정 전 vuToken 초기화 로직 추가 또는 tokens.csv 토큰으로 대체 필요.  
+> 블로커 2건 + check 조건 + vuToken 초기화 수정 후 재측정 예정.
 
 ---
 
@@ -673,7 +771,7 @@ done
 |---|---|---|---|---|
 | 01 주문 동시성 | 1.75s (전체) / 865ms (성공) | 75%\* | 0건 ✅ | ❌ P95 초과 |
 | 02 피드 Read | 133.02ms | 0.00% | — | ❌ P95 초과 |
-| 03 결제 확인 | — | — | — | 미측정 |
+| 03 결제 확인 | 1.54s | 0.00% | — | ✅ SLO 달성 |
 | 04 드롭스 스파이크 | 266.24ms (전체) / 640ms (성공) | 99.98%\* | 0건 ✅ | ✅ P95 SLO 달성 |
-| 05 SSE 대기열 | — | — | — | 미측정 |
-| 06 통합 워크로드 | — | — | — | 미측정 |
+| 05 SSE 대기열 | 213ms (p95) | 100%\* | — | ❌ 에러율 100%, retryable:true 누락 |
+| 06 통합 워크로드 | 측정 불가 | ~65%❌ | — | ❌ 블로커 2건: feed ROLE_FAN 403, Wiremock 400 |
