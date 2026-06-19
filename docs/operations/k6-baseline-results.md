@@ -394,29 +394,42 @@ done
 
 ### 사전 준비
 
-```bash
-# Wiremock 기동 확인 (EC2-1에서)
-docker ps --filter name=wiremock  # Up 상태 확인
+> ⚠️ **Wiremock 실행 위치: EC2-2** — EC2-1(t3.small)에서 Spring Boot + Wiremock(Java 2개)을 동시 구동하면 메모리 포화로 OOM이 반복된다. Wiremock은 반드시 EC2-2에서 기동한다.
 
-# TOSS_API_BASE_URL 설정 확인 (EC2-1)
-ACTIVE=$(cat /etc/fandrops/active-slot)
+```bash
+# [EC2-2] Wiremock 기동
+sudo docker rm -f wiremock 2>/dev/null; \
+sudo docker run -d --name wiremock \
+  -e JAVA_OPTS="-Xmx256m" \
+  -p 8090:8080 \
+  -v /opt/fandrops/repo/infra/k6/wiremock/mappings:/home/wiremock/mappings \
+  wiremock/wiremock:3.3.1 --global-response-templating
+
+# [EC2-1] TOSS_API_BASE_URL → EC2-2 내부 IP로 설정
+ACTIVE=$(sudo cat /etc/fandrops/active-slot)
 grep TOSS_API_BASE_URL /etc/fandrops/fandrops-prod.conf
-# → http://localhost:8090 이어야 함. 아니면:
-# sudo sed -i 's|TOSS_API_BASE_URL=.*|TOSS_API_BASE_URL=http://localhost:8090|' /etc/fandrops/fandrops-prod.conf
+# → http://10.0.1.47:8090 이어야 함. 아니면:
+# sudo sed -i 's|TOSS_API_BASE_URL=.*|TOSS_API_BASE_URL=http://10.0.1.47:8090|' /etc/fandrops/fandrops-prod.conf
 # sudo systemctl restart fandrops-$ACTIVE
 
-# DB: RESERVED 주문 500건 batch insert (EC2-2에서)
-mysql -u fandrops_admin -pfandrops1234 \
-  -h fandrops-prod-mysql.coqwxjz7zumt.ap-northeast-2.rds.amazonaws.com fandrops \
+# [EC2-2] DB: RESERVED 주문 500건 batch insert
+sudo mysql -h 10.0.1.114 -u root -pfandrops fandrops \
   -e "INSERT INTO orders (fan_id, idempotency_key, order_payment_key, status, total_amount, created_at, updated_at) SELECT ((n-1) % 2100) + 1, UUID(), CONCAT('seed-opk-', LPAD(n, 6, '0')), 'RESERVED', 15000.00, NOW(), NOW() FROM (SELECT a.n + b.n*10 + c.n*100 + 1 AS n FROM (SELECT 0 AS n UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9) a CROSS JOIN (SELECT 0 AS n UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9) b CROSS JOIN (SELECT 0 AS n UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4) c WHERE a.n + b.n*10 + c.n*100 + 1 <= 500) nums;"
 
-# orders.json 생성 (EC2-2에서)
-mysql -u fandrops_admin -pfandrops1234 \
-  -h fandrops-prod-mysql.coqwxjz7zumt.ap-northeast-2.rds.amazonaws.com fandrops \
-  --skip-column-names --batch \
-  -e "SELECT CONCAT('{\"orderId\":', id, ',\"amount\":', CAST(total_amount AS UNSIGNED), ',\"fanId\":', fan_id, '}') FROM orders WHERE status='RESERVED' ORDER BY id DESC LIMIT 500;" \
-  | awk 'BEGIN{printf "["} NR>1{printf ","} {printf $0} END{print "]"}' \
-  | sudo tee /opt/fandrops/k6/seed/orders.json > /dev/null
+# [EC2-2] orders.json 생성 (orderPaymentKey 포함)
+cd /opt/fandrops/k6
+sudo mysql -h 10.0.1.114 -u root -pfandrops fandrops -sNe "
+SELECT CONCAT('[', GROUP_CONCAT(
+  JSON_OBJECT(
+    'orderId', id,
+    'fanId', fan_id,
+    'amount', CAST(total_amount AS UNSIGNED),
+    'orderPaymentKey', order_payment_key
+  ) ORDER BY id SEPARATOR ','
+), ']')
+FROM orders
+WHERE order_payment_key LIKE 'seed-opk-%'
+LIMIT 500;" > seed/orders.json
 ```
 
 ### 실행 명령어
@@ -461,20 +474,21 @@ $MYSQL -e "UPDATE orders SET status='RESERVED', updated_at=NOW() WHERE order_pay
 
 ### 트러블슈팅
 
-**[2026-06-19] EC2-1 SSM 에이전트 OOM 강제 종료**
+**[2026-06-19] EC2-1 OOM 반복 — Wiremock EC2-2 이전으로 근본 해결**
 
-- **현상**: s03 실행 중 EC2-1 SSM 연결 끊김(연결 끊김 상태), SSH/Instance Connect 불가, CD 파이프라인 SSM RunCommand 10분 InProgress 후 타임아웃
-- **원인**: t3.small(2GB RAM)에서 Spring Boot + Wiremock(Java 2개) + Prometheus + Nginx 동시 구동 중 k6 50 VU 부하로 스레드 누적 → 메모리 포화 → OOM killer가 SSM 에이전트 프로세스를 종료
-- **해결**: EC2-1 콘솔 재부팅 후 SSM 정상화
-- **재발 방지**: Wiremock 기동 시 힙 사이즈 제한 적용
+- **현상**: s03 실행 중 EC2-1 SSM 연결 끊김, SSH/Instance Connect 불가, CD 파이프라인 타임아웃. Wiremock `-Xmx256m` 적용 후에도 재발.
+- **원인**: t3.small(2GB)에서 Java 프로세스 과다 — Spring Boot(~512MB) + Wiremock(~256MB) + MySQL(~400MB) + Prometheus + OS 합산 시 여유 없음. k6 50 VU 부하 시 Spring Boot 스레드 증가로 OOM killer 발동 → SSM 에이전트 종료.
+- **해결**: EC2-1 콘솔 재부팅 후 SSM 정상화 (임시)
+- **근본 해결**: Wiremock을 EC2-2로 이전. EC2-1은 Spring Boot + MySQL + Nginx만 유지.
+  - EC2-2에서 Wiremock 기동 (위 사전 준비 참고)
+  - Spring Boot `TOSS_API_BASE_URL=http://10.0.1.47:8090`으로 재기동
 
-```bash
-docker run -d --name wiremock \
-  -e JAVA_OPTS="-Xmx256m" \
-  -p 8090:8080 \
-  -v $(pwd)/infra/k6/wiremock/mappings:/home/wiremock/mappings \
-  wiremock/wiremock:3.3.1 --global-response-templating
-```
+**[2026-06-19] s03 요청 필드명 불일치 — 전체 400 실패**
+
+- **현상**: 500건 전체 `INVALID_REQUEST` 400 반환. Spring 로그에 payment 항목 없음.
+- **원인 1**: k6 스크립트가 `orderPaymentKey` 누락 → `orderPaymentKey: must not be blank`
+- **원인 2**: k6 스크립트가 `tossPaymentKey` 누락 → `tossPaymentKey: must not be blank`
+- **해결**: `PaymentConfirmRequest` DTO 확인 후 두 필드 모두 전송. `tossPaymentKey`(Wiremock 라우팅용) + `orderPaymentKey`(DB 주문 조회용) 분리.
 
 ### 오너 피드백 (장성재)
 
