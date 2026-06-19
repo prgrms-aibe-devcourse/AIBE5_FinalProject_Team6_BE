@@ -72,10 +72,10 @@ k6 run -e BASE_URL=$BASE_URL \
 
 ### 이전 피드백 (정환철)
 
-| 항목 | 베이스라인 수치 | 이슈 |
-|---|---|---|
-| P95 응답시간 | 133.02ms | SLO 120ms 초과 |
-| 쿼리 최적화 / 캐싱 | 미적용 | DB 직접 조회, 캐싱 없음 |
+> 출처: `k6-baseline-results.md` — 오너 피드백 (→ 정환철)
+
+- P95 133ms로 SLO(120ms) 13ms 미달입니다. 초반 캐시 워밍업 구간에서 250ms까지 튀는 게 집계 수치를 끌어올리고 있어서, 워밍업 트래픽 인가 또는 TTL jitter 범위 축소를 검토해주세요.
+- Redis P95 레이턴시 초반 25ms 피크가 캐시 미스 시 DB 쿼리에서 오는 것으로 보입니다. 피드 조회 쿼리 실행 계획(EXPLAIN) 한 번 확인 부탁드립니다.
 
 ### 피드백 반영 내용 (정환철)
 
@@ -125,13 +125,11 @@ k6 run -e BASE_URL=https://api.fandrops.site \
 
 ### 이전 피드백 (형성빈)
 
-| 항목 | 베이스라인 수치 | 이슈 |
-|---|---|---|
-| P95 응답시간 (전체) | 1,750ms | SLO 300ms 초과 |
-| P95 응답시간 (성공 요청) | 865ms | SLO 300ms 초과 |
-| 에러율 | 75%\* | 재고 소진 후 409 — 정상 동작 |
-| 오버셀 | 0건 | ✅ SLO 달성 |
-| 분산 락 경합 | 미최적화 | 락 대기 누적으로 응답 지연 추정 |
+> 출처: `k6-baseline-results.md` — 오너 피드백 (→ 형성빈)
+
+- P95 865ms(성공 요청 기준)로 SLO(300ms) 약 3배 초과입니다. 오버셀은 0건으로 정합성은 완벽합니다.
+- 200 VU 동시 발화 시 Redis 분산 락 직렬화 대기가 병목으로 추정됩니다. `reserveAtomic` Lua 스크립트 실행 시간 및 락 경합 현황 확인 부탁드립니다.
+- DB `available_qty` 조건 UPDATE 실행 계획(EXPLAIN)도 함께 확인해주세요.
 
 ### 피드백 반영 내용 (형성빈)
 
@@ -199,12 +197,10 @@ k6 run -e BASE_URL=http://10.0.1.114:8081 \
 
 ### 이전 피드백 (형성빈)
 
-| 항목 | 베이스라인 수치 | 이슈 |
-|---|---|---|
-| P95 응답시간 (전체) | 266.24ms | ✅ SLO 300ms 달성 |
-| P95 응답시간 (성공 요청) | 640ms | 참고값 — SLO 기준 외 |
-| 에러율 | 99.98%\* | 재고 소진 후 409 — 정상 동작 |
-| 오버셀 | 0건 | ✅ SLO 달성 |
+> 출처: `k6-baseline-results.md` — 오너 피드백 (→ 형성빈)
+
+- P95 266ms로 SLO(300ms) 달성, 오버셀 0건 확인입니다. ✅
+- Nginx rate limit이 스파이크를 흡수해서 앱 서버가 보호된 결과입니다. 성공 요청 P95 640ms는 s01과 동일하게 Redis 분산 락 경합이 원인으로 추정됩니다. 락 최적화 검토 부탁드립니다.
 
 ### 피드백 반영 내용 (형성빈)
 
@@ -267,12 +263,11 @@ k6 run -e BASE_URL=https://api.fandrops.site \
 
 ### 이전 피드백 (장성재)
 
-| 항목 | 베이스라인 수치 | 이슈 |
-|---|---|---|
-| P95 응답시간 | 1,540ms | ✅ SLO 3,000ms 달성 |
-| 에러율 | 0.00% | ✅ SLO 달성 |
-| h2c Upgrade 버그 | TossPaymentConfig HTTP_2 기본값 | Wiremock 빈 body → 403 체인 → PR #351 수정 완료 |
-| bluegreen systemctl start no-op | start → restart 미변경 | 신규 JAR 미로드 → PR #353 수정 완료 |
+> 출처: `k6-baseline-results.md` — 오너 피드백 (→ 장성재)
+
+- P95 1.54s, 에러율 0.00%로 SLO 달성 완료입니다. ✅
+- 최대 3.03s가 SLO 경계(3,000ms)에 0.03s 초과한 케이스가 있습니다. `toss.api.read-timeout` 설정값과 Wiremock timeout 시나리오(5초 지연) 설정을 비교해 앱 타임아웃이 SLO보다 충분히 작게 잡혀있는지 확인 부탁드립니다. `앱 readTimeout < SLO(3s)` 조건이어야 P95 기준 여유가 생깁니다.
+- mixed 시나리오(success 70% / timeout 10% / balance-error 10% / server-error 10%) 별도 실행으로 에러 유형별 응답시간 분포를 기록해 두면 PG 장애 대응 기준선이 됩니다.
 
 ### 피드백 반영 내용 (장성재)
 
@@ -339,12 +334,11 @@ BASE_URL=http://10.0.1.114:8081 k6 run \
 
 ### 이전 피드백 (장성재, 지영재)
 
-| 항목 | 베이스라인 수치 | 이슈 |
-|---|---|---|
-| 정상 구간 에러율 (1,000 VU) | 100% | ❌ SLO 0.1% 초과 — SSE 연결 거부 로직 부재 |
-| 경계 구간 에러율 (1,800 VU) | 100% | ❌ SLO 1% 초과 |
-| 초과 구간 429 발생 (2,100 VU) | 발생 ✅ | — |
-| 429 retryable:true | 누락 ❌ | 클라이언트 재시도 불가 — 응답 본문 수정 필요 |
+> 출처: `k6-baseline-results.md` — 오너 피드백 (→ 장성재, 지영재)
+
+- normal_load 1,000 VU 구간부터 에러율 100%입니다. SSE 연결 자체가 성립하지 않는 상태로 SLO 달성 불가입니다. ❌
+- 장성재: 429 응답 body에 `"retryable": true` 누락 — `api-contract.md` API 계약 위반입니다. 대기열 초과 응답 핸들러에 필드 추가 부탁드립니다.
+- 지영재(자체): Nginx `worker_connections` · `ulimit -n` 실제 설정값 확인 및 SSE 동시 연결 허용 범위 점검 필요. 1,000 VU 정상 구간에서 429가 발생하는 원인이 Nginx 설정인지 앱 레벨 제한인지 구분이 선행돼야 합니다.
 
 ### 피드백 반영 내용 (장성재, 지영재)
 
@@ -385,12 +379,12 @@ GitHub Actions → **Run k6 Load Test** → `scenario: 05` → `confirm: yes`
 
 ### 이전 피드백 (전체)
 
-| 항목 | 베이스라인 수치 | 이슈 | 담당 |
-|---|---|---|---|
-| Feed 403 ROLE_FAN | 60% 트래픽 100% 실패 | SecurityConfig에서 ROLE_FAN 접근 권한 누락 | 정환철 |
-| Payment 400 Wiremock | 5% 트래픽 100% 실패 | tossPaymentKey 형식(`wl-N-N`) 스텁 미매칭 | 장성재 |
-| Payment check 429 미허용 | check 실패 처리 | rate limiter 정상 429를 실패로 집계 | 지영재 |
-| 전체 에러율 | ~65% | Feed+Payment 실패 합산 — http_req_failed 임계 초과 | 전체 |
+> 출처: `k6-baseline-results.md` — 오너 피드백 (전체)
+
+- **정환철**: `GET /api/v1/artists/{id}/feeds` SecurityConfig에서 ROLE_FAN 허용 추가 필요.
+- **장성재**: Wiremock stub에 임의 tossPaymentKey 패턴(REGEX) 추가 필요.
+- **지영재**: `06_workload_model.js` payment check 조건에 429 허용 추가 (`r.status === 200 || r.status === 201 || r.status === 429`). queue join에도 rate limit 429 발생 여부 확인 후 필요 시 동일 수정.
+- 블로커 2건 수정 + check 조건 수정 후 재측정 예정.
 
 ### 피드백 반영 내용 (전체)
 
