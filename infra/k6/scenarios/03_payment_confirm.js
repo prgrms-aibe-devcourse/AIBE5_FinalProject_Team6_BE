@@ -33,7 +33,7 @@
  *   balance-error → toss-confirm-balance-error.json (400 잔액부족)
  *   server-error  → toss-confirm-server-error.json  (500 PG 오류)
  *
- * orders.json 형식: [{"orderId":1,"amount":15000,"fanId":1},...]
+ * orders.json 형식: [{"orderId":1,"amount":15000,"fanId":1,"orderPaymentKey":"seed-opk-000001"},...]
  */
 import http from 'k6/http';
 import { check } from 'k6';
@@ -82,12 +82,14 @@ export default function () {
   const fanId = order.fanId || exec.scenario.iterationInTest + 1;
   const token = userTokens[(fanId - 1) % userTokens.length].token;
   const prefix = resolvePrefix();
-  // prefix가 Wiremock stub 라우팅 키 — orderId가 iteration마다 고유하므로 충돌 없음
-  const orderPaymentKey = `${prefix}-${order.orderId}-${exec.scenario.iterationInTest}`;
+  // tossPaymentKey: Wiremock stub 라우팅 키 (prefix 기반, iteration마다 고유)
+  // orderPaymentKey: DB에 저장된 실제 order_payment_key (주문 조회용)
+  const tossPaymentKey = `${prefix}-${order.orderId}-${exec.scenario.iterationInTest}`;
+  const orderPaymentKey = order.orderPaymentKey;
 
   const res = http.post(
     `${BASE_URL}/api/v1/payments/toss/confirm`,
-    JSON.stringify({ orderPaymentKey, orderId: order.orderId, amount: order.amount }),
+    JSON.stringify({ tossPaymentKey, orderPaymentKey, orderId: order.orderId, amount: order.amount }),
     { headers: authHeaders(token) },
   );
 
