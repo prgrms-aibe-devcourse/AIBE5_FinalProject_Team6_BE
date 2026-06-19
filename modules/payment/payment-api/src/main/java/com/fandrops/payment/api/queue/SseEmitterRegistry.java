@@ -77,21 +77,6 @@ public class SseEmitterRegistry {
         return register(productId, fanId);
     }
 
-    /**
-     * 모든 emitter에 SSE comment heartbeat를 전송한다.
-     * write 시 IOException 발생 = 클라이언트 연결 종료 → 즉시 map에서 제거.
-     * 스케줄러에서 주기적으로 호출해 stale emitter를 조기에 정리한다.
-     */
-    public void sendHeartbeat() {
-        for (Map.Entry<String, SseEmitter> entry : emitters.entrySet()) {
-            try {
-                entry.getValue().send(SseEmitter.event().comment("heartbeat"));
-            } catch (IOException e) {
-                emitters.remove(entry.getKey());
-            }
-        }
-    }
-
     private String key(Long productId, Long fanId) {
         return productId + ":" + fanId;
     }
