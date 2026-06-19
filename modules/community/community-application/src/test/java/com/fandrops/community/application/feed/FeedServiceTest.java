@@ -2,6 +2,8 @@ package com.fandrops.community.application.feed;
 
 import com.fandrops.community.application.exception.FeedNotFoundException;
 import com.fandrops.community.application.exception.FeedOwnershipException;
+import com.fandrops.community.application.feed.FeedCacheEvictEvent;
+import com.fandrops.community.application.port.FeedCachePort;
 import com.fandrops.community.application.port.OutboxEventPort;
 import com.fandrops.community.application.port.OutboxEventType;
 import org.springframework.context.ApplicationEventPublisher;
@@ -23,10 +25,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -42,6 +46,7 @@ class FeedServiceTest {
     @Mock CommentLikeRepository commentLikeRepository;
     @Mock OutboxEventPort outboxEventPort;
     @Mock ApplicationEventPublisher applicationEventPublisher;
+    @Mock FeedCachePort feedCachePort;
 
     FeedService feedService;
     Clock clock;
@@ -52,7 +57,11 @@ class FeedServiceTest {
         feedService = new FeedService(
                 feedRepository, imageRepository, feedLikeRepository,
                 commentRepository, commentLikeRepository, outboxEventPort,
-                applicationEventPublisher, clock);
+                applicationEventPublisher, clock, feedCachePort);
+        // 기본값: getOrLoad는 loader를 직접 실행 (캐시 miss 시뮬레이션)
+        // doAnswer 방식: stub 등록 시 mock 메서드가 호출되지 않아 NPE 방지
+        lenient().doAnswer(inv -> inv.<Supplier<FeedListResult>>getArgument(3).get())
+                .when(feedCachePort).getOrLoad(anyLong(), any(), anyInt(), any());
     }
 
     @Nested
@@ -327,6 +336,88 @@ class FeedServiceTest {
             assertThrows(FeedNotFoundException.class,
                     () -> feedService.getFeed(999L, null, null));
             verifyNoInteractions(imageRepository, feedLikeRepository);
+        }
+    }
+
+    @Nested
+    @DisplayName("getFeeds - 캐시 (SingleFlight)")
+    class GetFeedsCacheTest {
+
+        @Test
+        @DisplayName("캐시 hit → getOrLoad가 loader 미실행, feedRepository·imageRepository 미호출, isLiked 적용")
+        void cacheHit_doesNotCallRepositoryAndAppliesIsLiked() {
+            FeedResult cachedItem = new FeedResult(1L, 10L, 5L, "캐시 피드", 0, 0,
+                    List.of(), OffsetDateTime.parse("2026-06-01T00:00:00Z"), false);
+            FeedListResult cachedResult = new FeedListResult(List.of(cachedItem), null, false);
+            doReturn(cachedResult).when(feedCachePort).getOrLoad(eq(10L), isNull(), eq(20), any());
+            when(feedLikeRepository.findLikedFeedIdsByFanId(eq(99L), anyList())).thenReturn(Set.of(1L));
+
+            FeedListResult result = feedService.getFeeds(10L, null, 20, 99L, null);
+
+            verifyNoInteractions(feedRepository, imageRepository);
+            assertTrue(result.items().get(0).isLiked());
+        }
+
+        @Test
+        @DisplayName("캐시 hit, 비로그인 → isLiked=false, feedLikeRepo 미호출")
+        void cacheHit_anonymous_isLikedFalseNoLikeQuery() {
+            FeedResult cachedItem = new FeedResult(1L, 10L, 5L, "캐시 피드", 0, 0,
+                    List.of(), OffsetDateTime.parse("2026-06-01T00:00:00Z"), false);
+            FeedListResult cachedResult = new FeedListResult(List.of(cachedItem), null, false);
+            doReturn(cachedResult).when(feedCachePort).getOrLoad(eq(10L), isNull(), eq(20), any());
+
+            FeedListResult result = feedService.getFeeds(10L, null, 20, null, null);
+
+            verifyNoInteractions(feedRepository, imageRepository, feedLikeRepository);
+            assertFalse(result.items().get(0).isLiked());
+        }
+
+        @Test
+        @DisplayName("캐시 miss → getOrLoad가 loader 실행, feedRepository 호출")
+        void cacheMiss_getOrLoadExecutesLoader() {
+            ArtistFeed f1 = ArtistFeed.reconstruct(1L, 10L, 5L, "피드1", 0, 0, LocalDateTime.now(clock));
+            when(feedRepository.findByArtistId(eq(10L), isNull(), eq(21))).thenReturn(List.of(f1));
+            when(imageRepository.findByFeedIdInOrderByCreatedAt(anyList())).thenReturn(List.of());
+
+            feedService.getFeeds(10L, null, 20, null, null);
+
+            verify(feedCachePort).getOrLoad(eq(10L), isNull(), eq(20), any());
+            verify(feedRepository).findByArtistId(eq(10L), isNull(), eq(21));
+        }
+    }
+
+    @Nested
+    @DisplayName("createFeed - 캐시 evict 이벤트")
+    class CreateFeedCacheEvictTest {
+
+        @Test
+        @DisplayName("createFeed 성공 → FeedCacheEvictEvent 발행 (TX commit 후 evict)")
+        void createFeed_publishesCacheEvictEvent() {
+            ArtistFeed saved = ArtistFeed.reconstruct(1L, 10L, 5L, "내용", 0, 0, LocalDateTime.now(clock));
+            when(feedRepository.save(any())).thenReturn(saved);
+            when(imageRepository.saveAll(anyList())).thenReturn(List.of());
+
+            feedService.createFeed(new FeedCreateCommand(10L, 5L, "내용", List.of()));
+
+            verify(applicationEventPublisher).publishEvent(argThat((Object e) ->
+                    e instanceof FeedCacheEvictEvent evt && evt.artistId().equals(10L)));
+        }
+    }
+
+    @Nested
+    @DisplayName("deleteFeed - 캐시 evict 이벤트")
+    class DeleteFeedCacheEvictTest {
+
+        @Test
+        @DisplayName("deleteFeed 성공 → FeedCacheEvictEvent 발행 (TX commit 후 evict)")
+        void deleteFeed_publishesCacheEvictEvent() {
+            ArtistFeed feed = ArtistFeed.reconstruct(1L, 10L, 5L, "내용", 0, 0, LocalDateTime.now(clock));
+            when(feedRepository.findById(eq(1L))).thenReturn(Optional.of(feed));
+
+            feedService.deleteFeed(1L, 5L);
+
+            verify(applicationEventPublisher).publishEvent(argThat((Object e) ->
+                    e instanceof FeedCacheEvictEvent evt && evt.artistId().equals(10L)));
         }
     }
 }

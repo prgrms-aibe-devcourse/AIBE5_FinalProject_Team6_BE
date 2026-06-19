@@ -3,9 +3,11 @@ package com.fandrops.community.application.feed;
 import com.fandrops.community.application.event.NewFeedEvent;
 import com.fandrops.community.application.exception.FeedNotFoundException;
 import com.fandrops.community.application.exception.FeedOwnershipException;
+import com.fandrops.community.application.port.FeedCachePort;
 import com.fandrops.community.application.port.OutboxEvent;
 import com.fandrops.community.application.port.OutboxEventPort;
 import com.fandrops.community.application.port.OutboxEventType;
+import com.fandrops.community.application.feed.FeedCacheEvictEvent;
 import com.fandrops.community.domain.feed.ArtistFeed;
 import org.springframework.context.ApplicationEventPublisher;
 import com.fandrops.community.domain.feed.FeedImage;
@@ -37,6 +39,7 @@ public class FeedService {
     private final OutboxEventPort outboxEventPort;
     private final ApplicationEventPublisher applicationEventPublisher;
     private final Clock clock;
+    private final FeedCachePort feedCachePort;
 
     public FeedService(ArtistFeedRepository feedRepository,
                        FeedImageRepository imageRepository,
@@ -45,7 +48,8 @@ public class FeedService {
                        CommentLikeRepository commentLikeRepository,
                        OutboxEventPort outboxEventPort,
                        ApplicationEventPublisher applicationEventPublisher,
-                       Clock clock) {
+                       Clock clock,
+                       FeedCachePort feedCachePort) {
         this.feedRepository = feedRepository;
         this.imageRepository = imageRepository;
         this.feedLikeRepository = feedLikeRepository;
@@ -54,6 +58,7 @@ public class FeedService {
         this.outboxEventPort = outboxEventPort;
         this.applicationEventPublisher = applicationEventPublisher;
         this.clock = clock;
+        this.feedCachePort = feedCachePort;
     }
 
     @Transactional
@@ -74,26 +79,27 @@ public class FeedService {
                        "artistMemberId", saved.getArtistMemberId())
         ));
         applicationEventPublisher.publishEvent(new NewFeedEvent(saved.getId(), saved.getArtistId()));
+        // TX commit 후 evict (evict-before-commit 방지)
+        applicationEventPublisher.publishEvent(new FeedCacheEvictEvent(saved.getArtistId()));
 
         return toResult(saved, savedImages, false);
     }
 
     public FeedListResult getFeeds(Long artistId, String cursor, int size,
                                    Long viewerFanId, Long viewerArtistMemberId) {
-        Long cursorId = null;
-        if (cursor != null) {
-            try {
-                cursorId = Long.parseLong(cursor);
-            } catch (NumberFormatException e) {
-                throw new IllegalArgumentException("cursor 형식이 올바르지 않습니다: " + cursor);
-            }
-        }
+        Long cursorId = parseCursor(cursor);
+        // SingleFlight + 캐시: 동일 키 동시 miss → DB 쿼리 1회로 수렴
+        FeedListResult baseResult = feedCachePort.getOrLoad(artistId, cursorId, size,
+                () -> loadFeeds(artistId, cursorId, size));
+        return applyIsLiked(baseResult, viewerFanId, viewerArtistMemberId);
+    }
+
+    private FeedListResult loadFeeds(Long artistId, Long cursorId, int size) {
         List<ArtistFeed> feeds = feedRepository.findByArtistId(artistId, cursorId, size + 1);
         boolean hasMore = feeds.size() > size;
         List<ArtistFeed> page = hasMore ? feeds.subList(0, size) : feeds;
 
         List<Long> feedIds = page.stream().map(ArtistFeed::getId).toList();
-        Set<Long> likedFeedIds = resolveLikedFeedIds(feedIds, viewerFanId, viewerArtistMemberId);
 
         List<FeedImage> allImages = feedIds.isEmpty()
                 ? List.of()
@@ -102,11 +108,34 @@ public class FeedService {
                 .collect(Collectors.groupingBy(FeedImage::getFeedId));
 
         List<FeedResult> items = page.stream()
-                .map(f -> toResult(f, imagesByFeedId.getOrDefault(f.getId(), List.of()),
-                        likedFeedIds.contains(f.getId())))
+                .map(f -> toResult(f, imagesByFeedId.getOrDefault(f.getId(), List.of()), false))
                 .toList();
         String nextCursor = hasMore ? String.valueOf(page.get(page.size() - 1).getId()) : null;
         return new FeedListResult(items, nextCursor, hasMore);
+    }
+
+    private Long parseCursor(String cursor) {
+        if (cursor == null) return null;
+        try {
+            return Long.parseLong(cursor);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("cursor 형식이 올바르지 않습니다: " + cursor);
+        }
+    }
+
+    private FeedListResult applyIsLiked(FeedListResult result, Long viewerFanId, Long viewerArtistMemberId) {
+        List<Long> feedIds = result.items().stream().map(FeedResult::id).toList();
+        Set<Long> likedFeedIds = resolveLikedFeedIds(feedIds, viewerFanId, viewerArtistMemberId);
+        if (likedFeedIds.isEmpty()) {
+            return result;
+        }
+        List<FeedResult> withLiked = result.items().stream()
+                .map(f -> likedFeedIds.contains(f.id())
+                        ? new FeedResult(f.id(), f.artistId(), f.artistMemberId(), f.content(),
+                                f.likeCount(), f.commentCount(), f.imageUrls(), f.createdAt(), true)
+                        : f)
+                .toList();
+        return new FeedListResult(withLiked, result.nextCursor(), result.hasMore());
     }
 
     private Set<Long> resolveLikedFeedIds(List<Long> feedIds, Long fanId, Long artistMemberId) {
@@ -145,6 +174,8 @@ public class FeedService {
         feedLikeRepository.deleteByFeedId(feedId);
         imageRepository.deleteByFeedId(feedId);
         feedRepository.delete(feed);
+        // TX commit 후 evict (evict-before-commit 방지)
+        applicationEventPublisher.publishEvent(new FeedCacheEvictEvent(feed.getArtistId()));
     }
 
     private FeedResult toResult(ArtistFeed feed, List<FeedImage> images, boolean isLiked) {
