@@ -1,5 +1,6 @@
 package com.fandrops.order.infrastructure.persistence;
 
+import com.fandrops.order.domain.AgencyOrderSummary;
 import com.fandrops.order.domain.Order;
 import com.fandrops.order.domain.OrderItem;
 import com.fandrops.order.domain.OrderStatus;
@@ -54,6 +55,29 @@ public class OrderRepositoryAdapter implements OrderRepository {
     public List<Order> findByFanId(Long fanId, Long cursor, int size) {
         return jpaRepository.findByFanIdCursor(fanId, cursor, size).stream()
                 .map(this::toDomain)
+                .toList();
+    }
+
+    @Override
+    public List<Order> findByAgency(Long agencyId, Long artistId, Long cursor, int size) {
+        List<Long> ids = jpaRepository.findOrderIdsByAgency(agencyId, artistId, cursor, size);
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        return jpaRepository.findByIdInOrderByIdDesc(ids).stream()
+                .map(this::toDomain)
+                .toList();
+    }
+
+    @Override
+    public List<AgencyOrderSummary> findAgencyOrderSummaries(Long agencyId, Long artistId, Long cursor, int size) {
+        return jpaRepository.findAgencyOrderSummaryRows(agencyId, artistId, cursor, size).stream()
+                .map(r -> new AgencyOrderSummary(
+                        r.getOrderId(), r.getStatus(),
+                        r.getTotalAmount() != null ? r.getTotalAmount() : 0,
+                        r.getCreatedAt(), r.getArtistId(), r.getArtistName(),
+                        r.getFirstProductName(),
+                        r.getItemCount() != null ? r.getItemCount().intValue() : 0))
                 .toList();
     }
 

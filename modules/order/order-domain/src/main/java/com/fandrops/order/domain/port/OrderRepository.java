@@ -1,5 +1,6 @@
 package com.fandrops.order.domain.port;
 
+import com.fandrops.order.domain.AgencyOrderSummary;
 import com.fandrops.order.domain.Order;
 import com.fandrops.order.domain.OrderStatus;
 import java.time.LocalDateTime;
@@ -20,4 +21,10 @@ public interface OrderRepository {
 
     /** fanId 기준 최신순 cursor-based 페이지네이션. cursor 미제공 시 첫 페이지. */
     List<Order> findByFanId(Long fanId, Long cursor, int size);
+
+    /** agency 소속 아티스트 주문 목록. artistId null이면 소속 전체 아티스트. cursor 미제공 시 첫 페이지. */
+    List<Order> findByAgency(Long agencyId, Long artistId, Long cursor, int size);
+
+    /** agency 소속 아티스트 주문 요약 (productSummary·artistName 포함). Agency Order Management 화면용. */
+    List<AgencyOrderSummary> findAgencyOrderSummaries(Long agencyId, Long artistId, Long cursor, int size);
 }
