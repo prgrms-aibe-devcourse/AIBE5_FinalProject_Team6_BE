@@ -43,6 +43,17 @@ public class ArtistProfileRepositoryImpl implements ArtistProfileRepository {
     }
 
     @Override
+    public List<ArtistProfile> findByAgencyId(Long agencyId, Long cursorId, int size) {
+        PageRequest pageable = PageRequest.of(0, size);
+        if (cursorId == null) {
+            return jpaRepository.findAllByAgencyIdOrderByFanCountDescIdAsc(agencyId, pageable)
+                    .stream().map(ArtistProfileJpaEntity::toDomain).toList();
+        }
+        return jpaRepository.findByAgencyIdAfterCursor(agencyId, cursorId, pageable)
+                .stream().map(ArtistProfileJpaEntity::toDomain).toList();
+    }
+
+    @Override
     public List<ArtistSummary> findAllByIds(Set<Long> artistIds) {
         return jpaRepository.findAllById(artistIds)
                 .stream()
