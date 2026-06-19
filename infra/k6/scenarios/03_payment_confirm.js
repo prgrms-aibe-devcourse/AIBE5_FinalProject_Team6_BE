@@ -83,11 +83,11 @@ export default function () {
   const token = userTokens[(fanId - 1) % userTokens.length].token;
   const prefix = resolvePrefix();
   // prefix가 Wiremock stub 라우팅 키 — orderId가 iteration마다 고유하므로 충돌 없음
-  const tossPaymentKey = `${prefix}-${order.orderId}-${exec.scenario.iterationInTest}`;
+  const orderPaymentKey = `${prefix}-${order.orderId}-${exec.scenario.iterationInTest}`;
 
   const res = http.post(
     `${BASE_URL}/api/v1/payments/toss/confirm`,
-    JSON.stringify({ tossPaymentKey, orderId: order.orderId, amount: order.amount }),
+    JSON.stringify({ orderPaymentKey, orderId: order.orderId, amount: order.amount }),
     { headers: authHeaders(token) },
   );
 

@@ -459,6 +459,23 @@ $MYSQL -e "UPDATE orders SET status='RESERVED', updated_at=NOW() WHERE order_pay
 | 에러율 | — | < 1% | 미측정 |
 | 처리량 | — | — | — |
 
+### 트러블슈팅
+
+**[2026-06-19] EC2-1 SSM 에이전트 OOM 강제 종료**
+
+- **현상**: s03 실행 중 EC2-1 SSM 연결 끊김(연결 끊김 상태), SSH/Instance Connect 불가, CD 파이프라인 SSM RunCommand 10분 InProgress 후 타임아웃
+- **원인**: t3.small(2GB RAM)에서 Spring Boot + Wiremock(Java 2개) + Prometheus + Nginx 동시 구동 중 k6 50 VU 부하로 스레드 누적 → 메모리 포화 → OOM killer가 SSM 에이전트 프로세스를 종료
+- **해결**: EC2-1 콘솔 재부팅 후 SSM 정상화
+- **재발 방지**: Wiremock 기동 시 힙 사이즈 제한 적용
+
+```bash
+docker run -d --name wiremock \
+  -e JAVA_OPTS="-Xmx256m" \
+  -p 8090:8080 \
+  -v $(pwd)/infra/k6/wiremock/mappings:/home/wiremock/mappings \
+  wiremock/wiremock:3.3.1 --global-response-templating
+```
+
 ### 오너 피드백 (장성재)
 
 > 측정 후 작성
