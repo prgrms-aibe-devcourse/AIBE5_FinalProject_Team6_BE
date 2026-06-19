@@ -122,6 +122,26 @@ class ScheduleServiceTest {
         }
 
         @Test
+        @DisplayName("type=LIVE → IllegalArgumentException (registerLive 엔드포인트 사용 안내), save 미호출")
+        void liveType_throws() {
+            assertThrows(IllegalArgumentException.class,
+                    () -> scheduleService.createEvent(
+                            new EventCreateCommand(10L, 5L, "라이브", "LIVE",
+                                    NOW.plusDays(1).atOffset(ZoneOffset.UTC), null)));
+            verify(scheduleRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("type=NOTICE → IllegalArgumentException (createNotice 엔드포인트 사용 안내), save 미호출")
+        void noticeType_throws() {
+            assertThrows(IllegalArgumentException.class,
+                    () -> scheduleService.createEvent(
+                            new EventCreateCommand(10L, 5L, "공지", "NOTICE",
+                                    NOW.plusDays(1).atOffset(ZoneOffset.UTC), null)));
+            verify(scheduleRepository, never()).save(any());
+        }
+
+        @Test
         @DisplayName("artistMemberId null → NullPointerException (service-level null 가드)")
         void nullArtistMemberId_throws() {
             assertThrows(NullPointerException.class,

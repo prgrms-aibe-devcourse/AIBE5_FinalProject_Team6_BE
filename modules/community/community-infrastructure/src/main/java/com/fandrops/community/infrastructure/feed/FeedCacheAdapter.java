@@ -8,8 +8,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.core.RedisCallback;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ScanOptions;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
@@ -33,12 +34,12 @@ public class FeedCacheAdapter implements FeedCachePort {
     private static final int JITTER_MAX_SECONDS = 30;
     private static final int SINGLEFLIGHT_TIMEOUT_SECONDS = 5;
 
-    private final RedisTemplate<String, String> redisTemplate;
+    private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
     // SingleFlight: 동일 캐시 키에 대한 동시 DB 쿼리를 한 번으로 줄임
     private final ConcurrentHashMap<String, CompletableFuture<FeedListResult>> inFlight = new ConcurrentHashMap<>();
 
-    public FeedCacheAdapter(RedisTemplate<String, String> redisTemplate, ObjectMapper objectMapper) {
+    public FeedCacheAdapter(StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
         this.redisTemplate = redisTemplate;
         this.objectMapper = objectMapper;
     }
@@ -103,6 +104,10 @@ public class FeedCacheAdapter implements FeedCachePort {
         } catch (RuntimeException e) {
             myFuture.completeExceptionally(e);
             throw e;
+        } catch (Error e) {
+            // OOM 등 Error 발생 시에도 대기 스레드가 5초 full timeout 없이 즉시 fail-open 처리되도록
+            myFuture.completeExceptionally(e);
+            throw e;
         } finally {
             inFlight.remove(key, myFuture);
         }
@@ -130,7 +135,8 @@ public class FeedCacheAdapter implements FeedCachePort {
         }
     }
 
-    // TX commit 후 evict — createFeed·deleteFeed의 evict-before-commit 레이스 방지
+    // TX commit 후 별도 스레드에서 evict — HTTP 응답 스레드 블로킹 및 evict-before-commit 방지
+    @Async
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onFeedCacheEvict(FeedCacheEvictEvent event) {
         evictByArtistId(event.artistId());

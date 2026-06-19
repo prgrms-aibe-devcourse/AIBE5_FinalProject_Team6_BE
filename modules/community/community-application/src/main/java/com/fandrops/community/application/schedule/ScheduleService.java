@@ -48,7 +48,15 @@ public class ScheduleService {
             type = ArtistScheduleType.valueOf(command.type());
         } catch (IllegalArgumentException e) {
             throw new IllegalArgumentException(
-                    "지원하지 않는 일정 유형입니다: " + command.type() + " (DROP|LIVE|EVENT|NOTICE)");
+                    "지원하지 않는 일정 유형입니다: " + command.type() + " (DROP|EVENT)");
+        }
+        if (type == ArtistScheduleType.LIVE) {
+            throw new IllegalArgumentException(
+                    "LIVE 타입은 POST /api/v1/artists/{artistId}/lives 엔드포인트를 사용하세요.");
+        }
+        if (type == ArtistScheduleType.NOTICE) {
+            throw new IllegalArgumentException(
+                    "NOTICE 타입은 POST /api/v1/artists/{artistId}/notices 엔드포인트를 사용하세요.");
         }
         LocalDateTime scheduledAtUtc = command.scheduledAt().withOffsetSameInstant(ZoneOffset.UTC).toLocalDateTime();
         ArtistSchedule schedule = (type == ArtistScheduleType.EVENT)
