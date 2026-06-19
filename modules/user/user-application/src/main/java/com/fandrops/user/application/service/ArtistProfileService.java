@@ -39,4 +39,20 @@ public class ArtistProfileService {
         String nextCursor = hasMore ? String.valueOf(page.get(page.size() - 1).getId()) : null;
         return new ArtistProfileListResult(page, nextCursor, hasMore);
     }
+
+    public ArtistProfileListResult listByAgencyId(Long agencyId, String cursor, int size) {
+        Long cursorId = null;
+        if (cursor != null) {
+            try {
+                cursorId = Long.valueOf(cursor);
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("cursor 형식이 올바르지 않습니다: " + cursor);
+            }
+        }
+        List<ArtistProfile> raw = artistProfileRepository.findByAgencyId(agencyId, cursorId, size + 1);
+        boolean hasMore = raw.size() > size;
+        List<ArtistProfile> page = hasMore ? raw.subList(0, size) : raw;
+        String nextCursor = hasMore ? String.valueOf(page.get(page.size() - 1).getId()) : null;
+        return new ArtistProfileListResult(page, nextCursor, hasMore);
+    }
 }

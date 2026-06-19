@@ -175,6 +175,17 @@ Gradle 모듈·담당자: [architecture.md § 도메인 오너십](../architectu
 
 ---
 
+## Agency Artists
+
+`user-api` · 담당: **표지민**  
+Agency 계정이 자신의 소속 아티스트 목록 조회. `artist_profile.agency_id = 로그인 Agency ID` 로 소유권 scoping.
+
+| Method | Endpoint | Auth | 설명 | Query Params | Response |
+| --- | --- | --- | --- | --- | --- |
+| GET | `/agency/artists` | Agency | 내 소속 아티스트 목록 (팬 수 내림차순, cursor 페이지네이션) | `cursor`(optional), `size`(default 20, max 100) | `{ data: { items: [{ id, name, profileImageUrl, fanCount }], nextCursor, hasMore }, traceId }` |
+
+---
+
 ## Agency Banner (F04-03)
 
 `user-api` · 담당: **표지민**  

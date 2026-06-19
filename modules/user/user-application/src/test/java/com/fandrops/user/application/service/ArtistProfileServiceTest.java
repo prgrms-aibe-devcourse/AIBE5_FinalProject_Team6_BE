@@ -157,6 +157,92 @@ class ArtistProfileServiceTest {
         verify(artistProfileRepository).findAllOrderByFanCountDesc(null, 101);
     }
 
+    // ── Agency 소속 필터 목록 (listByAgencyId) ────────────────────────────────
+
+    @Test
+    @DisplayName("agencyId=10, cursor=null, 데이터 2개 — 소속 아티스트만 반환")
+    void listByAgencyId_firstPage_returnsAgencyArtistsOnly() {
+        when(artistProfileRepository.findByAgencyId(10L, null, 3))
+                .thenReturn(List.of(dummyProfile(1L, 500L), dummyProfile(2L, 300L)));
+
+        ArtistProfileListResult result = artistProfileService.listByAgencyId(10L, null, 2);
+
+        assertEquals(2, result.items().size());
+        assertFalse(result.hasMore());
+        assertNull(result.nextCursor());
+        verify(artistProfileRepository).findByAgencyId(10L, null, 3);
+    }
+
+    @Test
+    @DisplayName("agencyId=10, size=1, 데이터 2건(size+1) — hasMore=true, nextCursor 반환")
+    void listByAgencyId_hasMore_returnsCursor() {
+        when(artistProfileRepository.findByAgencyId(10L, null, 2))
+                .thenReturn(List.of(dummyProfile(1L, 500L), dummyProfile(2L, 300L)));
+
+        ArtistProfileListResult result = artistProfileService.listByAgencyId(10L, null, 1);
+
+        assertEquals(1, result.items().size());
+        assertTrue(result.hasMore());
+        assertEquals("1", result.nextCursor());
+    }
+
+    @Test
+    @DisplayName("agencyId=10, cursor=\"1\" — cursorId=1L로 repository 호출")
+    void listByAgencyId_withCursor_callsRepositoryWithParsedCursorId() {
+        when(artistProfileRepository.findByAgencyId(10L, 1L, 3))
+                .thenReturn(List.of(dummyProfile(2L, 300L)));
+
+        ArtistProfileListResult result = artistProfileService.listByAgencyId(10L, "1", 2);
+
+        verify(artistProfileRepository).findByAgencyId(10L, 1L, 3);
+        assertEquals(1, result.items().size());
+        assertFalse(result.hasMore());
+    }
+
+    @Test
+    @DisplayName("agencyId=10, 소속 아티스트 없음 — 빈 목록 반환")
+    void listByAgencyId_noArtists_returnsEmpty() {
+        when(artistProfileRepository.findByAgencyId(10L, null, 21))
+                .thenReturn(List.of());
+
+        ArtistProfileListResult result = artistProfileService.listByAgencyId(10L, null, 20);
+
+        assertTrue(result.items().isEmpty());
+        assertFalse(result.hasMore());
+        assertNull(result.nextCursor());
+    }
+
+    @Test
+    @DisplayName("agencyId=10, cursor가 숫자 아닐 때 — IllegalArgumentException")
+    void listByAgencyId_invalidCursor_throwsIllegalArgumentException() {
+        assertThrows(IllegalArgumentException.class,
+                () -> artistProfileService.listByAgencyId(10L, "invalid", 20));
+    }
+
+    @Test
+    @DisplayName("size=1 최솟값 경계 — size+1=2 요청, hasMore=true 이면 nextCursor 정상 반환")
+    void listByAgencyId_sizeOne_hasMoreTrue() {
+        when(artistProfileRepository.findByAgencyId(10L, null, 2))
+                .thenReturn(List.of(dummyProfile(1L, 500L), dummyProfile(2L, 300L)));
+
+        ArtistProfileListResult result = artistProfileService.listByAgencyId(10L, null, 1);
+
+        assertEquals(1, result.items().size());
+        assertTrue(result.hasMore());
+        assertEquals("1", result.nextCursor());
+        verify(artistProfileRepository).findByAgencyId(10L, null, 2);
+    }
+
+    @Test
+    @DisplayName("size=100 최댓값 경계 — repository에 101개 요청")
+    void listByAgencyId_maxSize_requestsSizePlusOne() {
+        when(artistProfileRepository.findByAgencyId(10L, null, 101)).thenReturn(List.of());
+
+        artistProfileService.listByAgencyId(10L, null, 100);
+
+        verify(artistProfileRepository).findByAgencyId(10L, null, 101);
+    }
+
     // ── 헬퍼 ─────────────────────────────────────────────────────────────────
 
     private ArtistProfile dummyProfile(Long id, long fanCount) {

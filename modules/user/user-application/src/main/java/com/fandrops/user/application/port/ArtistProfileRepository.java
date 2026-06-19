@@ -11,5 +11,6 @@ public interface ArtistProfileRepository {
     ArtistProfile save(ArtistProfile profile);
     Optional<ArtistProfile> findById(Long artistId);
     List<ArtistProfile> findAllOrderByFanCountDesc(Long cursorId, int size);
+    List<ArtistProfile> findByAgencyId(Long agencyId, Long cursorId, int size);
     List<ArtistSummary> findAllByIds(Set<Long> artistIds);
 }
