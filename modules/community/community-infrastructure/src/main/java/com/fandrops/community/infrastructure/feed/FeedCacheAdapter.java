@@ -136,7 +136,7 @@ public class FeedCacheAdapter implements FeedCachePort {
     }
 
     // TX commit 후 별도 스레드에서 evict — HTTP 응답 스레드 블로킹 및 evict-before-commit 방지
-    @Async
+    @Async("communityEvictExecutor")
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onFeedCacheEvict(FeedCacheEvictEvent event) {
         evictByArtistId(event.artistId());
