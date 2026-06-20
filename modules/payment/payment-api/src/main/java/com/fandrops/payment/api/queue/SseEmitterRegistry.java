@@ -77,6 +77,16 @@ public class SseEmitterRegistry {
         return register(productId, fanId);
     }
 
+    public void sendHeartbeat() {
+        for (Map.Entry<String, SseEmitter> entry : emitters.entrySet()) {
+            try {
+                entry.getValue().send(SseEmitter.event().comment("heartbeat"));
+            } catch (IOException | IllegalStateException e) {
+                emitters.remove(entry.getKey());
+            }
+        }
+    }
+
     private String key(Long productId, Long fanId) {
         return productId + ":" + fanId;
     }
