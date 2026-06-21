@@ -40,10 +40,6 @@ const wlQueue   = new Counter('wl_queue');
 const wlOrder   = new Counter('wl_order');
 const wlPayment = new Counter('wl_payment');
 
-// VU별 accessToken — module-level 변수는 VU마다 독립된 메모리에 저장됨
-let vuToken       = null;
-let vuInitialized = false;
-
 export const options = {
   scenarios: {
     workload: {
@@ -95,7 +91,6 @@ export default function () {
   } else if (r < 0.95) {
     // ── 주문 생성 15% ──────────────────────────────────────────────────────
     wlOrder.add(1);
-    if (!vuToken) return; // 토큰 미획득 시 주문 건너뜀
     const res = http.post(
       `${BASE_URL}/api/v1/orders`,
       JSON.stringify({ accessTicket: 'test-ticket-token', items: [{ productId: PRODUCT_ID, quantity: 1 }] }),
