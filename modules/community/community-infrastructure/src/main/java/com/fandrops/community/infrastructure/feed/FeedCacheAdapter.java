@@ -1,7 +1,6 @@
 package com.fandrops.community.infrastructure.feed;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fandrops.community.application.feed.FeedCacheEvictEvent;
 import com.fandrops.community.application.feed.FeedListResult;
 import com.fandrops.community.application.port.FeedCachePort;
 import org.slf4j.Logger;
@@ -10,10 +9,7 @@ import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.event.TransactionPhase;
-import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -133,13 +129,6 @@ public class FeedCacheAdapter implements FeedCachePort {
         } catch (Exception e) {
             log.warn("[FeedCache] evict failed artistId={}", artistId, e);
         }
-    }
-
-    // TX commit 후 별도 스레드에서 evict — HTTP 응답 스레드 블로킹 및 evict-before-commit 방지
-    @Async("communityEvictExecutor")
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    public void onFeedCacheEvict(FeedCacheEvictEvent event) {
-        evictByArtistId(event.artistId());
     }
 
     private String buildKey(Long artistId, Long cursorId, int size) {
