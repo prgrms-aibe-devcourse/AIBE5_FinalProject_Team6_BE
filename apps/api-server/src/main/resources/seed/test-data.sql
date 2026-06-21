@@ -432,12 +432,9 @@ FROM product WHERE name = 'ECHO Limited Vinyl';
 -- [COMMUNITY 도메인] 아티스트멤버 · 피드좋아요 · 댓글 · 투표 · 출석 · 일정/공지 seed
 -- ============================================================
 
--- C1. artist_member — hani (NOVA, artist_id=1)
---     기존 seed에 주석만 있고 row 없음. artist_feed.artist_member_id=1 참조용
-INSERT INTO artist_member (artist_id, login_id, password_hash, member_name, role)
-VALUES (1, 'hani',
-        '$2a$10$IXraSx3hpYkrj8jRqqIsxOkdIfRCZKYxPafAJT7v3ZrlvB43gl7Re',
-        'HANI', 'ARTIST');
+-- C1. artist_member 확인
+--     L47에서 이미 id=1(login='artist', artist_id=1, NOVA 멤버)이 삽입됨.
+--     C3/C4의 artist_member_id=1 은 해당 'artist' 멤버를 참조.
 
 -- C2. feed_like — fan_id=1 이 NOVA 피드 2건 좋아요
 --     CHECK: (fan_id IS NOT NULL) != (artist_member_id IS NOT NULL)
@@ -475,7 +472,7 @@ SELECT id, 1, 1, null, null,
 FROM artist_feed
 WHERE content LIKE '오늘 라이브 방송%' AND artist_id = 1;
 
--- HANI 대댓글 (댓글 A에 달린 아티스트 답글 — artist_member_id=1)
+-- NOVA 멤버 대댓글 (댓글 A에 달린 아티스트 답글 — artist_member_id=1, login='artist')
 INSERT INTO comment (feed_id, artist_id, fan_id, artist_member_id, parent_id, content, created_at)
 SELECT c.feed_id, c.artist_id, null, 1, c.id,
        '고마워요! 꼭 같이 즐겨요', DATEADD('MINUTE', 15, NOW())
