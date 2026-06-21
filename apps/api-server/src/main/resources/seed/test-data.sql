@@ -286,13 +286,13 @@ SELECT id, 0, 0, 0, 0 FROM product WHERE name = 'NOVA 스프링 드롭스 (만�
 INSERT INTO cart (fan_id)
 VALUES (1), (2);
 
-INSERT INTO cart_item (cart_id, product_id, quantity)
-SELECT c.id, p.id, 2
+INSERT INTO cart_item (cart_id, product_id, quantity, added_at)
+SELECT c.id, p.id, 2, NOW()
 FROM cart c, product p
 WHERE c.fan_id = 1 AND p.name = 'NOVA 포토카드 세트';
 
-INSERT INTO cart_item (cart_id, product_id, quantity)
-SELECT c.id, p.id, 1
+INSERT INTO cart_item (cart_id, product_id, quantity, added_at)
+SELECT c.id, p.id, 1, NOW()
 FROM cart c, product p
 WHERE c.fan_id = 1 AND p.name = 'NOVA 드롭스 한정 굿즈 세트';
 
