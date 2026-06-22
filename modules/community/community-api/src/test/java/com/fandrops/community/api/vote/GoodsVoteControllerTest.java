@@ -103,7 +103,7 @@ class GoodsVoteControllerTest {
         @Test
         @DisplayName("AGENCY JWT (비로컬) → 201 반환")
         void agencyJwt_nonLocal_returns201() {
-            Authentication auth = mockAuth("5", "AGENCY");
+            Authentication auth = mockAuth("5", "ROLE_AGENCY");
             when(goodsVoteService.createVote(any())).thenReturn(101L);
 
             ResponseEntity<?> response = controller.createVote(10L, validRequest(), auth, null);
@@ -114,7 +114,7 @@ class GoodsVoteControllerTest {
         @Test
         @DisplayName("FAN JWT (비로컬) → ForbiddenException, service 미호출")
         void fanJwt_nonLocal_throwsForbidden() {
-            Authentication auth = mockAuth("77", "FAN");
+            Authentication auth = mockAuth("77", "ROLE_FAN");
 
             assertThrows(ForbiddenException.class,
                     () -> controller.createVote(10L, validRequest(), auth, null));
@@ -150,7 +150,7 @@ class GoodsVoteControllerTest {
         @Test
         @DisplayName("FAN JWT (비로컬) → 201 반환")
         void fanJwt_nonLocal_returns201() {
-            Authentication auth = mockAuth("77", "FAN");
+            Authentication auth = mockAuth("77", "ROLE_FAN");
             when(goodsVoteService.castBallot(any())).thenReturn(new GoodsBallotResult(1000L));
 
             ResponseEntity<?> response = controller.castBallot(

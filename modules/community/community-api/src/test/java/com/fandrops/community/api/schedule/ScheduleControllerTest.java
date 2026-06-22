@@ -72,7 +72,7 @@ class ScheduleControllerTest {
         @Test
         @DisplayName("ARTIST JWT (비로컬) → 201 반환")
         void artistJwt_nonLocal_returns201() {
-            Authentication auth = mockAuth("5", "ARTIST");
+            Authentication auth = mockAuth("5", "ROLE_ARTIST");
             ScheduleResult stub = scheduleResult(11L, ArtistScheduleType.EVENT);
             when(scheduleService.createEvent(any())).thenReturn(stub);
 
@@ -92,7 +92,7 @@ class ScheduleControllerTest {
         @Test
         @DisplayName("FAN JWT (비로컬) → ForbiddenException, service 미호출")
         void fanJwt_nonLocal_throwsForbidden() {
-            Authentication auth = mockAuth("77", "FAN");
+            Authentication auth = mockAuth("77", "ROLE_FAN");
 
             assertThrows(ForbiddenException.class,
                     () -> controller.createEvent(1L, validRequest(), auth, null));
@@ -107,7 +107,7 @@ class ScheduleControllerTest {
         @Test
         @DisplayName("ARTIST JWT → 200, ScheduleResult 반환")
         void artistJwt_returns200() {
-            Authentication auth = mockAuth("5", "ARTIST");
+            Authentication auth = mockAuth("5", "ROLE_ARTIST");
             ScheduleResult stub = scheduleResult(20L, ArtistScheduleType.LIVE);
             when(scheduleService.startLive(eq(20L), eq(5L))).thenReturn(stub);
 
@@ -132,7 +132,7 @@ class ScheduleControllerTest {
         @Test
         @DisplayName("FAN JWT (비로컬) → ForbiddenException, service 미호출")
         void fanJwt_nonLocal_throwsForbidden() {
-            Authentication auth = mockAuth("77", "FAN");
+            Authentication auth = mockAuth("77", "ROLE_FAN");
 
             assertThrows(ForbiddenException.class,
                     () -> controller.startLive(20L, auth, null));
@@ -142,7 +142,7 @@ class ScheduleControllerTest {
         @Test
         @DisplayName("존재하지 않는 scheduleId (잘못된 입력) → ScheduleNotFoundException 전파")
         void invalidScheduleId_propagates() {
-            Authentication auth = mockAuth("5", "ARTIST");
+            Authentication auth = mockAuth("5", "ROLE_ARTIST");
             when(scheduleService.startLive(eq(999L), eq(5L)))
                     .thenThrow(new ScheduleNotFoundException("스케줄을 찾을 수 없습니다."));
 
@@ -165,7 +165,7 @@ class ScheduleControllerTest {
         @Test
         @DisplayName("AGENCY JWT (비로컬) → 201, scheduleId 반환")
         void agencyJwt_nonLocal_returns201() {
-            Authentication auth = mockAuth("5", "AGENCY");
+            Authentication auth = mockAuth("5", "ROLE_AGENCY");
             ScheduleResult stub = scheduleResult(30L, ArtistScheduleType.LIVE);
             when(scheduleService.registerLive(any())).thenReturn(stub);
 
@@ -177,7 +177,7 @@ class ScheduleControllerTest {
         @Test
         @DisplayName("ARTIST JWT (비로컬) → ForbiddenException (AGENCY 전용)")
         void artistJwt_nonLocal_throwsForbidden() {
-            Authentication auth = mockAuth("5", "ARTIST");
+            Authentication auth = mockAuth("5", "ROLE_ARTIST");
 
             assertThrows(ForbiddenException.class,
                     () -> controller.registerLive(1L, validRequest(), auth, null));

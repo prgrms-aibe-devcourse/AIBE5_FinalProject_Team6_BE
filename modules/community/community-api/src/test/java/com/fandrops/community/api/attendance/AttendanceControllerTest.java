@@ -93,7 +93,7 @@ class AttendanceControllerTest {
         @Test
         @DisplayName("FAN JWT (비로컬) → 201, 출석 결과 반환")
         void fanJwt_nonLocal_returns201() {
-            Authentication auth = mockAuth("77", "FAN");
+            Authentication auth = mockAuth("77", "ROLE_FAN");
             CheckInResult stub = new CheckInResult(1L, LocalDate.of(2026, 6, 19), 1);
             when(attendanceService.checkIn(eq(1L), eq(77L))).thenReturn(stub);
 

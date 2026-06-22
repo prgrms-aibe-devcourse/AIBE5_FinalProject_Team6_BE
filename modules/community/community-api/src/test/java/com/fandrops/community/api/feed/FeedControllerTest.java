@@ -52,7 +52,7 @@ class FeedControllerTest {
         @Test
         @DisplayName("ARTIST role JWT → viewerArtistMemberId로 FeedService 호출")
         void artistJwt_usesViewerArtistMemberId() {
-            Authentication auth = mockAuth("5", "ARTIST");
+            Authentication auth = mockAuth("5", "ROLE_ARTIST");
             FeedListResult stub = new FeedListResult(List.of(), null, false);
             when(feedService.getFeeds(eq(10L), isNull(), eq(20), isNull(), eq(5L))).thenReturn(stub);
 
@@ -64,7 +64,7 @@ class FeedControllerTest {
         @Test
         @DisplayName("AGENCY role JWT → viewerArtistMemberId로 FeedService 호출")
         void agencyJwt_usesViewerArtistMemberId() {
-            Authentication auth = mockAuth("7", "AGENCY");
+            Authentication auth = mockAuth("7", "ROLE_AGENCY");
             FeedListResult stub = new FeedListResult(List.of(), null, false);
             when(feedService.getFeeds(eq(10L), isNull(), eq(20), isNull(), eq(7L))).thenReturn(stub);
 
@@ -76,7 +76,7 @@ class FeedControllerTest {
         @Test
         @DisplayName("FAN role JWT → viewerFanId로 FeedService 호출")
         void fanJwt_usesViewerFanId() {
-            Authentication auth = mockAuth("99", "FAN");
+            Authentication auth = mockAuth("99", "ROLE_FAN");
             FeedListResult stub = new FeedListResult(List.of(), null, false);
             when(feedService.getFeeds(eq(10L), isNull(), eq(20), eq(99L), isNull())).thenReturn(stub);
 

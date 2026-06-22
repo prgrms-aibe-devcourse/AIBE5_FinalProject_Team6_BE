@@ -49,7 +49,7 @@ class ArtistFollowControllerTest {
         @Test
         @DisplayName("FAN JWT → 201, FanJoinResult body 반환")
         void fanJwt_returns201() {
-            Authentication auth = mockAuth("77", "FAN");
+            Authentication auth = mockAuth("77", "ROLE_FAN");
             FanJoinResult result = new FanJoinResult(10L, 77L,
                     OffsetDateTime.of(2026, 6, 1, 0, 0, 0, 0, ZoneOffset.UTC));
             when(fanJoinService.join(eq(10L), eq(77L))).thenReturn(result);
@@ -85,7 +85,7 @@ class ArtistFollowControllerTest {
         @Test
         @DisplayName("AGENCY JWT (비로컬) → ForbiddenException, join 미호출")
         void agencyJwt_forbidden() {
-            Authentication auth = mockAuth("5", "AGENCY");
+            Authentication auth = mockAuth("5", "ROLE_AGENCY");
 
             assertThrows(ForbiddenException.class,
                     () -> controller.follow(10L, auth, null));
@@ -95,7 +95,7 @@ class ArtistFollowControllerTest {
         @Test
         @DisplayName("ARTIST JWT (비로컬) → ForbiddenException, join 미호출")
         void artistJwt_forbidden() {
-            Authentication auth = mockAuth("5", "ARTIST");
+            Authentication auth = mockAuth("5", "ROLE_ARTIST");
 
             assertThrows(ForbiddenException.class,
                     () -> controller.follow(10L, auth, null));
@@ -105,7 +105,7 @@ class ArtistFollowControllerTest {
         @Test
         @DisplayName("이미 팬 가입 → AlreadyJoinedException 전파")
         void alreadyJoined_propagates() {
-            Authentication auth = mockAuth("77", "FAN");
+            Authentication auth = mockAuth("77", "ROLE_FAN");
             when(fanJoinService.join(eq(10L), eq(77L)))
                     .thenThrow(new AlreadyJoinedException("이미 팬 가입한 아티스트입니다."));
 
@@ -121,7 +121,7 @@ class ArtistFollowControllerTest {
         @Test
         @DisplayName("FAN JWT → 204 No Content")
         void fanJwt_returns204() {
-            Authentication auth = mockAuth("77", "FAN");
+            Authentication auth = mockAuth("77", "ROLE_FAN");
 
             ResponseEntity<Void> response = controller.unfollow(10L, auth, null);
 
@@ -151,7 +151,7 @@ class ArtistFollowControllerTest {
         @Test
         @DisplayName("AGENCY JWT (비로컬) → ForbiddenException, leave 미호출")
         void agencyJwt_forbidden() {
-            Authentication auth = mockAuth("5", "AGENCY");
+            Authentication auth = mockAuth("5", "ROLE_AGENCY");
 
             assertThrows(ForbiddenException.class,
                     () -> controller.unfollow(10L, auth, null));
