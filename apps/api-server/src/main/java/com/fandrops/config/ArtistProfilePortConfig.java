@@ -56,6 +56,11 @@ public class ArtistProfilePortConfig {
                                 e -> toSummary(e)));
             }
 
+            @Override
+            public boolean isOwnedByAgency(Long artistId, Long agencyAccountId) {
+                return repository.existsByIdAndAgencyId(artistId, agencyAccountId);
+            }
+
             private ArtistSummary toSummary(ArtistProfileJpaEntity e) {
                 return new ArtistSummary(e.getId(), e.getName(), e.getProfileImageUrl());
             }
