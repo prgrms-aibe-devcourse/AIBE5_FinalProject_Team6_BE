@@ -170,6 +170,15 @@ k6 run -e BASE_URL=https://api.fandrops.site \
   - `FeedListResult`를 경량화하거나 캐시 히트 시 `applyIsLiked()` 쿼리를 배치로 최적화
   - 또는 팬별 `likedFeedIds`를 별도 Redis Set으로 캐싱하여 추가 DB 쿼리 제거
 
+### 개선 방향
+
+| 우선순위 | 항목 | 설명 | 기대 효과 |
+|---|---|---|---|
+| 🔴 High | `applyIsLiked()` 쿼리 제거 또는 캐싱 | 캐시 히트 경로에서도 `feedLikeRepository` 추가 쿼리가 매번 실행됨. viewer의 `likedFeedIds`를 Redis Set(`feed:liked:{fanId}`, TTL 30s)으로 캐싱하거나, `isLiked` 필드를 viewer-specific 캐시 키에 포함하는 방식으로 추가 DB 쿼리 제거 | 캐시 히트 경로 P95 50~80ms → 10ms 이하 목표 |
+| 🔴 High | CPU 포화 해소 | t3.small 2 vCPU 환경에서 Spring Boot + Prometheus + Grafana 공존. 565 RPS 이상에서 CPU 100% 포화. 프로파일링으로 CPU 핫스팟 확인 또는 모니터링 스택을 별도 인스턴스로 분리 | CPU 여유 확보 → tail latency 안정화 |
+| 🟡 Mid | Cold start 워밍업 구간 개선 | 테스트 초반 250ms 피크가 P95 집계를 끌어올리는 구조. k6 시나리오에 1분 `ramping-vus` warm-up 단계 추가 또는 Nginx readiness probe로 트래픽 인가 전 캐시 프리워밍 | 집계 P95 정확도 향상 |
+| 🟢 Low | `FeedListResult` 직렬화 최적화 | Redis 저장 시 Jackson 직렬화 오버헤드 측정. `@JsonView` 또는 컴팩트 DTO로 직렬화 페이로드 축소 | 캐시 put/get 레이턴시 감소 |
+
 ---
 
 ## 시나리오 01: 주문 동시성 (Order Concurrency)
@@ -268,6 +277,14 @@ k6 run -e BASE_URL=http://10.0.1.114:8081 \
 
 > 측정 후 작성
 
+### 개선 방향
+
+> 측정 완료 후 작성. 예상 검토 항목:
+> - `reserveAtomic` Lua 스크립트 실행 시간 및 Redis 분산 락 경합 현황 (RedisInsight 또는 SLOWLOG 조회)
+> - `UPDATE inventory SET available_qty = available_qty - qty WHERE available_qty >= qty` 실행 계획 (EXPLAIN) — `product_id` 인덱스 적용 여부
+> - HikariCP `connection-timeout` 로그 — DB 커넥션 풀 대기 발생 여부
+> - P95 300ms 초과 시 원인 구간(Redis 락 대기 vs DB UPDATE 경합 vs 커넥션 풀 대기) 분리
+
 ---
 
 ## 시나리오 04: 드롭스 스파이크 (Drop Spike)
@@ -353,6 +370,14 @@ k6 run -e BASE_URL=https://api.fandrops.site \
 ### 관찰 및 오너 피드백
 
 > 측정 후 작성
+
+### 개선 방향
+
+> 측정 완료 후 작성. 예상 검토 항목:
+> - 베이스라인(SLO 달성)이므로 추가 개선보다 회귀 방지 초점
+> - 스파이크 구간(100→1,000 VU) Rate Limit 흡수 후 성공 요청 P95 확인 — 640ms(베이스라인) 대비 개선 여부
+> - 오버셀 0건 재확인 (`SELECT COUNT(*) FROM orders WHERE status = 'RESERVED'` = 100)
+> - Nginx rate limit이 스파이크를 흡수하는 동안 앱 서버 스레드 풀·커넥션 풀 여유 확인
 
 ---
 
@@ -473,6 +498,14 @@ BASE_URL=http://10.0.1.114:8081 k6 run \
 
 > 측정 후 작성
 
+### 개선 방향
+
+> 측정 완료 후 작성. 예상 검토 항목:
+> - `TOSS_API_READ_TIMEOUT=2s` 주입 후 P95가 베이스라인(1,540ms) 대비 개선됐는지 확인
+> - timeout 시나리오(Wiremock 5s 지연) 요청이 2s 내 `ReadTimeoutException`으로 처리되는지 확인
+> - max 응답시간이 SLO(2,000ms) 이하로 수렴했는지 확인 (베이스라인 max 3.03s)
+> - mixed 시나리오(70/10/10/10%) 에러 유형별 응답시간 분포 기록 — PG 장애 대응 기준선
+
 ---
 
 ## 시나리오 05: SSE 대기열 연결 안정성 (SSE Queue)
@@ -581,6 +614,14 @@ GitHub Actions → **Run k6 Load Test** → `scenario: 05` → `confirm: yes`
 ### 관찰 및 오너 피드백
 
 > 측정 후 작성
+
+### 개선 방향
+
+> 측정 완료 후 작성. 예상 검토 항목:
+> - heartbeat 스케줄 적용 후 1,000 VU 구간 에러율이 0.1% 이하로 수렴했는지 확인
+> - stale emitter 정리 속도 확인 — `emitters.size()` 모니터링으로 2,000 한도 도달 여부 추적
+> - 2,100 VU 초과 구간에서 429 + `retryable:true` 응답 계약 이행 확인
+> - heartbeat 전송 주기(5s) 적절성 검토 — 부하 상황에서 heartbeat 처리가 추가 스레드 압박 주는지 확인
 
 ---
 
@@ -705,6 +746,14 @@ k6 run -e BASE_URL=https://api.fandrops.site \
 
 > 측정 후 작성
 
+### 개선 방향
+
+> 측정 완료 후 작성. 예상 검토 항목:
+> - 블로커 수정(ROLE_FAN SecurityConfig, Wiremock wildcard stub, vuToken 초기화) 후 Write/Read P95 동시 측정 가능 여부 확인
+> - 피드 조회(60%) + 주문(15%) 간 DB 커넥션 풀 간섭 효과 확인 — 개별 시나리오 대비 P95 증가폭
+> - 오버셀 0건 재확인 (`orders WHERE status = 'RESERVED'` ≤ 200)
+> - Rate Limit 429가 check 실패로 집계되지 않는지 확인 (지영재 수정 반영 여부)
+
 ---
 
 ## 시나리오 07: 상품 조회 처리량 기준선 (Product Read)
@@ -798,6 +847,16 @@ cd /opt/fandrops/k6 && BASE_URL=http://10.0.1.114:8082 K6_PROMETHEUS_RW_SERVER_U
   3. **`findRegularProducts` 인덱스 확인**: 커서 페이지네이션 쿼리(`WHERE status = 'ON_SALE' AND id < cursor ORDER BY id DESC LIMIT size`)에 `(status, id DESC)` 복합 인덱스가 없으면 Full Scan 발생. `EXPLAIN` 실행 계획 확인 필요.
 
   4. **꼬리 레이턴시(max 1.33s) 원인 추적**: 1.33s는 단순 DB 쿼리 범위를 벗어난 수치. 커넥션 풀 대기 또는 GC pause 가능성이 있음. HikariCP `connection-timeout` 로그 및 GC 로그 확인 권장.
+
+### 개선 방향
+
+| 우선순위 | 항목 | 설명 | 기대 효과 |
+|---|---|---|---|
+| 🔴 High | 상품·이미지 캐시 적용 | `productRepository.findRegularProducts()` + `productImageRepository.findThumbnailsByProductIds()` 결과를 Redis 캐시(TTL 120~300s)로 저장. 상품·이미지는 변경 빈도가 낮아 캐시 적합도 높음. 상품 변경 시 이벤트 기반 evict 적용 | 쿼리 1·3 제거 → 900 q/s → 300 q/s, P95 120ms 이하 목표 |
+| 🔴 High | `findRegularProducts` 인덱스 확인 | `WHERE status = 'ON_SALE' AND id < cursor ORDER BY id DESC LIMIT size` 쿼리에 `(status, id DESC)` 복합 인덱스 미적용 시 Full Scan 발생. `EXPLAIN` 실행 계획 확인 필수 | 쿼리 응답 시간 단축 및 꼬리 레이턴시 개선 |
+| 🟡 Mid | inventory 조회 분리 캐싱 | `inventoryReadPort.getByProductIds()` 재고 정보는 변동 빈도가 높으므로 TTL 5~10s 짧은 캐시 적용. 또는 상품 목록에 재고 실시간 표시 대신 "재고 있음/없음" 단순 필드만 반환하도록 응답 경량화 | 900 q/s DB 압박 해소 |
+| 🟡 Mid | 꼬리 레이턴시(max 1.33s) 원인 제거 | HikariCP `connectionTimeout` 로그로 커넥션 풀 대기 확인. GC 로그(`-Xlog:gc`) 분석으로 Full GC pause 여부 확인. t3.small `-Xmx768m` 힙 제한 하에서 GC 압박 발생 가능 | `dropped_iterations ≈ 0` 달성, 300 RPS 완전 소화 |
+| 🟢 Low | maxVUs 상향 (임시 조치) | 캐시·인덱스 개선 전 임시로 `maxVUs: 200 → 300` 상향 시 `dropped_iterations` 감소. 근본 원인 해결 후 원복 권장 | dropped_iterations 251 → 0 (단, P95 개선은 미보장) |
 
 ---
 
