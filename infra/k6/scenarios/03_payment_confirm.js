@@ -1,6 +1,6 @@
 /**
  * 결제 확인 흐름 — Wiremock 기반 Toss PG 모킹
- * 목표: POST /payments/toss/confirm P95 < 3s, error rate < 1%
+ * 목표: POST /payments/toss/confirm P95 < 2s, error rate < 0.1%
  * 파라미터: 장성재 확정 (2026-06-05) / executor 변경: 지영재 (2026-06-19)
  *
  * executor: shared-iterations (vus:50, iterations:500)
