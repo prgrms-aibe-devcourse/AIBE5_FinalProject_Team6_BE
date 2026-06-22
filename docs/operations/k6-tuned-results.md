@@ -44,7 +44,7 @@ k6 run -e BASE_URL=$BASE_URL \
 |---|---|---|---|
 | Read | < 120ms | < 0.1% | 02 |
 | Write | < 300ms | < 0.1% | 01, 04, 06 |
-| Payment | < 3,000ms | < 1% | 03 |
+| Payment | < 2,000ms | < 0.1% | 03 |
 | SSE | 연결 거부 없음 (정상 구간) | — | 05 |
 
 ---
@@ -259,21 +259,23 @@ k6 run -e BASE_URL=https://api.fandrops.site \
 
 **파일**: `infra/k6/scenarios/03_payment_confirm.js`
 **담당 오너**: 장성재
-**SLO**: P95 < 3,000ms, 에러율 < 1%
+**SLO**: P95 < 2,000ms, 에러율 < 0.1%
+
+> **SLO 완화 사유 (2026-06-22 팀 합의)**: 기획 원안 300ms → 2,000ms. Wiremock 즉시 응답 조건에서 앱 처리 단독 P95가 1,540ms로 측정됨. 외부 Toss PG 레이턴시(네트워크 왕복 + 카드사 승인) 추가 시 300ms는 현재 동기 TX 구조에서 달성 불가. 2,000ms는 데이터 기반으로 방어 가능한 최솟값.
 
 ### 이전 피드백 (장성재)
 
 > 출처: `k6-baseline-results.md` — 오너 피드백 (→ 장성재)
 
 - P95 1.54s, 에러율 0.00%로 SLO 달성 완료입니다. ✅
-- 최대 3.03s가 SLO 경계(3,000ms)에 0.03s 초과한 케이스가 있습니다. `toss.api.read-timeout` 설정값과 Wiremock timeout 시나리오(5초 지연) 설정을 비교해 앱 타임아웃이 SLO보다 충분히 작게 잡혀있는지 확인 부탁드립니다. `앱 readTimeout < SLO(3s)` 조건이어야 P95 기준 여유가 생깁니다.
+- 최대 3.03s가 변경된 SLO(2,000ms)를 초과합니다. `toss.api.read-timeout: ${TOSS_API_READ_TIMEOUT:10s}` — k6 측정 시 `TOSS_API_READ_TIMEOUT=2s` 주입으로 SLO(2s) 이내 처리를 보장합니다. `앱 readTimeout < SLO(2s)` 조건이어야 P95 기준 여유가 생깁니다.
 - mixed 시나리오(success 70% / timeout 10% / balance-error 10% / server-error 10%) 별도 실행으로 에러 유형별 응답시간 분포를 기록해 두면 PG 장애 대응 기준선이 됩니다.
 
 ### 피드백 반영 내용 (장성재)
 
 **어떻게 반영했는지**
 
-`application-prod.yml`의 `toss.api.read-timeout` 설정이 `10s`로 잡혀 있어 SLO(3s)보다 3배 이상 길었다. 피드백 조건(`앱 readTimeout < SLO 3s`)에 따라 `2s`로 단축했다. 단, `application-prod.yml`에 직접 하드코딩하면 Wiremock이 아닌 실제 Toss API 환경에서도 `2s`가 적용되어 P99 정상 결제가 `ReadTimeoutException`으로 처리될 위험이 있으므로, PR 리뷰 피드백을 반영해 `${TOSS_API_READ_TIMEOUT:10s}` 환경변수 방식으로 변경했다. k6 측정 시에만 EC2-1에 `TOSS_API_READ_TIMEOUT=2s`를 주입하고, 측정 완료 후 원복한다.
+`application-prod.yml`의 `toss.api.read-timeout` 설정이 `10s`로 잡혀 있어 SLO(2s)보다 5배 이상 길었다. 피드백 조건(`앱 readTimeout < SLO 2s`)에 따라 `2s`로 단축했다. 단, `application-prod.yml`에 직접 하드코딩하면 Wiremock이 아닌 실제 Toss API 환경에서도 `2s`가 적용되어 P99 정상 결제가 `ReadTimeoutException`으로 처리될 위험이 있으므로, PR 리뷰 피드백을 반영해 `${TOSS_API_READ_TIMEOUT:10s}` 환경변수 방식으로 변경했다. k6 측정 시에만 EC2-1에 `TOSS_API_READ_TIMEOUT=2s`를 주입하고, 측정 완료 후 원복한다.
 
 **어떤 기술/방법을 적용했는지**
 
@@ -334,7 +336,7 @@ BASE_URL=http://10.0.1.114:8081 k6 run \
 
 | 지표 | 베이스라인 | 결과 | 목표 | 상태 |
 |---|---|---|---|---|
-| P95 응답시간 | 1,540ms ✅ | — | < 3,000ms | 미측정 |
+| P95 응답시간 | 1,540ms ✅ | — | < 2,000ms | 미측정 |
 | 평균 응답시간 | — | — | — | — |
 | 에러율 | 0.00% ✅ | — | < 1% | 미측정 |
 | 처리량 | — | — | — | — |

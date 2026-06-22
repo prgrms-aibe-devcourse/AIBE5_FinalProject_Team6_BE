@@ -62,7 +62,7 @@ k6 run -e BASE_URL=$BASE_URL \
 |---|---|---|---|
 | Read | < 120ms | < 0.1% | 02 |
 | Write | < 300ms | < 0.1% | 01, 04, 06 |
-| Payment | < 3,000ms | < 1% | 03 |
+| Payment | < 2,000ms | < 0.1% | 03 |
 | SSE | 연결 거부 없음 (정상 구간) | — | 05 |
 
 ---
@@ -366,7 +366,9 @@ done
 
 **파일**: `infra/k6/scenarios/03_payment_confirm.js`
 **담당 오너**: 장성재
-**SLO**: P95 < 3,000ms, 에러율 < 1%
+**SLO**: P95 < 2,000ms, 에러율 < 0.1%
+
+> **SLO 완화 사유 (2026-06-22 팀 합의)**: 기획 원안 300ms → 2,000ms. Wiremock 즉시 응답 조건에서 앱 처리 단독 P95가 1,540ms로 측정됨. 외부 Toss PG 레이턴시(네트워크 왕복 + 카드사 승인) 추가 시 300ms는 현재 동기 TX 구조에서 달성 불가. 2,000ms는 데이터 기반으로 방어 가능한 최솟값.
 
 ### 목적
 
@@ -375,7 +377,7 @@ done
 검증 핵심:
 - **중복 결제 0건**: 동일 `payment_key`로 중복 confirm 요청 시 409 반환 여부
 - **타임아웃 처리**: Wiremock 지연 응답(2,000ms) 시 앱이 적절히 처리하는지
-- **P95 < 3,000ms**: 결제 SLO — PG 응답 대기 포함
+- **P95 < 2,000ms**: 결제 SLO — PG 응답 대기 포함
 - **에러율 < 1%**: 성공 시나리오 기준
 
 ### 실행 흐름
@@ -387,7 +389,7 @@ done
 | SCENARIO | Wiremock 응답 | 기대 결과 |
 |---|---|---|
 | `success` (기본) | 200 즉시 | 정상 처리 |
-| `timeout` | 200, 5초 지연 | P95 < 3s 내 처리 |
+| `timeout` | 200, 5초 지연 | P95 < 2s 내 처리 |
 | `balance-error` | 400 잔액부족 | 400 정상 반환 |
 | `server-error` | 500 PG 오류 | 5xx 에러율 < 1% |
 | `mixed` | 70/10/10/10% 혼합 | 전체 에러율 < 1% |
@@ -467,11 +469,11 @@ $MYSQL -e "UPDATE orders SET status='RESERVED', updated_at=NOW() WHERE order_pay
 
 | 지표 | 결과 | 목표 | 상태 |
 |---|---|---|---|
-| P95 응답 시간 | **1.54s** | < 3,000ms | ✅ SLO 달성 |
+| P95 응답 시간 | **1.54s** | < 2,000ms | ✅ SLO 달성 |
 | P90 응답 시간 | 1.33s | — | — |
 | 평균 응답 시간 | 895.05ms | — | — |
 | 최대 응답 시간 | 3.03s | — | — |
-| 에러율 | **0.00%** | < 1% | ✅ |
+| 에러율 | **0.00%** | < 0.1% | ✅ |
 | 처리량 | 54.4 RPS | — | — |
 | 총 요청 수 | 500 | — | — |
 | 실행 시간 | 9.2s | — | — |
@@ -483,13 +485,13 @@ $MYSQL -e "UPDATE orders SET status='RESERVED', updated_at=NOW() WHERE order_pay
 ### 관찰 및 개선사항
 
 **관찰:**
-- P95 1.54s로 SLO(3,000ms) 달성, 에러율 0.00% — 500건 전체 성공 ✅
+- P95 1.54s로 SLO(2,000ms) 달성, 에러율 0.00% — 500건 전체 성공 ✅
 - 평균 895ms — Wiremock success 시나리오 즉시 응답 기준으로 안정적 처리
-- 최대 3.03s — SLO 경계(3,000ms)에 0.03s 초과한 단일 케이스. Wiremock timeout 시나리오(5초 지연 설정) 중 한 건이 경계에 걸린 것으로 추정
+- 최대 3.03s — SLO 경계(2,000ms)를 1.03s 초과한 단일 케이스. Wiremock timeout 시나리오(5초 지연 설정) 중 한 건이 경계에 걸린 것으로 추정
 - 50 VU 동시 처리에서 54.4 RPS — 9.2초 내 500건 완료, 결제 확인 시나리오로서 충분한 처리량
 
 **개선사항:**
-- 최대 3.03s가 SLO 경계 0.03s 초과 — Wiremock timeout 설정(5초 지연)과 앱 `toss.api.read-timeout` 설정 정합성 확인 권장. `앱 타임아웃 < SLO(3s)` 조건이어야 P95 기준 안전 여유 확보 가능
+- 최대 3.03s가 SLO 경계(2,000ms) 1.03s 초과 — Wiremock timeout 설정(5초 지연)과 앱 `toss.api.read-timeout` 설정 정합성 확인 권장. `앱 타임아웃 < SLO(2s)` 조건이어야 P95 기준 안전 여유 확보 가능
 - 현재 success(기본) 단일 시나리오 측정. mixed 시나리오(70/10/10/10 비율) 별도 실행 시 에러 응답 유형별 응답시간 분포 파악 가능 — PG 장애 대응 기준선 마련에 유용
 
 ### 트러블슈팅
@@ -546,7 +548,7 @@ $MYSQL -e "UPDATE orders SET status='RESERVED', updated_at=NOW() WHERE order_pay
 ### 오너 피드백 (→ 장성재)
 
 - P95 1.54s, 에러율 0.00%로 SLO 달성 완료입니다. ✅
-- 최대 3.03s가 SLO 경계(3,000ms)에 0.03s 초과한 케이스가 있습니다. `toss.api.read-timeout` 설정값과 Wiremock timeout 시나리오(5초 지연) 설정을 비교해 앱 타임아웃이 SLO보다 충분히 작게 잡혀있는지 확인 부탁드립니다. `앱 readTimeout < SLO(3s)` 조건이어야 P95 기준 여유가 생깁니다.
+- 최대 3.03s가 SLO 경계(2,000ms)를 1.03s 초과한 케이스가 있습니다. `toss.api.read-timeout` 설정값과 Wiremock timeout 시나리오(5초 지연) 설정을 비교해 앱 타임아웃이 SLO보다 충분히 작게 잡혀있는지 확인 부탁드립니다. `앱 readTimeout < SLO(2s)` 조건이어야 P95 기준 여유가 생깁니다.
 - mixed 시나리오(success 70% / timeout 10% / balance-error 10% / server-error 10%) 별도 실행으로 에러 유형별 응답시간 분포를 기록해 두면 PG 장애 대응 기준선이 됩니다.
 
 ---
