@@ -6,7 +6,7 @@
 --   팬 로그인2     : fan2@fandrops.test / Test1234!  (fan id=2, 팔로우 0명)
 --   에이전시 로그인 : agency@fandrops.test / Test1234!
 --   어드민 로그인  : admin@fandrops.com / Test1234!
---   아티스트 로그인 : artist / Test1234!  (NOVA 멤버 하늘, artist_member id=1)
+--   아티스트 로그인 : NovaHaneul·NovaSera·NovaMina·NovaYujin / LunaEunbyeol·LunaDal·LunaHaneul·LunaSeoyeon / Echo — 비번 Test1234!
 --   아티스트 프로필 : NOVA(id=1) LUNA(id=2) ECHO(id=3)
 --   그룹 멤버 수   : NOVA 4명 · LUNA 4명 · ECHO 1명 (이미지/수정본 프로필 기준, URL은 업로드로 채움)
 --   팬 팔로우      : fan(id=1) -> NOVA(id=1) 초기 팔로우 상태
@@ -44,18 +44,18 @@ VALUES
     (3, 1, 'ECHO', 0, '2024-01-01 00:00:00', 'FE 검증용 테스트 아티스트 ECHO');
 
 -- 3-1. 아티스트 멤버 (finalize_assets.py 프로필 기준 인원·이름)
---    id=1 고정 -> JWT sub=1 role=ARTIST, login_id: artist / Test1234!
+--    id=1 고정 -> JWT sub=1 role=ARTIST, login_id: NovaHaneul / Test1234!
 INSERT INTO artist_member (id, artist_id, login_id, password_hash, member_name, role)
 VALUES
-    (1, 1, 'artist',           '$2a$10$IXraSx3hpYkrj8jRqqIsxOkdIfRCZKYxPafAJT7v3ZrlvB43gl7Re', '하늘', 'ARTIST'),
-    (2, 1, 'seed-nova-sera',   '$2a$10$IXraSx3hpYkrj8jRqqIsxOkdIfRCZKYxPafAJT7v3ZrlvB43gl7Re', '세라', 'ARTIST'),
-    (3, 1, 'seed-nova-mina',   '$2a$10$IXraSx3hpYkrj8jRqqIsxOkdIfRCZKYxPafAJT7v3ZrlvB43gl7Re', '미나', 'ARTIST'),
-    (4, 1, 'seed-nova-yujin',  '$2a$10$IXraSx3hpYkrj8jRqqIsxOkdIfRCZKYxPafAJT7v3ZrlvB43gl7Re', '유진', 'ARTIST'),
-    (5, 2, 'seed-luna-eunbyeol', '$2a$10$IXraSx3hpYkrj8jRqqIsxOkdIfRCZKYxPafAJT7v3ZrlvB43gl7Re', '은별', 'ARTIST'),
-    (6, 2, 'seed-luna-dal',      '$2a$10$IXraSx3hpYkrj8jRqqIsxOkdIfRCZKYxPafAJT7v3ZrlvB43gl7Re', '달',   'ARTIST'),
-    (7, 2, 'seed-luna-haneul',   '$2a$10$IXraSx3hpYkrj8jRqqIsxOkdIfRCZKYxPafAJT7v3ZrlvB43gl7Re', '하늘', 'ARTIST'),
-    (8, 2, 'seed-luna-seoyeon',  '$2a$10$IXraSx3hpYkrj8jRqqIsxOkdIfRCZKYxPafAJT7v3ZrlvB43gl7Re', '서연', 'ARTIST'),
-    (9, 3, 'seed-echo',          '$2a$10$IXraSx3hpYkrj8jRqqIsxOkdIfRCZKYxPafAJT7v3ZrlvB43gl7Re', 'ECHO', 'ARTIST');
+    (1, 1, 'NovaHaneul',   '$2a$10$IXraSx3hpYkrj8jRqqIsxOkdIfRCZKYxPafAJT7v3ZrlvB43gl7Re', '하늘', 'ARTIST'),
+    (2, 1, 'NovaSera',     '$2a$10$IXraSx3hpYkrj8jRqqIsxOkdIfRCZKYxPafAJT7v3ZrlvB43gl7Re', '세라', 'ARTIST'),
+    (3, 1, 'NovaMina',     '$2a$10$IXraSx3hpYkrj8jRqqIsxOkdIfRCZKYxPafAJT7v3ZrlvB43gl7Re', '미나', 'ARTIST'),
+    (4, 1, 'NovaYujin',    '$2a$10$IXraSx3hpYkrj8jRqqIsxOkdIfRCZKYxPafAJT7v3ZrlvB43gl7Re', '유진', 'ARTIST'),
+    (5, 2, 'LunaEunbyeol', '$2a$10$IXraSx3hpYkrj8jRqqIsxOkdIfRCZKYxPafAJT7v3ZrlvB43gl7Re', '은별', 'ARTIST'),
+    (6, 2, 'LunaDal',      '$2a$10$IXraSx3hpYkrj8jRqqIsxOkdIfRCZKYxPafAJT7v3ZrlvB43gl7Re', '달',   'ARTIST'),
+    (7, 2, 'LunaHaneul',   '$2a$10$IXraSx3hpYkrj8jRqqIsxOkdIfRCZKYxPafAJT7v3ZrlvB43gl7Re', '하늘', 'ARTIST'),
+    (8, 2, 'LunaSeoyeon',  '$2a$10$IXraSx3hpYkrj8jRqqIsxOkdIfRCZKYxPafAJT7v3ZrlvB43gl7Re', '서연', 'ARTIST'),
+    (9, 3, 'Echo',         '$2a$10$IXraSx3hpYkrj8jRqqIsxOkdIfRCZKYxPafAJT7v3ZrlvB43gl7Re', 'ECHO', 'ARTIST');
 
 -- 4. 아티스트 피드
 --    artist_member_id=1 = 위 NOVA 아티스트 멤버
@@ -441,7 +441,7 @@ FROM product WHERE name = 'ECHO Limited Vinyl';
 -- ============================================================
 
 -- C1. artist_member 확인
---     NOVA id=1(하늘, login=artist) · LUNA id=5(은별) · ECHO id=9
+--     NOVA id=1(하늘, login=NovaHaneul) · LUNA id=5(은별, login=LunaEunbyeol) · ECHO id=9(login=Echo)
 
 -- C2. feed_like — fan_id=1 이 NOVA 피드 2건 좋아요
 --     CHECK: (fan_id IS NOT NULL) != (artist_member_id IS NOT NULL)
@@ -479,7 +479,7 @@ SELECT id, 1, 1, null, null,
 FROM artist_feed
 WHERE content LIKE '오늘 라이브 방송%' AND artist_id = 1;
 
--- NOVA 멤버 대댓글 (댓글 A에 달린 아티스트 답글 — artist_member_id=1, login='artist')
+-- NOVA 멤버 대댓글 (댓글 A에 달린 아티스트 답글 — artist_member_id=1, login=NovaHaneul)
 INSERT INTO comment (feed_id, artist_id, fan_id, artist_member_id, parent_id, content, created_at)
 SELECT c.feed_id, c.artist_id, null, 1, c.id,
        '고마워요! 꼭 같이 즐겨요', DATEADD('MINUTE', 15, NOW())
