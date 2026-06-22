@@ -145,6 +145,26 @@ k6 run -e BASE_URL=https://api.fandrops.site \
 
 ![s02_feed_read_tuned](screenshots/tuned/s02_feed_read_tuned.png)
 
+### 문제 정의
+
+**k6 측정 결과 (2회 측정 — 지영재, 2026-06-22)**
+
+| 지표 | 1차 측정 | 2차 측정 | SLO | 판정 |
+|---|---|---|---|---|
+| P95 응답시간 | 168.16ms | 172.09ms | < 120ms | ❌ +40~52ms 초과 |
+| P90 응답시간 | 139.67ms | 142.62ms | — | — |
+| 평균 응답시간 | 87.99ms | 89.60ms | — | — |
+| 에러율 | 0.00% | 0.00% | < 0.1% | ✅ |
+| 처리량(RPS) | 565/s | 555/s | — | ⚠️ 베이스라인(741/s) 대비 감소 |
+
+**Grafana 스크린샷에서 확인된 패턴**
+
+- **Cold start 구간**: 테스트 초반 P95 ~250ms 피크 — 캐시 워밍업 전 모든 요청이 DB 쿼리 경로 직행
+- **워밍업 수렴**: 30~60s 이후 P95 ~120ms까지 점진적 감소 — Redis GET ops 600/s까지 급증하며 캐시 히트율 증가 확인
+- **CPU 100% 포화**: 565 RPS 도달 시 CPU 100% 포화 확인 (CloudWatch + `ps aux`)
+
+**핵심 문제**: FeedCache 버그 수정(`90b212c` @Async executor 미지정, `8c867d0` @TransactionalEventListener 프록시 에러) 후 캐시가 실동작하면서 캐시 히트 경로에도 Redis 역직렬화(`objectMapper.readValue`) + `applyIsLiked()` 추가 DB 쿼리 오버헤드가 추가됨. 베이스라인(133ms, 캐시 미동작 상태)보다 오히려 악화. Cold start 집계 영향 + CPU 포화가 복합 작용.
+
 ### 관찰 및 오너 피드백
 
 **관찰 (지영재 — 2026-06-22)**
@@ -273,6 +293,13 @@ k6 run -e BASE_URL=http://10.0.1.114:8081 \
 
 > `screenshots/tuned/s01_order_concurrency_tuned.png`
 
+### 문제 정의
+
+> 측정 완료 후 작성. 아래 항목을 기준으로 서술한다.
+> - k6 로그: P95(전체/성공 요청), 에러율, 처리량(RPS), max 응답시간
+> - Grafana 스크린샷: P95 시계열 패턴(200 VU 동시 발화 직후 급등 여부), `orders_reserved` 카운트 확인
+> - 핵심 문제: `orders_reserved` 오버셀 발생 여부 + P95 300ms SLO 달성 여부 + 병목 구간 특정
+
 ### 관찰 및 오너 피드백
 
 > 측정 후 작성
@@ -366,6 +393,13 @@ k6 run -e BASE_URL=https://api.fandrops.site \
 ### 스크린샷
 
 > `screenshots/tuned/s04_drop_spike_tuned.png`
+
+### 문제 정의
+
+> 측정 완료 후 작성. 아래 항목을 기준으로 서술한다.
+> - k6 로그: P95(전체/성공 요청), 에러율(전체/429/409/5xx 구분), 처리량(RPS), VU 램프업 구간별 응답 패턴
+> - Grafana 스크린샷: 0→1,000 VU 급상승 구간 P95 시계열, 5xx 에러율 패널, `spike_orders_reserved` 카운트
+> - 핵심 문제: 스파이크 구간 오버셀 발생 여부 + Rate Limit 429 흡수 비율 + P95 300ms SLO 달성 여부
 
 ### 관찰 및 오너 피드백
 
@@ -494,6 +528,13 @@ BASE_URL=http://10.0.1.114:8081 k6 run \
 
 > `screenshots/tuned/s03_payment_confirm_tuned.png`
 
+### 문제 정의
+
+> 측정 완료 후 작성. 아래 항목을 기준으로 서술한다.
+> - k6 로그: P95, max 응답시간, 에러율, 처리량(RPS), iterations 완료 수
+> - Grafana 스크린샷: P95 시계열(2,000ms SLO 기준선 대비), 5xx 에러율 패널
+> - 핵심 문제: `TOSS_API_READ_TIMEOUT=2s` 적용 후 max 응답시간이 SLO(2,000ms) 이내로 수렴했는지, timeout 시나리오 요청이 2s 내 처리됐는지
+
 ### 관찰 및 오너 피드백
 
 > 측정 후 작성
@@ -610,6 +651,13 @@ GitHub Actions → **Run k6 Load Test** → `scenario: 05` → `confirm: yes`
 ### 스크린샷
 
 > `screenshots/tuned/s05_sse_queue_tuned.png`
+
+### 문제 정의
+
+> 측정 완료 후 작성. 아래 항목을 기준으로 서술한다.
+> - k6 로그: 구간별(1,000 / 1,800 / 2,100 VU) 에러율, 429 발생 비율, checks 통과율
+> - Grafana 스크린샷: 구간별 5xx/429 에러율 패널, 활성 SSE 연결 수(`emitters.size()`) 추이
+> - 핵심 문제: heartbeat 적용 후 1,000 VU 정상 구간 에러율 0.1% 이하 달성 여부 + stale emitter 정리 속도 + 2,100 VU 초과 구간 429 `retryable:true` 계약 이행 여부
 
 ### 관찰 및 오너 피드백
 
@@ -742,6 +790,13 @@ k6 run -e BASE_URL=https://api.fandrops.site \
 
 > `screenshots/tuned/s06_workload_model_tuned.png`
 
+### 문제 정의
+
+> 측정 완료 후 작성. 아래 항목을 기준으로 서술한다.
+> - k6 로그: Write P95, Read P95, 에러율(전체/엔드포인트별), 처리량(RPS), `orders_reserved` 카운트
+> - Grafana 스크린샷: 엔드포인트별 P95 시계열(피드·주문·결제 간섭 효과), 5xx 에러율, 워밍업→정상→스파이크 구간별 패턴
+> - 핵심 문제: 혼합 부하에서 피드 조회(60%)가 DB 커넥션 풀을 점유해 주문(15%) P95가 단독 테스트 대비 증가하는 간섭 효과 발생 여부
+
 ### 관찰 및 오너 피드백
 
 > 측정 후 작성
@@ -806,6 +861,30 @@ cd /opt/fandrops/k6 && BASE_URL=http://10.0.1.114:8082 K6_PROMETHEUS_RW_SERVER_U
 ### 스크린샷
 
 ![s07_product_read_tuned](screenshots/tuned/s07_product_read_tuned.png)
+
+### 문제 정의
+
+**k6 측정 결과 (지영재, 2026-06-22)**
+
+| 지표 | 측정값 | SLO | 판정 |
+|---|---|---|---|
+| P95 응답시간 | 133.45ms | < 120ms | ❌ +13ms 초과 |
+| P90 응답시간 | 45.38ms | — | — |
+| 평균 응답시간 | 34.07ms | — | — |
+| 중앙값 응답시간 | 7.19ms | — | — |
+| 최대 응답시간 | 1.33s | — | ⚠️ 꼬리 레이턴시 |
+| 에러율 | 0.00% | < 0.1% | ✅ |
+| 실제 RPS | ~298/s | 300 RPS | ⚠️ 목표 미달 |
+| dropped_iterations | 251건 | ≈ 0 | ⚠️ 처리량 병목 |
+| 최대 활성 VU | 168 / 200 | — | ⚠️ 한도 근접 |
+
+**Grafana 스크린샷에서 확인된 패턴**
+
+- **P95 3단계 변화**: 초반(~18:55:00) ~175ms cold start → 중반(18:55~18:56:30) ~100ms DB 버퍼 워밍업 → 후반(18:56:30~) ~125~150ms 재상승(DB 커넥션 풀 압박 누적)
+- **RPS 최대 ~250 req/s**: 목표 300 RPS에 미달. `dropped_iterations: 251`로 k6가 목표 RPS를 완전히 소화하지 못함을 확인
+- **VU 168/200 도달**: maxVUs 한도에 근접. 꼬리 레이턴시(max 1.33s)가 VU를 점유하는 구조
+
+**핵심 문제**: `ProductService.getProducts()`에 캐시가 없어 300 RPS 전량이 DB로 직행. 매 요청마다 product + inventory + product_image 3-way DB 쿼리(900 q/s) 발생. 연속 부하 후반부에 DB 커넥션 풀 압박이 누적되어 P95가 재상승하는 패턴.
 
 ### 관찰 및 오너 피드백
 
