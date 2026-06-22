@@ -118,6 +118,14 @@ class ArtistScheduleTest {
     }
 
     @Test
+    @DisplayName("createLinkedSchedule — NOTICE 타입 → ScheduleDomainException")
+    void createLinkedSchedule_noticeType_throws() {
+        assertThrows(ScheduleDomainException.class,
+                () -> ArtistSchedule.createLinkedSchedule(
+                        1L, "타이틀", ArtistScheduleType.NOTICE, VALID_TIME, 1L));
+    }
+
+    @Test
     @DisplayName("createEvent(noticeId 포함) — noticeId 연결된 EVENT 생성")
     void createEvent_withNoticeId_success() {
         ArtistSchedule s = ArtistSchedule.createEvent(

@@ -102,6 +102,9 @@ public class ArtistSchedule {
         if (scheduledAt == null) {
             throw new ScheduleDomainException("scheduledAt은 필수입니다.");
         }
+        if (type == ArtistScheduleType.NOTICE) {
+            throw new ScheduleDomainException("캘린더 연동 항목에 NOTICE 타입은 사용할 수 없습니다.");
+        }
         return new ArtistSchedule(null, artistId, noticeId, title, type, scheduledAt, null, null, null);
     }
 

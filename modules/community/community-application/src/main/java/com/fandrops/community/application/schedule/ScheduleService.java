@@ -151,7 +151,11 @@ public class ScheduleService {
             resultImageUrls = scheduleImagePort.findByScheduleId(saved.getId());
         }
 
-        if (command.autoSyncCalendar() && command.calendarType() != null) {
+        if (command.autoSyncCalendar()) {
+            if (command.calendarType() == null) {
+                throw new IllegalArgumentException(
+                        "autoSyncCalendar=true 시 calendarType(DROP|EVENT|LIVE)은 필수입니다.");
+            }
             ArtistScheduleType calType = parseCalendarType(command.calendarType());
             ArtistSchedule calEntry = ArtistSchedule.createLinkedSchedule(
                     command.artistId(), command.title(), calType, scheduledAtUtc, saved.getId());

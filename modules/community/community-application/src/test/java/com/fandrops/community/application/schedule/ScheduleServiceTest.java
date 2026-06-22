@@ -168,7 +168,7 @@ class ScheduleServiceTest {
         @Test
         @DisplayName("linkNoticeId 있음 — NOTICE 검증 후 noticeId 포함 schedule 저장")
         void withLinkNoticeId_success() {
-            ArtistSchedule noticeSchedule = noticeWithId(20L, 10L, "공지", null, NOW);
+            ArtistSchedule noticeSchedule = notice(20L, 10L, "공지", null, NOW);
             ArtistSchedule saved = scheduleWithNoticeId(1L, 10L, ArtistScheduleType.EVENT, "팬미팅",
                     NOW.plusDays(30), null, "https://ticket.example.com/1", 20L);
             when(scheduleRepository.findById(eq(20L))).thenReturn(Optional.of(noticeSchedule));
@@ -211,7 +211,7 @@ class ScheduleServiceTest {
         @Test
         @DisplayName("linkNoticeId가 다른 artistId 공지 → ScheduleNotFoundException (IDOR)")
         void linkNoticeId_wrongArtist_throws() {
-            ArtistSchedule otherArtistNotice = noticeWithId(20L, 99L, "공지", null, NOW);
+            ArtistSchedule otherArtistNotice = notice(20L, 99L, "공지", null, NOW);
             when(scheduleRepository.findById(eq(20L))).thenReturn(Optional.of(otherArtistNotice));
 
             assertThrows(ScheduleNotFoundException.class,
@@ -462,6 +462,18 @@ class ScheduleServiceTest {
         }
 
         @Test
+        @DisplayName("autoSyncCalendar=true + calendarType=null → IllegalArgumentException")
+        void autoSyncCalendar_nullCalendarType_throws() {
+            ArtistSchedule savedNotice = notice(1L, 10L, "공지", null, NOW);
+            when(scheduleRepository.save(any())).thenReturn(savedNotice);
+
+            assertThrows(IllegalArgumentException.class,
+                    () -> scheduleService.createNotice(
+                            new NoticeCreateCommand(10L, 5L, "공지", null, List.of(),
+                                    NOW.atOffset(ZoneOffset.UTC), true, null)));
+        }
+
+        @Test
         @DisplayName("autoSyncCalendar=true + calendarType=NOTICE → IllegalArgumentException")
         void autoSyncCalendar_noticeType_throws() {
             ArtistSchedule savedNotice = notice(1L, 10L, "공지", null, NOW);
@@ -606,9 +618,4 @@ class ScheduleServiceTest {
                 ArtistScheduleType.NOTICE, scheduledAt, null, content);
     }
 
-    private static ArtistSchedule noticeWithId(Long id, Long artistId, String title,
-                                                String content, LocalDateTime scheduledAt) {
-        return ArtistSchedule.reconstruct(id, artistId, null, title,
-                ArtistScheduleType.NOTICE, scheduledAt, null, content);
-    }
 }
