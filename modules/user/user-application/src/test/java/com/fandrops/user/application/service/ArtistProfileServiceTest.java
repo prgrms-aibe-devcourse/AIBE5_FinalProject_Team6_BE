@@ -1,8 +1,15 @@
 package com.fandrops.user.application.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fandrops.user.application.dto.ArtistProfileListResult;
+import com.fandrops.user.application.dto.PresignedUploadResult;
 import com.fandrops.user.application.exception.ArtistNotFoundException;
+import com.fandrops.user.application.exception.InvalidContentTypeException;
+import com.fandrops.user.application.exception.InvalidImageUrlException;
 import com.fandrops.user.application.port.ArtistProfileRepository;
+import com.fandrops.user.application.port.AuditLogPort;
+import com.fandrops.user.application.port.S3ImageValidationPort;
+import com.fandrops.user.application.port.S3PresignedUrlPort;
 import com.fandrops.user.domain.ArtistProfile;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -11,24 +18,32 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class ArtistProfileServiceTest {
 
     @Mock ArtistProfileRepository artistProfileRepository;
+    @Mock AuditLogPort auditLogPort;
+    @Mock S3PresignedUrlPort s3PresignedUrlPort;
+    @Mock S3ImageValidationPort s3ImageValidationPort;
+
+    ObjectMapper objectMapper = new ObjectMapper();
 
     ArtistProfileService artistProfileService;
 
     @BeforeEach
     void setUp() {
-        artistProfileService = new ArtistProfileService(artistProfileRepository);
+        artistProfileService = new ArtistProfileService(
+                artistProfileRepository, auditLogPort, s3PresignedUrlPort, s3ImageValidationPort, objectMapper);
     }
 
     // ── 단건 조회 ─────────────────────────────────────────────────────────────
@@ -241,6 +256,96 @@ class ArtistProfileServiceTest {
         artistProfileService.listByAgencyId(10L, null, 100);
 
         verify(artistProfileRepository).findByAgencyId(10L, null, 101);
+    }
+
+    // ── updateArtistProfile ───────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("소유권 일치 — 프로필 수정 후 저장된 프로필 반환")
+    void updateArtistProfile_ownerMatches_savesAndReturns() {
+        ArtistProfile profile = dummyProfile(1L, 500L);
+        when(artistProfileRepository.findById(1L)).thenReturn(Optional.of(profile));
+        when(artistProfileRepository.save(any())).thenReturn(profile);
+
+        ArtistProfile result = artistProfileService.updateArtistProfile(
+                1L, 10L, "새 bio", null, null, null, null, null, "127.0.0.1", "trace");
+
+        verify(artistProfileRepository).save(profile);
+        assertNotNull(result);
+    }
+
+    @Test
+    @DisplayName("소유권 불일치 — ArtistNotFoundException")
+    void updateArtistProfile_agencyMismatch_throwsArtistNotFoundException() {
+        ArtistProfile profile = dummyProfile(1L, 500L); // agencyId=10
+        when(artistProfileRepository.findById(1L)).thenReturn(Optional.of(profile));
+
+        assertThrows(ArtistNotFoundException.class,
+                () -> artistProfileService.updateArtistProfile(
+                        1L, 99L, "bio", null, null, null, null, null, "127.0.0.1", "trace"));
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 아티스트 — ArtistNotFoundException")
+    void updateArtistProfile_notFound_throwsArtistNotFoundException() {
+        when(artistProfileRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThrows(ArtistNotFoundException.class,
+                () -> artistProfileService.updateArtistProfile(
+                        99L, 10L, "bio", null, null, null, null, null, "127.0.0.1", "trace"));
+    }
+
+    // ── generateProfileImagePresignedUrl ──────────────────────────────────────
+
+    @Test
+    @DisplayName("허용된 contentType — presigned URL 반환")
+    void generateProfileImagePresignedUrl_allowed_returnsResult() {
+        ArtistProfile profile = dummyProfile(1L, 500L);
+        when(artistProfileRepository.findById(1L)).thenReturn(Optional.of(profile));
+        PresignedUploadResult stubResult = new PresignedUploadResult(
+                "https://s3.example.com/presigned", "https://s3.example.com/img.jpg",
+                Instant.now().plusSeconds(300));
+        when(s3PresignedUrlPort.generateForProfileImage("image/jpeg", 1000L)).thenReturn(stubResult);
+
+        PresignedUploadResult result = artistProfileService.generateProfileImagePresignedUrl(
+                1L, 10L, "image/jpeg", 1000L, "127.0.0.1", "trace");
+
+        assertEquals("https://s3.example.com/presigned", result.presignedUrl());
+    }
+
+    @Test
+    @DisplayName("허용되지 않는 contentType — InvalidContentTypeException")
+    void generateProfileImagePresignedUrl_invalidContentType_throws() {
+        assertThrows(InvalidContentTypeException.class,
+                () -> artistProfileService.generateProfileImagePresignedUrl(
+                        1L, 10L, "application/pdf", 1000L, "127.0.0.1", "trace"));
+    }
+
+    // ── confirmProfileImageUrl ────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("S3 소유 URL — 프로필 이미지 URL 확정 후 저장")
+    void confirmProfileImageUrl_ownedUrl_savesImageUrl() {
+        ArtistProfile profile = dummyProfile(1L, 500L);
+        when(artistProfileRepository.findById(1L)).thenReturn(Optional.of(profile));
+        when(s3ImageValidationPort.isOwnedUrl("https://cdn.fandrops.com/img.jpg")).thenReturn(true);
+        when(artistProfileRepository.save(any())).thenReturn(profile);
+
+        ArtistProfile result = artistProfileService.confirmProfileImageUrl(
+                1L, 10L, "https://cdn.fandrops.com/img.jpg", "127.0.0.1", "trace");
+
+        verify(artistProfileRepository).save(profile);
+        assertNotNull(result);
+    }
+
+    @Test
+    @DisplayName("외부 도메인 URL — InvalidImageUrlException")
+    void confirmProfileImageUrl_externalUrl_throwsInvalidImageUrlException() {
+        when(s3ImageValidationPort.isOwnedUrl("https://attacker.com/img.jpg")).thenReturn(false);
+
+        assertThrows(InvalidImageUrlException.class,
+                () -> artistProfileService.confirmProfileImageUrl(
+                        1L, 10L, "https://attacker.com/img.jpg", "127.0.0.1", "trace"));
     }
 
     // ── 헬퍼 ─────────────────────────────────────────────────────────────────

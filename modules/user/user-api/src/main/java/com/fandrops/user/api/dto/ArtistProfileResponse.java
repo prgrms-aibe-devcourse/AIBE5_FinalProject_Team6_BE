@@ -15,7 +15,8 @@ public record ArtistProfileResponse(
         String bio,
         String homepageUrl,
         String youtubeUrl,
-        String instagramUrl
+        String instagramUrl,
+        String twitterUrl
 ) {
     public static ArtistProfileResponse from(ArtistProfile profile) {
         return new ArtistProfileResponse(
@@ -29,7 +30,8 @@ public record ArtistProfileResponse(
                 profile.getBio(),
                 profile.getHomepageUrl(),
                 profile.getYoutubeUrl(),
-                profile.getInstagramUrl()
+                profile.getInstagramUrl(),
+                profile.getTwitterUrl()
         );
     }
 }
