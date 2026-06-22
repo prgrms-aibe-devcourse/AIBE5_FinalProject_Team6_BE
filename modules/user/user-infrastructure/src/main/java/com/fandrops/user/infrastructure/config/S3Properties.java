@@ -17,6 +17,7 @@ public class S3Properties {
     private int presignedUrlExpiryMinutes = 10;
     private String uploadPrefix = "uploads/banners";
     private String uploadProfileImagePrefix = "uploads/profiles";
+    private String cdnBaseUrl;
 
     public String getBucket() { return bucket; }
     public void setBucket(String bucket) { this.bucket = bucket; }
@@ -32,4 +33,7 @@ public class S3Properties {
 
     public String getUploadProfileImagePrefix() { return uploadProfileImagePrefix; }
     public void setUploadProfileImagePrefix(String uploadProfileImagePrefix) { this.uploadProfileImagePrefix = uploadProfileImagePrefix; }
+
+    public String getCdnBaseUrl() { return cdnBaseUrl; }
+    public void setCdnBaseUrl(String cdnBaseUrl) { this.cdnBaseUrl = cdnBaseUrl; }
 }
