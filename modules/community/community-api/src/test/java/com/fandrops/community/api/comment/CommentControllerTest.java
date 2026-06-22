@@ -66,7 +66,7 @@ class CommentControllerTest {
         @Test
         @DisplayName("FAN JWT (비로컬) → 201, commentId 반환")
         void fanJwt_nonLocal_returns201() {
-            Authentication auth = mockAuth("77", "FAN");
+            Authentication auth = mockAuth("77", "ROLE_FAN");
             CommentResult stub = new CommentResult(43L, 1L, 77L, null, null, "응원해요", OffsetDateTime.now(ZoneOffset.UTC));
             when(commentService.createComment(any())).thenReturn(stub);
 

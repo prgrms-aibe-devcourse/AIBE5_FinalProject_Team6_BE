@@ -59,7 +59,7 @@ class FanMypageControllerTest {
         @Test
         @DisplayName("FAN JWT (비로컬) → 200, 활동 목록 반환")
         void fanJwt_nonLocal_returns200() {
-            Authentication auth = mockAuth("77", "FAN");
+            Authentication auth = mockAuth("77", "ROLE_FAN");
             ActivityListResult stub = new ActivityListResult(List.of(), null, false);
             when(fanActivityService.getActivities(eq(77L), isNull(), eq(20))).thenReturn(stub);
 
@@ -81,7 +81,7 @@ class FanMypageControllerTest {
         @Test
         @DisplayName("AGENCY JWT (비로컬) → ForbiddenException (팬 계정 전용), service 미호출")
         void agencyJwt_nonLocal_throwsForbidden() {
-            Authentication auth = mockAuth("5", "AGENCY");
+            Authentication auth = mockAuth("5", "ROLE_AGENCY");
 
             assertThrows(ForbiddenException.class,
                     () -> controller.getActivities(null, 20, auth, null));
@@ -122,7 +122,7 @@ class FanMypageControllerTest {
         @Test
         @DisplayName("FAN JWT (비로컬) → 200, 가입 아티스트 목록 반환")
         void fanJwt_nonLocal_returns200() {
-            Authentication auth = mockAuth("77", "FAN");
+            Authentication auth = mockAuth("77", "ROLE_FAN");
             JoinedArtistListResult stub = new JoinedArtistListResult(List.of(), null, false);
             when(fanActivityService.getJoinedArtists(eq(77L), isNull(), eq(20))).thenReturn(stub);
 
@@ -142,7 +142,7 @@ class FanMypageControllerTest {
         @Test
         @DisplayName("ARTIST JWT (비로컬) → ForbiddenException (팬 계정 전용), service 미호출")
         void artistJwt_nonLocal_throwsForbidden() {
-            Authentication auth = mockAuth("5", "ARTIST");
+            Authentication auth = mockAuth("5", "ROLE_ARTIST");
 
             assertThrows(ForbiddenException.class,
                     () -> controller.getJoinedArtists(null, 20, auth, null));

@@ -69,18 +69,18 @@ public abstract class CommunityControllerSupport {
 
     protected static boolean hasArtistOrAgencyRole(Authentication authentication) {
         return authentication.getAuthorities().stream()
-                .anyMatch(a -> a.getAuthority().equals("ARTIST")
-                        || a.getAuthority().equals("AGENCY"));
+                .anyMatch(a -> a.getAuthority().equals("ROLE_ARTIST")
+                        || a.getAuthority().equals("ROLE_AGENCY"));
     }
 
     protected static boolean hasAgencyRole(Authentication authentication) {
         return authentication.getAuthorities().stream()
-                .anyMatch(a -> a.getAuthority().equals("AGENCY"));
+                .anyMatch(a -> a.getAuthority().equals("ROLE_AGENCY"));
     }
 
     protected static boolean hasFanRole(Authentication authentication) {
         return authentication.getAuthorities().stream()
-                .anyMatch(a -> a.getAuthority().equals("FAN"));
+                .anyMatch(a -> a.getAuthority().equals("ROLE_FAN"));
     }
 
     protected Long resolveAgencyAccountId(Authentication authentication, Long header) {
