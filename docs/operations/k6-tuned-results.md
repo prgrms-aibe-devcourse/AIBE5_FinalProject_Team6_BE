@@ -733,35 +733,51 @@ k6 run -e BASE_URL=https://api.fandrops.site \
 
 ### 실행 명령어
 
-> ⚠️ **BASE_URL 예외**: s07은 `http://10.0.1.114:8081` (Spring Boot 직접 연결, Nginx 우회).
+> ⚠️ **BASE_URL 예외**: s07은 Spring Boot 직접 연결, Nginx 우회.
 > EC2-2 단일 IP에서 300 RPS 발화 시 Nginx IP 기반 rate limit이 개입할 수 있어 s01과 동일하게 Nginx를 우회한다. 실제 프로덕션에서는 다수 IP에서 분산 요청이 들어오므로 Nginx 제한 없이 처리된다.
+> 활성 슬롯 포트 확인 후 적용 (blue: 8081, green: 8082). 측정 시 **8082** 사용 (green 활성). EC2-1 보안 그룹에 8082 인바운드 규칙 추가 완료 (10.0.1.47/32 허용).
 
 ```bash
-cd /opt/fandrops/k6
-export K6_PROMETHEUS_RW_SERVER_URL=http://10.0.1.114:9090/api/v1/write
-export K6_PROMETHEUS_RW_TREND_STATS="p(95),p(99)"
-
-k6 run -e BASE_URL=http://10.0.1.114:8081 \
-  --out experimental-prometheus-rw \
-  scenarios/07_product_read.js
+cd /opt/fandrops/k6 && BASE_URL=http://10.0.1.114:8082 K6_PROMETHEUS_RW_SERVER_URL=http://10.0.1.114:9090/api/v1/write K6_PROMETHEUS_RW_TREND_STATS="p(95),p(99),avg,min,max" k6 run --out experimental-prometheus-rw scenarios/07_product_read.js
 ```
 
 ### 결과 (튜닝 후)
 
 | 지표 | 베이스라인 | 결과 | 목표 | 상태 |
 |---|---|---|---|---|
-| P95 응답시간 | — | — | < 120ms | 미측정 |
-| 에러율 | — | — | < 0.1% | 미측정 |
-| 처리량(RPS) | — | — | 300 RPS 유지 | 미측정 |
-| dropped_iterations | — | — | ≈ 0 | 미측정 |
+| P95 응답시간 | — (신규) | 133.45ms | < 120ms | ❌ SLO 미달 |
+| P90 응답시간 | — | 45.38ms | — | — |
+| 평균 응답시간 | — | 34.07ms | — | — |
+| 중앙값 응답시간 | — | 7.19ms | — | — |
+| 에러율 | — | 0.00% | < 0.1% | ✅ |
+| 처리량(RPS) | — | ~298/s | 300 RPS | ≈ 근접 |
+| dropped_iterations | — | 251건 | ≈ 0 | ⚠️ 처리량 병목 신호 |
+| 최대 활성 VU | — | 168 / 200 | — | ⚠️ 한도 근접 |
 
 ### 스크린샷
 
-> `screenshots/tuned/s07_product_read_tuned.png`
+![s07_product_read_tuned](screenshots/tuned/s07_product_read_tuned.png)
 
 ### 관찰 및 오너 피드백
 
-> 측정 후 작성
+**관찰 (지영재 — 2026-06-22)**
+
+1. **P95 133.45ms, SLO 미달**: 목표 120ms 대비 +13ms 초과. 에러율은 0.00%로 안정적. s02 피드 Read와 동일한 수준의 초과폭.
+
+2. **이중 레이턴시 분포 확인**: avg 34ms vs med 7ms로 분포가 이분화되어 있음. 중앙값(7ms)는 캐시 히트 경로, 평균(34ms)은 캐시 미스 경로가 P95를 끌어올리는 구조. Grafana 스크린샷에서 `GET /api/v1/products` P95가 측정 구간 내 상하로 요동치는 패턴 확인.
+
+3. **`dropped_iterations 251`건 + VU 한도 168 도달**: `constant-arrival-rate` 특성상 서버 응답이 느려지면 k6가 VU를 추가 투입하는데, maxVUs 200에 근접한 168까지 도달. 꼬리 레이턴시(max 1.33s)가 VU를 잡아두어 목표 300 RPS를 완전히 소화하지 못했음. 실제 달성 RPS ~298/s.
+
+4. **보안 그룹 이슈 해결 (2026-06-22)**: EC2-1 보안 그룹에 8082 포트가 EC2-2(10.0.1.47/32) 허용 규칙이 누락되어 있었음. 8081(blue)만 등록된 상태였고, green 슬롯 전환 후 미반영 상태였음. 이번 측정 전 8082 인바운드 규칙 추가 완료.
+
+**오너 피드백 (지영재 자체)**
+
+- **SLO 미달**: P95 133.45ms — 목표 120ms 대비 +13ms 초과. 에러율 0%로 안정성은 문제없음.
+- **근본 원인**: `GET /api/v1/products` 엔드포인트에 캐시 미적용으로 추정. 매 요청이 DB 조회 경로를 거치면서 캐시 미스 비용이 P95를 끌어올림. 중앙값 7ms(캐시 히트 또는 단순 쿼리)와 P95 133ms 사이의 큰 편차가 이를 뒷받침.
+- **개선 방향**:
+  - `GET /api/v1/products?type=regular` 쿼리 EXPLAIN으로 인덱스 적용 여부 확인
+  - 상품 목록은 변경 빈도가 낮으므로 Redis 캐시 적용(TTL 60~300s) 시 P95 대폭 개선 가능
+  - maxVUs 200 → 300으로 상향하거나 쿼리 최적화로 꼬리 레이턴시(max 1.33s) 제거 시 `dropped_iterations ≈ 0` 달성 가능
 
 ---
 
@@ -775,4 +791,4 @@ k6 run -e BASE_URL=http://10.0.1.114:8081 \
 | 04 드롭스 스파이크 | 266.24ms ✅ | — | 99.98%\* | — | 0건 ✅ | 미측정 |
 | 05 SSE 대기열 | — | — | 100% ❌ | — | — | 미측정 |
 | 06 통합 워크로드 | 측정 불가 | — | ~65% ❌ | — | — | 미측정 |
-| 07 상품 조회 처리량 | — (신규) | — | — (신규) | — | — | 미측정 |
+| 07 상품 조회 처리량 | — (신규) | 133.45ms ❌ | — (신규) | 0.00% ✅ | — | ❌ SLO 미달 (캐시 미적용 추정, +13ms) |
