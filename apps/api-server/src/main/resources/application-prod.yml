@@ -70,7 +70,7 @@ toss:
     base-url: https://api.tosspayments.com
     secret-key: ${TOSS_SECRET_KEY}
     connect-timeout: 3s
-    read-timeout: 10s
+    read-timeout: ${TOSS_API_READ_TIMEOUT:10s}
 
 fandrops:
   mail:
