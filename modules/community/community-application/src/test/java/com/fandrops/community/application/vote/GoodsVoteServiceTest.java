@@ -255,16 +255,16 @@ class GoodsVoteServiceTest {
         }
 
         @Test
-        @DisplayName("is_active=false 투표도 강제 종료 가능 (idempotent)")
-        void alreadyInactive_succeeds() {
+        @DisplayName("is_active=false 투표 — early return, save 호출 없음 (idempotent)")
+        void alreadyInactive_earlyReturn() {
             GoodsVote inactive = vote(1L, false, NOW.plusDays(7));
             when(voteRepository.findById(1L)).thenReturn(Optional.of(inactive));
             when(artistProfilePort.isOwnedByAgency(100L, 200L)).thenReturn(true);
-            when(voteRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
             GoodsVoteCloseResult result = service.closeVote(1L, 200L);
 
             assertFalse(result.active());
+            verify(voteRepository, never()).save(any());
         }
 
         @Test

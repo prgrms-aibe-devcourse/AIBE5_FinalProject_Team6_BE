@@ -91,8 +91,12 @@ public class GoodsVoteService {
         if (!artistProfilePort.isOwnedByAgency(vote.getArtistId(), agencyAccountId)) {
             throw new ForbiddenException("해당 아티스트의 소속사만 투표를 종료할 수 있습니다.");
         }
-        voteRepository.save(vote.close());
-        return new GoodsVoteCloseResult(voteId, false);
+        if (!vote.isActive()) {
+            return new GoodsVoteCloseResult(voteId, false);
+        }
+        GoodsVote closed = vote.close();
+        voteRepository.save(closed);
+        return new GoodsVoteCloseResult(voteId, closed.isActive());
     }
 
     @Transactional
