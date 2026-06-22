@@ -710,7 +710,7 @@ k6 run -e BASE_URL=https://api.fandrops.site \
 ## 시나리오 07: 상품 조회 처리량 기준선 (Product Read)
 
 **파일**: `infra/k6/scenarios/07_product_read.js`
-**담당 오너**: 지영재
+**담당 오너**: 형성빈
 **SLO**: P95 < 120ms, 에러율 < 0.1%
 
 ### 목적
@@ -762,22 +762,42 @@ cd /opt/fandrops/k6 && BASE_URL=http://10.0.1.114:8082 K6_PROMETHEUS_RW_SERVER_U
 
 **관찰 (지영재 — 2026-06-22)**
 
-1. **P95 133.45ms, SLO 미달**: 목표 120ms 대비 +13ms 초과. 에러율은 0.00%로 안정적. s02 피드 Read와 동일한 수준의 초과폭.
+1. **P95 133.45ms, SLO 미달**: 목표 120ms 대비 +13ms 초과. 에러율 0.00%로 안정성은 문제없음. s02 피드 Read와 동일한 초과폭.
 
-2. **이중 레이턴시 분포 확인**: avg 34ms vs med 7ms로 분포가 이분화되어 있음. 중앙값(7ms)는 캐시 히트 경로, 평균(34ms)은 캐시 미스 경로가 P95를 끌어올리는 구조. Grafana 스크린샷에서 `GET /api/v1/products` P95가 측정 구간 내 상하로 요동치는 패턴 확인.
+2. **Grafana P95 3단계 패턴 확인**:
+   - 초반(18:54:30~18:55:00): P95 ~175ms — cold start, JVM JIT 미워밍업
+   - 중반(18:55:00~18:56:30): P95 ~100ms — DB 버퍼 풀 워밍업 후 안정화, SLO 일시 달성 구간
+   - 후반(18:56:30~18:57:30): P95 재상승 ~125~150ms — 연속 부하로 DB 커넥션 풀 압박 누적
 
-3. **`dropped_iterations 251`건 + VU 한도 168 도달**: `constant-arrival-rate` 특성상 서버 응답이 느려지면 k6가 VU를 추가 투입하는데, maxVUs 200에 근접한 168까지 도달. 꼬리 레이턴시(max 1.33s)가 VU를 잡아두어 목표 300 RPS를 완전히 소화하지 못했음. 실제 달성 RPS ~298/s.
+3. **RPS 목표 미달 및 VU 한도 근접**: Grafana RPS 패널에서 `GET /api/v1/products` 실제 처리량이 최대 ~250 req/s에 그침. `dropped_iterations: 251`, maxVUs 168/200 도달. 꼬리 레이턴시(max 1.33s)가 VU를 잡아두어 300 RPS 목표 완전 달성 불가.
 
-4. **보안 그룹 이슈 해결 (2026-06-22)**: EC2-1 보안 그룹에 8082 포트가 EC2-2(10.0.1.47/32) 허용 규칙이 누락되어 있었음. 8081(blue)만 등록된 상태였고, green 슬롯 전환 후 미반영 상태였음. 이번 측정 전 8082 인바운드 규칙 추가 완료.
+4. **이중 레이턴시 분포**: avg 34ms vs med 7ms. 중앙값 7ms는 빠른 응답 경로(소량 데이터 또는 DB 버퍼 히트), 평균 34ms는 느린 경로가 혼재하는 이분화 분포. 캐시가 없으므로 DB 버퍼 풀 상태에 따라 레이턴시가 크게 흔들리는 구조.
 
-**오너 피드백 (지영재 자체)**
+**오너 피드백 (→ 형성빈)**
 
-- **SLO 미달**: P95 133.45ms — 목표 120ms 대비 +13ms 초과. 에러율 0%로 안정성은 문제없음.
-- **근본 원인**: `GET /api/v1/products` 엔드포인트에 캐시 미적용으로 추정. 매 요청이 DB 조회 경로를 거치면서 캐시 미스 비용이 P95를 끌어올림. 중앙값 7ms(캐시 히트 또는 단순 쿼리)와 P95 133ms 사이의 큰 편차가 이를 뒷받침.
+- **SLO 미달**: P95 133.45ms — 목표 120ms 대비 +13ms. 에러율 0%로 안정성은 문제없으나, 처리량 관점에서 300 RPS를 안정적으로 소화하지 못함.
+
+- **근본 원인 — 캐시 없는 3-way DB 조회**:
+
+  `ProductService.getProducts()` 코드 분석 결과, 매 요청마다 아래 3개 DB 쿼리가 직렬 실행됨:
+
+  ```
+  1. productRepository.findRegularProducts(artistId, cursor, size)   — product 테이블
+  2. inventoryReadPort.getByProductIds(productIds)                   — inventory 테이블
+  3. productImageRepository.findThumbnailsByProductIds(productIds)   — product_image 테이블
+  ```
+
+  300 RPS × 3 DB 쿼리 = **900 queries/s** DB 압박. 캐시 레이어가 전혀 없어 모든 요청이 DB로 직행하는 구조. Grafana 후반부 P95 재상승은 연속 부하로 DB 커넥션 풀이 포화되어 대기가 발생하는 패턴과 일치함.
+
 - **개선 방향**:
-  - `GET /api/v1/products?type=regular` 쿼리 EXPLAIN으로 인덱스 적용 여부 확인
-  - 상품 목록은 변경 빈도가 낮으므로 Redis 캐시 적용(TTL 60~300s) 시 P95 대폭 개선 가능
-  - maxVUs 200 → 300으로 상향하거나 쿼리 최적화로 꼬리 레이턴시(max 1.33s) 제거 시 `dropped_iterations ≈ 0` 달성 가능
+
+  1. **상품·이미지 캐시 적용 (우선순위 높음)**: `product`, `product_image`는 변경 빈도가 낮으므로 Redis 캐시 적용(TTL 120~300s)으로 쿼리 1, 3 제거 가능. 캐시 히트 시 P95 7ms(중앙값 수준)로 수렴 예상.
+
+  2. **inventory 캐시 분리**: 재고(`available_qty`)는 주문 시마다 변동하므로 TTL을 짧게(5~10s) 가져가거나, 상품 목록 조회 시 재고 표시 정확도 요건을 팀 합의로 완화(예: "약 N개 남음" 표시)하면 캐시 TTL을 늘릴 수 있음.
+
+  3. **`findRegularProducts` 인덱스 확인**: 커서 페이지네이션 쿼리(`WHERE status = 'ON_SALE' AND id < cursor ORDER BY id DESC LIMIT size`)에 `(status, id DESC)` 복합 인덱스가 없으면 Full Scan 발생. `EXPLAIN` 실행 계획 확인 필요.
+
+  4. **꼬리 레이턴시(max 1.33s) 원인 추적**: 1.33s는 단순 DB 쿼리 범위를 벗어난 수치. 커넥션 풀 대기 또는 GC pause 가능성이 있음. HikariCP `connection-timeout` 로그 및 GC 로그 확인 권장.
 
 ---
 
