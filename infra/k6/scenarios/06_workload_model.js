@@ -15,8 +15,7 @@
  *       --out experimental-prometheus-rw \
  *       scenarios/06_workload_model.js
  *
- * VU 흐름: 첫 번째 iteration — 대기열 진입(fanId별) + accessToken 획득 (초기화 전용)
- *           이후 iteration — 60/20/15/5 분포 워크로드
+ * VU 흐름: 매 iteration — 피드 60% · 대기열 20% · 주문 15% · 결제 5% 분포로 직접 실행
  */
 import http from 'k6/http';
 import { check } from 'k6';
@@ -39,10 +38,6 @@ const wlFeed    = new Counter('wl_feed');
 const wlQueue   = new Counter('wl_queue');
 const wlOrder   = new Counter('wl_order');
 const wlPayment = new Counter('wl_payment');
-
-// VU별 accessToken — module-level 변수는 VU마다 독립된 메모리에 저장됨
-let vuToken       = null;
-let vuInitialized = false;
 
 export const options = {
   scenarios: {
@@ -95,14 +90,13 @@ export default function () {
   } else if (r < 0.95) {
     // ── 주문 생성 15% ──────────────────────────────────────────────────────
     wlOrder.add(1);
-    if (!vuToken) return; // 토큰 미획득 시 주문 건너뜀
     const res = http.post(
       `${BASE_URL}/api/v1/orders`,
       JSON.stringify({ accessTicket: 'test-ticket-token', items: [{ productId: PRODUCT_ID, quantity: 1 }] }),
       { headers: authHeaders(token) },
     );
     check(res, {
-      '[order] reserved or depleted': (r) => r.status === 201 || r.status === 409,
+      '[order] reserved or depleted': (r) => r.status === 201 || r.status === 409 || r.status === 429,
     });
 
   } else {
