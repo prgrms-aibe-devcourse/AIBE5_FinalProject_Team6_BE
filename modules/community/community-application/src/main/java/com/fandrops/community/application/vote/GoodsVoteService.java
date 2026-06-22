@@ -1,9 +1,11 @@
 package com.fandrops.community.application.vote;
 
 import com.fandrops.community.application.exception.DuplicateVoteException;
+import com.fandrops.community.application.exception.ForbiddenException;
 import com.fandrops.community.application.exception.GoodsVoteClosedException;
 import com.fandrops.community.application.exception.GoodsVoteNotFoundException;
 import com.fandrops.community.application.exception.NotFanMemberException;
+import com.fandrops.community.application.port.ArtistProfilePort;
 import com.fandrops.community.application.port.FanMembershipPort;
 import com.fandrops.community.domain.vote.GoodsVote;
 import com.fandrops.community.domain.vote.GoodsVoteOption;
@@ -32,17 +34,20 @@ public class GoodsVoteService {
     private final GoodsVoteOptionRepository optionRepository;
     private final GoodsVoteRecordRepository recordRepository;
     private final FanMembershipPort fanMembershipPort;
+    private final ArtistProfilePort artistProfilePort;
     private final Clock clock;
 
     public GoodsVoteService(GoodsVoteRepository voteRepository,
                             GoodsVoteOptionRepository optionRepository,
                             GoodsVoteRecordRepository recordRepository,
                             FanMembershipPort fanMembershipPort,
+                            ArtistProfilePort artistProfilePort,
                             Clock clock) {
         this.voteRepository = voteRepository;
         this.optionRepository = optionRepository;
         this.recordRepository = recordRepository;
         this.fanMembershipPort = fanMembershipPort;
+        this.artistProfilePort = artistProfilePort;
         this.clock = clock;
     }
 
@@ -77,6 +82,17 @@ public class GoodsVoteService {
         return votes.stream()
                 .map(vote -> GoodsVoteResult.of(vote, optionsByVoteId.getOrDefault(vote.getId(), List.of())))
                 .toList();
+    }
+
+    @Transactional
+    public GoodsVoteCloseResult closeVote(Long voteId, Long agencyAccountId) {
+        GoodsVote vote = voteRepository.findById(voteId)
+                .orElseThrow(() -> new GoodsVoteNotFoundException("투표를 찾을 수 없습니다."));
+        if (!artistProfilePort.isOwnedByAgency(vote.getArtistId(), agencyAccountId)) {
+            throw new ForbiddenException("해당 아티스트의 소속사만 투표를 종료할 수 있습니다.");
+        }
+        voteRepository.save(vote.close());
+        return new GoodsVoteCloseResult(voteId, false);
     }
 
     @Transactional

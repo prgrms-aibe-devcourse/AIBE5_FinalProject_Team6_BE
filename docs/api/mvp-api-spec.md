@@ -140,6 +140,7 @@ Gradle 모듈·담당자: [architecture.md § 도메인 오너십](../architectu
 | GET | `/artists/{id}/goods-votes` | 굿즈 투표 목록 (F03-08) | `?cursor`, `size` | `{ items: [...], nextCursor }` |
 | POST | `/artists/{id}/goods-votes` | 굿즈 투표 생성 (운영 계정 · `ROLE_AGENCY`) | `title`, `endsAt`, `options: [{ label, imageUrl }]` | `201` `{ voteId }` |
 | POST | `/goods-votes/{id}/ballots` | 굿즈 투표 참여 (`GOODS_VOTE_RECORD`, 1인 1표) | `optionId` | `201` `{ recordId }` |
+| PATCH | `/goods-votes/{voteId}/close` | 굿즈 투표 강제 종료 (`ROLE_AGENCY`, 소속사 소유권 검증) | — | `{ voteId, active: false }` |
 | GET | `/fans/me/activities` | 내가 남긴 댓글/좋아요 히스토리 | `?cursor`, `size` | `{ items: [...], nextCursor }` |
 | GET | `/fans/me/artists` | 가입 아티스트 목록 | `?cursor`, `size` | `{ items: [...], nextCursor }` |
 

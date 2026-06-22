@@ -1,9 +1,11 @@
 package com.fandrops.community.application.vote;
 
 import com.fandrops.community.application.exception.DuplicateVoteException;
+import com.fandrops.community.application.exception.ForbiddenException;
 import com.fandrops.community.application.exception.GoodsVoteClosedException;
 import com.fandrops.community.application.exception.GoodsVoteNotFoundException;
 import com.fandrops.community.application.exception.NotFanMemberException;
+import com.fandrops.community.application.port.ArtistProfilePort;
 import com.fandrops.community.application.port.FanMembershipPort;
 import com.fandrops.community.domain.vote.GoodsVote;
 import com.fandrops.community.domain.vote.GoodsVoteOption;
@@ -31,6 +33,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -40,6 +43,7 @@ class GoodsVoteServiceTest {
     @Mock GoodsVoteOptionRepository optionRepository;
     @Mock GoodsVoteRecordRepository recordRepository;
     @Mock FanMembershipPort fanMembershipPort;
+    @Mock ArtistProfilePort artistProfilePort;
 
     GoodsVoteService service;
     Clock clock;
@@ -49,7 +53,8 @@ class GoodsVoteServiceTest {
     @BeforeEach
     void setUp() {
         clock = Clock.fixed(Instant.parse("2026-06-01T12:00:00Z"), ZoneOffset.UTC);
-        service = new GoodsVoteService(voteRepository, optionRepository, recordRepository, fanMembershipPort, clock);
+        service = new GoodsVoteService(voteRepository, optionRepository, recordRepository,
+                fanMembershipPort, artistProfilePort, clock);
     }
 
     @Nested
@@ -205,6 +210,73 @@ class GoodsVoteServiceTest {
 
             assertThrows(GoodsVoteDomainException.class,
                     () -> service.castBallot(new GoodsBallotCommand(1L, 10L, 5L)));
+        }
+    }
+
+    @Nested
+    @DisplayName("closeVote")
+    class CloseVoteTest {
+
+        @Test
+        @DisplayName("정상 강제 종료 — is_active=false로 저장 후 {voteId, active:false} 반환")
+        void success() {
+            GoodsVote openVote = vote(1L, true, NOW.plusDays(7));
+            when(voteRepository.findById(1L)).thenReturn(Optional.of(openVote));
+            when(artistProfilePort.isOwnedByAgency(100L, 200L)).thenReturn(true);
+            when(voteRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            GoodsVoteCloseResult result = service.closeVote(1L, 200L);
+
+            assertEquals(1L, result.voteId());
+            assertFalse(result.active());
+            verify(voteRepository).save(argThat(v -> !v.isActive()));
+        }
+
+        @Test
+        @DisplayName("투표 없음 → GoodsVoteNotFoundException")
+        void voteNotFound_throws() {
+            when(voteRepository.findById(99L)).thenReturn(Optional.empty());
+
+            assertThrows(GoodsVoteNotFoundException.class,
+                    () -> service.closeVote(99L, 200L));
+            verify(voteRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("다른 agency → ForbiddenException")
+        void wrongAgency_throws() {
+            GoodsVote vote = vote(1L, true, NOW.plusDays(7));
+            when(voteRepository.findById(1L)).thenReturn(Optional.of(vote));
+            when(artistProfilePort.isOwnedByAgency(100L, 999L)).thenReturn(false);
+
+            assertThrows(ForbiddenException.class,
+                    () -> service.closeVote(1L, 999L));
+            verify(voteRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("is_active=false 투표도 강제 종료 가능 (idempotent)")
+        void alreadyInactive_succeeds() {
+            GoodsVote inactive = vote(1L, false, NOW.plusDays(7));
+            when(voteRepository.findById(1L)).thenReturn(Optional.of(inactive));
+            when(artistProfilePort.isOwnedByAgency(100L, 200L)).thenReturn(true);
+            when(voteRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            GoodsVoteCloseResult result = service.closeVote(1L, 200L);
+
+            assertFalse(result.active());
+        }
+
+        @Test
+        @DisplayName("close 후 ballot 시도 → GoodsVoteClosedException (is_active=false 차단 확인)")
+        void ballotAfterClose_isBlocked() {
+            // is_active=false 투표 (close() 결과)
+            GoodsVote closed = vote(1L, false, NOW.plusDays(7));
+            when(voteRepository.findById(1L)).thenReturn(Optional.of(closed));
+
+            assertThrows(GoodsVoteClosedException.class,
+                    () -> service.castBallot(new GoodsBallotCommand(1L, 10L, 5L)));
+            verify(recordRepository, never()).save(any());
         }
     }
 

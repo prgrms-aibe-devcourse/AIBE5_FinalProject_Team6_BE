@@ -83,6 +83,17 @@ public abstract class CommunityControllerSupport {
                 .anyMatch(a -> a.getAuthority().equals("FAN"));
     }
 
+    protected Long resolveAgencyAccountId(Authentication authentication, Long header) {
+        if (header != null && isLocalProfile()) {
+            return header;
+        }
+        if (authentication != null && authentication.isAuthenticated()
+                && !"anonymousUser".equals(authentication.getPrincipal())) {
+            return Long.parseLong(authentication.getName());
+        }
+        throw new UnauthorizedException("인증 정보가 없습니다. Bearer 토큰을 제공하세요.");
+    }
+
     protected void assertFanRole(Authentication authentication) {
         if (!isLocalProfile()
                 && authentication != null

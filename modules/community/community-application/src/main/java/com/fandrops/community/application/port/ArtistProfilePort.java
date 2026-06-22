@@ -27,4 +27,7 @@ public interface ArtistProfilePort {
      * 빈 컬렉션 입력 시 빈 Map 반환 (DB 호출 없음).
      */
     Map<Long, ArtistSummary> findAllByIds(Collection<Long> artistIds);
+
+    /** 아티스트가 해당 에이전시 계정 소속인지 확인한다. */
+    boolean isOwnedByAgency(Long artistId, Long agencyAccountId);
 }
