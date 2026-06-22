@@ -14,4 +14,5 @@ export const READ_THRESHOLDS = {
 export const PAYMENT_THRESHOLDS = {
   http_req_duration: ['p(95)<2000'],
   http_req_failed: ['rate<0.001'],
+  http_5xx_rate: ['rate<0.001'],
 };

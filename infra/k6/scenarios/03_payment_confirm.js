@@ -42,6 +42,7 @@ import { SharedArray } from 'k6/data';
 import papaparse from 'https://jslib.k6.io/papaparse/5.1.1/index.js';
 import { BASE_URL, authHeaders } from '../lib/auth.js';
 import { PAYMENT_THRESHOLDS } from '../lib/thresholds.js';
+import { http5xxRate } from '../lib/metrics.js';
 
 // pre-seeded RESERVED 주문 픽스처 (iterationInTest 기반 — iteration마다 고유 orderId 보장)
 const ORDERS = JSON.parse(__ENV.ORDERS_JSON || '[{"orderId":1,"amount":15000,"fanId":1}]');
@@ -92,6 +93,8 @@ export default function () {
     JSON.stringify({ tossPaymentKey, orderPaymentKey, orderId: order.orderId, amount: order.amount }),
     { headers: authHeaders(token) },
   );
+
+  http5xxRate.add(res.status >= 500);
 
   // success/timeout: 200·201 기대 / balance-error: 400 / server-error: 5xx
   check(res, {
