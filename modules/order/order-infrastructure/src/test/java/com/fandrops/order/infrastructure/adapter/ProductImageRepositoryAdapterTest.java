@@ -17,6 +17,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
@@ -112,6 +113,15 @@ class ProductImageRepositoryAdapterTest {
             given(jpaRepository.findPrimaryByProductIds(any())).willReturn(List.of());
 
             assertTrue(sut.findThumbnailsByProductIds(List.of(PRODUCT_ID)).isEmpty());
+        }
+
+        @Test
+        @DisplayName("빈 productIds 전달 시 JPA 호출 없이 빈 맵 반환")
+        void findThumbnails_emptyIds_noJpaCall() {
+            Map<Long, String> result = sut.findThumbnailsByProductIds(List.of());
+
+            assertTrue(result.isEmpty());
+            verify(jpaRepository, never()).findPrimaryByProductIds(any());
         }
     }
 }

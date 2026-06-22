@@ -33,6 +33,7 @@ public class ProductImageRepositoryAdapter implements ProductImageRepository {
 
     @Override
     public Map<Long, String> findThumbnailsByProductIds(List<Long> productIds) {
+        if (productIds.isEmpty()) return Map.of();
         return jpaRepository.findPrimaryByProductIds(productIds).stream()
                 .collect(Collectors.toMap(ProductImageJpaEntity::getProductId, ProductImageJpaEntity::getImageUrl));
     }
