@@ -58,10 +58,30 @@ public class ScheduleService {
             throw new IllegalArgumentException(
                     "NOTICE 타입은 POST /api/v1/artists/{artistId}/notices 엔드포인트를 사용하세요.");
         }
+
+        Long linkNoticeId = command.linkNoticeId();
+        if (linkNoticeId != null) {
+            ArtistSchedule noticeSchedule = scheduleRepository.findById(linkNoticeId)
+                    .orElseThrow(() -> new ScheduleNotFoundException("연결할 공지사항을 찾을 수 없습니다."));
+            if (noticeSchedule.getType() != ArtistScheduleType.NOTICE) {
+                throw new IllegalArgumentException("linkNoticeId는 NOTICE 타입 일정이어야 합니다.");
+            }
+            if (!noticeSchedule.getArtistId().equals(command.artistId())) {
+                throw new ScheduleNotFoundException("연결할 공지사항을 찾을 수 없습니다.");
+            }
+        }
+
         LocalDateTime scheduledAtUtc = command.scheduledAt().withOffsetSameInstant(ZoneOffset.UTC).toLocalDateTime();
-        ArtistSchedule schedule = (type == ArtistScheduleType.EVENT)
-                ? ArtistSchedule.createEvent(command.artistId(), command.title(), scheduledAtUtc, command.externalTicketUrl())
-                : ArtistSchedule.create(command.artistId(), command.title(), type, scheduledAtUtc);
+        ArtistSchedule schedule;
+        if (type == ArtistScheduleType.EVENT) {
+            schedule = (linkNoticeId != null)
+                    ? ArtistSchedule.createEvent(command.artistId(), command.title(), scheduledAtUtc, command.externalTicketUrl(), linkNoticeId)
+                    : ArtistSchedule.createEvent(command.artistId(), command.title(), scheduledAtUtc, command.externalTicketUrl());
+        } else {
+            schedule = (linkNoticeId != null)
+                    ? ArtistSchedule.createLinkedSchedule(command.artistId(), command.title(), type, scheduledAtUtc, linkNoticeId)
+                    : ArtistSchedule.create(command.artistId(), command.title(), type, scheduledAtUtc);
+        }
         return toResult(scheduleRepository.save(schedule));
     }
 
@@ -130,7 +150,33 @@ public class ScheduleService {
             scheduleImagePort.saveAll(saved.getId(), imageUrls);
             resultImageUrls = scheduleImagePort.findByScheduleId(saved.getId());
         }
+
+        if (command.autoSyncCalendar()) {
+            if (command.calendarType() == null) {
+                throw new IllegalArgumentException(
+                        "autoSyncCalendar=true 시 calendarType(DROP|EVENT|LIVE)은 필수입니다.");
+            }
+            ArtistScheduleType calType = parseCalendarType(command.calendarType());
+            ArtistSchedule calEntry = ArtistSchedule.createLinkedSchedule(
+                    command.artistId(), command.title(), calType, scheduledAtUtc, saved.getId());
+            scheduleRepository.save(calEntry);
+        }
+
         return toNoticeResult(saved, resultImageUrls);
+    }
+
+    private ArtistScheduleType parseCalendarType(String calendarType) {
+        ArtistScheduleType type;
+        try {
+            type = ArtistScheduleType.valueOf(calendarType);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException(
+                    "calendarType은 DROP, EVENT, LIVE 중 하나여야 합니다: " + calendarType);
+        }
+        if (type == ArtistScheduleType.NOTICE) {
+            throw new IllegalArgumentException("calendarType에 NOTICE는 사용할 수 없습니다.");
+        }
+        return type;
     }
 
     @Transactional(readOnly = true)
@@ -189,7 +235,8 @@ public class ScheduleService {
                 s.getTitle(),
                 s.getScheduledAt().atOffset(ZoneOffset.UTC),
                 s.getLiveUrl(),
-                s.getExternalTicketUrl()
+                s.getExternalTicketUrl(),
+                s.getNoticeId()
         );
     }
 }

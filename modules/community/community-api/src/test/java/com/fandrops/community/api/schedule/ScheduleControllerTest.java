@@ -53,7 +53,8 @@ class ScheduleControllerTest {
                     "팬미팅",
                     "EVENT",
                     OffsetDateTime.of(2026, 8, 10, 14, 0, 0, 0, ZoneOffset.UTC),
-                    "https://ticket.example.com/123");
+                    "https://ticket.example.com/123",
+                    null);
         }
 
         @Test
@@ -260,7 +261,7 @@ class ScheduleControllerTest {
     }
 
     private static ScheduleResult scheduleResult(Long id, ArtistScheduleType type) {
-        return new ScheduleResult(id, type, "제목", OffsetDateTime.now(ZoneOffset.UTC), null, null);
+        return new ScheduleResult(id, type, "제목", OffsetDateTime.now(ZoneOffset.UTC), null, null, null);
     }
 
     private static Authentication mockAuth(String name, String authority) {

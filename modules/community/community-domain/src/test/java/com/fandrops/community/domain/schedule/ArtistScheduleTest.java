@@ -87,4 +87,52 @@ class ArtistScheduleTest {
         assertEquals(ArtistScheduleType.EVENT, s.getType());
         assertNull(s.getExternalTicketUrl());
     }
+
+    @Test
+    @DisplayName("createLinkedSchedule — noticeId 연결, DROP 타입 정상 생성")
+    void createLinkedSchedule_drop_success() {
+        ArtistSchedule s = ArtistSchedule.createLinkedSchedule(
+                1L, "드롭 일정", ArtistScheduleType.DROP, VALID_TIME, 42L);
+
+        assertEquals(ArtistScheduleType.DROP, s.getType());
+        assertEquals(42L, s.getNoticeId());
+        assertNull(s.getId());
+    }
+
+    @Test
+    @DisplayName("createLinkedSchedule — LIVE 타입 + noticeId 정상 생성")
+    void createLinkedSchedule_live_success() {
+        ArtistSchedule s = ArtistSchedule.createLinkedSchedule(
+                1L, "라이브 예고", ArtistScheduleType.LIVE, VALID_TIME, 99L);
+
+        assertEquals(ArtistScheduleType.LIVE, s.getType());
+        assertEquals(99L, s.getNoticeId());
+    }
+
+    @Test
+    @DisplayName("createLinkedSchedule — artistId null → ScheduleDomainException")
+    void createLinkedSchedule_nullArtistId_throws() {
+        assertThrows(ScheduleDomainException.class,
+                () -> ArtistSchedule.createLinkedSchedule(
+                        null, "타이틀", ArtistScheduleType.EVENT, VALID_TIME, 1L));
+    }
+
+    @Test
+    @DisplayName("createLinkedSchedule — NOTICE 타입 → ScheduleDomainException")
+    void createLinkedSchedule_noticeType_throws() {
+        assertThrows(ScheduleDomainException.class,
+                () -> ArtistSchedule.createLinkedSchedule(
+                        1L, "타이틀", ArtistScheduleType.NOTICE, VALID_TIME, 1L));
+    }
+
+    @Test
+    @DisplayName("createEvent(noticeId 포함) — noticeId 연결된 EVENT 생성")
+    void createEvent_withNoticeId_success() {
+        ArtistSchedule s = ArtistSchedule.createEvent(
+                1L, "팬미팅", VALID_TIME, "https://ticket.example.com/1", 77L);
+
+        assertEquals(ArtistScheduleType.EVENT, s.getType());
+        assertEquals("https://ticket.example.com/1", s.getExternalTicketUrl());
+        assertEquals(77L, s.getNoticeId());
+    }
 }

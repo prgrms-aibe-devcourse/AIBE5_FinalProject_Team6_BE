@@ -110,8 +110,8 @@ Gradle 모듈·담당자: [architecture.md § 도메인 오너십](../architectu
 | POST | `/artists/{id}/follow` | 팬 가입(팔로우, `USER_FOLLOW`) + 팬 수 증가 | — | `201` `{ artistId, fanId, followedAt }` |
 | DELETE | `/artists/{id}/follow` | 팔로우 해지 | — | `204 No Content` |
 | POST | `/artists` | 아티스트 등록 (Admin) | `agencyId`, `name` | `201` `{ artistId }` |
-| GET | `/artists/{id}/calendar` | 드롭·팬미팅·라이브 통합 스케줄 | `?from`, `to` | `{ events: [{ type, title, startTime }] }` |
-| POST | `/artists/{id}/events` | 행사 안내·외부 예매 링크 (F05-01~03) | `title`, `type`, `venue`, `startTime`, `ticketOpenAt` (참고), `externalTicketUrls[]` (F05-02), `externalTicketUrlExpiresAt` (optional) | `201` `{ eventId }` |
+| GET | `/artists/{id}/calendar` | 드롭·팬미팅·라이브 통합 스케줄 | `?from`, `to` | `{ events: [{ id, type, title, startTime, liveUrl, externalTicketUrl, noticeId }] }` |
+| POST | `/artists/{id}/events` | 행사 안내·외부 예매 링크 (F05-01~03) | `title`, `type`, `scheduledAt`, `externalTicketUrl` (optional), `linkNoticeId` (optional: NOTICE ID 연결) | `201` `{ eventId }` |
 | PATCH | `/lives/{id}/start` | 라이브 시작 (상태 갱신 + 알림 이벤트 발행) | — | `{ liveId, isLive: true }` |
 
 `PATCH /lives/{id}/start` 성공 시 `notification`에 `ARTIST_SCHEDULE` 타입 이벤트 발행 → 표지민 모듈이 전송.
@@ -126,7 +126,7 @@ Gradle 모듈·담당자: [architecture.md § 도메인 오너십](../architectu
 | --- | --- | --- | --- | --- |
 | GET | `/artists/{id}/notices` | 공지사항 목록 (④ 공지사항 탭) | `?cursor`, `size` | `{ items: [...], nextCursor }` |
 | GET | `/artists/{id}/notices/{noticeId}` | 공지 상세 | — | `{ id, title, content, imageUrls[], createdAt }` |
-| POST | `/artists/{id}/notices` | 공지 작성 (아티스트 멤버) | `title`, `content`, `imageUrls[]` | `201` `{ noticeId }` |
+| POST | `/artists/{id}/notices` | 공지 작성 (아티스트 멤버) | `title`, `content`, `imageUrls[]`, `autoSyncCalendar` (bool, default false), `calendarType` (DROP\|EVENT\|LIVE, autoSyncCalendar=true 시 필수) | `201` `{ noticeId }` |
 | POST | `/artists/{id}/feeds` | 아티스트 게시글 작성(텍스트+이미지) | `content`, `imageUrls[]` | `201` `{ feedId }` |
 | GET | `/artists/{id}/feeds` | 피드 목록 | `?cursor`, `size` | `{ items: [...], nextCursor }` |
 | DELETE | `/artists/{id}/feeds/{feedId}` | 피드 삭제 (작성자 아티스트 멤버만) | — | `204 No Content` |

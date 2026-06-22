@@ -10,7 +10,9 @@ public record NoticeCreateRequest(
         @NotBlank String title,
         String content,
         @Size(max = 10) List<String> imageUrls,
-        OffsetDateTime scheduledAt
+        OffsetDateTime scheduledAt,
+        boolean autoSyncCalendar,     // true 시 calendarType 타입 캘린더 항목 자동 생성
+        String calendarType           // DROP | EVENT | LIVE (autoSyncCalendar=true 시 필수)
 ) {
     public NoticeCreateRequest {
         imageUrls = imageUrls != null ? imageUrls : List.of();

@@ -10,5 +10,6 @@ public record ScheduleResult(
         String title,
         OffsetDateTime startTime,
         String liveUrl,
-        String externalTicketUrl
+        String externalTicketUrl,
+        Long noticeId
 ) {}
