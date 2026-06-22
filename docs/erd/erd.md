@@ -46,6 +46,7 @@ PRODUCT ||--o{ CART_ITEM : "담김"
 ORDER ||--|{ ORDER_ITEM : aggregates
 ORDER ||--|| PAYMENT : has
 PRODUCT ||--o{ RESTOCK_ALERT : triggers
+PRODUCT ||--o{ PRODUCT_IMAGE : "이미지"
 CART ||--o{ CART_ITEM : "담김"
 INVENTORY ||--o{ INVENTORY_HISTORY : "이력"
 
@@ -181,6 +182,15 @@ PRODUCT {
     datetime drops_start_at
     datetime drops_end_at
     datetime updated_at
+}
+
+PRODUCT_IMAGE {
+    bigint id PK
+    bigint product_id FK
+    varchar image_url
+    tinyint sort_order "0-based, 오름차순 정렬"
+    boolean is_primary "대표 이미지 여부 (sort_order=0)"
+    datetime created_at
 }
 
 INVENTORY {

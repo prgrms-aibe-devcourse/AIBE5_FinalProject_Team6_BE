@@ -14,10 +14,11 @@ public class ProductListItemResponse {
     private final String status;
     private final int totalQty;
     private final int availableQty;
+    private final String thumbnailUrl;
 
     public ProductListItemResponse(Long id, Long artistId, String name,
                                    BigDecimal price, String status,
-                                   int totalQty, int availableQty) {
+                                   int totalQty, int availableQty, String thumbnailUrl) {
         this.id = id;
         this.artistId = artistId;
         this.name = name;
@@ -25,12 +26,13 @@ public class ProductListItemResponse {
         this.status = status;
         this.totalQty = totalQty;
         this.availableQty = availableQty;
+        this.thumbnailUrl = thumbnailUrl;
     }
 
-    public static ProductListItemResponse from(Product product, InventoryInfo inventory) {
+    public static ProductListItemResponse from(Product product, InventoryInfo inventory, String thumbnailUrl) {
         return new ProductListItemResponse(
                 product.getId(), product.getArtistId(), product.getName(),
                 product.getPrice(), product.getStatus().name(),
-                inventory.getTotalQty(), inventory.getAvailableQty());
+                inventory.getTotalQty(), inventory.getAvailableQty(), thumbnailUrl);
     }
 }

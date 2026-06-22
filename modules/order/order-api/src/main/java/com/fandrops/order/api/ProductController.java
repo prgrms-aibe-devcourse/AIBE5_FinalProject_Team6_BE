@@ -72,7 +72,7 @@ public class ProductController {
             @Valid @RequestBody CreateProductRequest request) {
         Long productId = productService.createProduct(new CreateProductCommand(
                 request.getArtistId(), request.getName(), request.getPrice(), request.getTotalQty(),
-                request.getDropsStartAt(), request.getDropsEndAt()));
+                request.getDropsStartAt(), request.getDropsEndAt(), request.getImageUrls()));
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.ok(Map.of("productId", productId), traceId()));
     }
@@ -83,7 +83,7 @@ public class ProductController {
             @Valid @RequestBody UpdateProductRequest request) {
         ProductStatus status = productService.updateProduct(new UpdateProductCommand(
                 id, request.getName(), request.getPrice(), request.getStatus(),
-                request.getDropsStartAt(), request.getDropsEndAt()));
+                request.getDropsStartAt(), request.getDropsEndAt(), request.getImageUrls()));
         return ResponseEntity.ok(ApiResponse.ok(
                 Map.of("productId", id, "status", status.name()), traceId()));
     }
