@@ -197,8 +197,14 @@ VALUES
      'https://fandrops.test/spring', 5, true,
      DATEADD('DAY', -30, NOW()), DATEADD('DAY', -1, NOW()));
 
--- A2. Admin 패스워드를 Test1234! 로 통일
---     V18+V19 마이그레이션이 admin@fandrops.com 계정을 이미 생성하므로 UPDATE만 수행
+-- A2. Admin 계정 (로컬 H2: Flyway 미실행 → INSERT 필요)
+--     비밀번호: Test1234!  (BCrypt strength=10)
+INSERT INTO admin_account (login_id, password_hash, created_at)
+VALUES ('admin@fandrops.com',
+        '$2a$10$IXraSx3hpYkrj8jRqqIsxOkdIfRCZKYxPafAJT7v3ZrlvB43gl7Re',
+        NOW());
+
+-- A2-1. 재시작 시 멱등: 비밀번호만 통일 (행이 이미 있을 때)
 UPDATE admin_account
 SET password_hash = '$2a$10$IXraSx3hpYkrj8jRqqIsxOkdIfRCZKYxPafAJT7v3ZrlvB43gl7Re'
 WHERE login_id = 'admin@fandrops.com';
