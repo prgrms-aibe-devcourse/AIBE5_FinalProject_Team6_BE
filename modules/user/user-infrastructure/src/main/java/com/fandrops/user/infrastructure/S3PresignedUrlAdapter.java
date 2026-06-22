@@ -62,8 +62,9 @@ public class S3PresignedUrlAdapter implements S3PresignedUrlPort {
             throw new S3OperationException("S3 Presigned URL 생성 실패 (네트워크/자격증명 오류)", e);
         }
 
-        String imageUrl = "https://%s.s3.%s.amazonaws.com/%s"
-                .formatted(properties.getBucket(), properties.getRegion(), objectKey);
+        String imageUrl = (properties.getCdnBaseUrl() != null && !properties.getCdnBaseUrl().isBlank())
+                ? "https://%s/%s".formatted(properties.getCdnBaseUrl(), objectKey)
+                : "https://%s.s3.%s.amazonaws.com/%s".formatted(properties.getBucket(), properties.getRegion(), objectKey);
         Instant expiresAt = Instant.now().plusSeconds(properties.getPresignedUrlExpiryMinutes() * 60L);
 
         return new PresignedUploadResult(presignedUrl, imageUrl, expiresAt);

@@ -131,21 +131,73 @@ k6 run -e BASE_URL=https://api.fandrops.site \
 
 ### 결과 (튜닝 후)
 
-| 지표 | 베이스라인 | 결과 | 목표 | 상태 |
-|---|---|---|---|---|
-| P95 응답 시간 | 133.02ms | — | < 120ms | 미측정 |
-| P90 응답 시간 | 110.6ms | — | — | — |
-| 평균 응답 시간 | 67.08ms | — | — | — |
-| 에러율 | 0.00% | — | < 0.1% | 미측정 |
-| 처리량 | 741 RPS | — | — | — |
+| 지표 | 베이스라인 | 결과 (1차) | 결과 (2차) | 목표 | 상태 |
+|---|---|---|---|---|---|
+| P95 응답 시간 | 133.02ms | 168.16ms | 172.09ms | < 120ms | ❌ SLO 미달 |
+| P90 응답 시간 | 110.6ms | 139.67ms | 142.62ms | — | — |
+| 평균 응답 시간 | 67.08ms | 87.99ms | 89.60ms | — | — |
+| 에러율 | 0.00% | 0.00% | 0.00% | < 0.1% | ✅ |
+| 처리량 | 741 RPS | 565 RPS | 555 RPS | — | — |
+
+> 1차: s07(300 RPS 2분) 직후 실행. 2차: CPU 포화 확인 후 재측정. 두 측정 모두 P95 120ms 초과로 일관.
 
 ### 스크린샷
 
-> `screenshots/tuned/s02_feed_read_tuned.png`
+![s02_feed_read_tuned](screenshots/tuned/s02_feed_read_tuned.png)
+
+### 문제 정의
+
+**k6 측정 결과 (2회 측정 — 지영재, 2026-06-22)**
+
+| 지표 | 1차 측정 | 2차 측정 | SLO | 판정 |
+|---|---|---|---|---|
+| P95 응답시간 | 168.16ms | 172.09ms | < 120ms | ❌ +40~52ms 초과 |
+| P90 응답시간 | 139.67ms | 142.62ms | — | — |
+| 평균 응답시간 | 87.99ms | 89.60ms | — | — |
+| 에러율 | 0.00% | 0.00% | < 0.1% | ✅ |
+| 처리량(RPS) | 565/s | 555/s | — | ⚠️ 베이스라인(741/s) 대비 감소 |
+
+**Grafana 스크린샷에서 확인된 패턴**
+
+- **Cold start 구간**: 테스트 초반 P95 ~250ms 피크 — 캐시 워밍업 전 모든 요청이 DB 쿼리 경로 직행
+- **워밍업 수렴**: 30~60s 이후 P95 ~120ms까지 점진적 감소 — Redis GET ops 600/s까지 급증하며 캐시 히트율 증가 확인
+- **CPU 100% 포화**: 565 RPS 도달 시 CPU 100% 포화 확인 (CloudWatch + `ps aux`)
+
+**핵심 문제**: FeedCache 버그 수정(`90b212c` @Async executor 미지정, `8c867d0` @TransactionalEventListener 프록시 에러) 후 캐시가 실동작하면서 캐시 히트 경로에도 Redis 역직렬화(`objectMapper.readValue`) + `applyIsLiked()` 추가 DB 쿼리 오버헤드가 추가됨. 베이스라인(133ms, 캐시 미동작 상태)보다 오히려 악화. Cold start 집계 영향 + CPU 포화가 복합 작용.
 
 ### 관찰 및 오너 피드백
 
-> 측정 후 작성
+**관찰 (지영재 — 2026-06-22)**
+
+1. **CPU 100% 포화 확인**: t3.small 2 vCPU에서 Spring Boot + Prometheus(k6 remote write 수신) + Grafana 공존 환경. 565 RPS 처리 중 CPU 100% 도달 확인 (CloudWatch + `ps aux` 직접 확인).
+
+2. **베이스라인(133ms) 대비 오히려 악화된 원인 분석**:
+   - `fix/361` 브랜치(PR #380 테스트 당시) 기준: `FeedCacheAdapter` 버그 2개(`90b212c` @Async executor 미지정, `8c867d0` `@TransactionalEventListener` 프록시 에러)로 캐시가 실질적으로 미동작 → 단순 DB 쿼리 경로 → 100ms대
+   - `develop` 머지 후(현재 배포): 두 버그 수정으로 캐시 실동작 시작 → Redis 역직렬화 + `applyIsLiked()` 추가 DB 쿼리 오버헤드 발생 → 168~172ms
+   - **결과적으로 FeedCache가 켜지면서 N+1 제거 효과를 상쇄하고 CPU 부담까지 추가됨**
+
+3. **캐시 OFF가 SLO 검증 기준으로 부적합**: 실서비스에서는 캐시가 켜진 상태로 운영되므로, 캐시를 끄고 SLO를 달성해도 의미 없음. 캐시 켜진 상태에서 120ms 달성이 목표.
+
+4. **캐시 워밍업 후 SLO 근접 확인 (Grafana 스크린샷)**: P95가 테스트 시작 시 ~250ms에서 후반부 ~120ms까지 점진적으로 감소하는 패턴 확인. Redis GET ops도 600 ops/s까지 급증 — 캐시가 실제 동작 중임을 확인. **cold start 구간(초반 30~60s)이 집계 P95를 끌어올리는 구조**이며, 워밍업 완료 후에는 SLO 달성 가능성이 있음. 단, CPU 100% 포화 상태에서는 워밍업 후에도 tail latency가 불안정하므로 CPU 부담 해소가 선행돼야 함.
+
+**오너 피드백 (→ 정환철)**
+
+- **SLO 미달**: P95 168~172ms — 목표 120ms 대비 약 40~52ms 초과
+- **근본 원인**: 캐시 히트 경로에도 `applyIsLiked()`에서 `feedLikeRepository` 쿼리가 추가 실행됨. Redis 역직렬화(`objectMapper.readValue`) + 추가 DB 쿼리 합산 비용이 캐시 히트 이득을 상쇄.
+- **워밍업 후 SLO 근접 확인**: Grafana 스크린샷에서 테스트 후반부 P95 ~120ms 달성 확인. cold start 구간이 집계 수치를 끌어올리는 구조이므로, `applyIsLiked()` 오버헤드 제거 + CPU 부담 해소 시 안정적 SLO 달성 가능할 것으로 판단.
+- **개선 방향 제안**:
+  - `viewer-agnostic` 캐시 설계 재검토 — `isLiked` 정보를 캐시 외부에서 매번 조회하는 구조가 고부하 시 오버헤드 주범
+  - `FeedListResult`를 경량화하거나 캐시 히트 시 `applyIsLiked()` 쿼리를 배치로 최적화
+  - 또는 팬별 `likedFeedIds`를 별도 Redis Set으로 캐싱하여 추가 DB 쿼리 제거
+
+### 개선 방향
+
+| 우선순위 | 항목 | 설명 | 기대 효과 |
+|---|---|---|---|
+| 🔴 High | `applyIsLiked()` 쿼리 제거 또는 캐싱 | 캐시 히트 경로에서도 `feedLikeRepository` 추가 쿼리가 매번 실행됨. viewer의 `likedFeedIds`를 Redis Set(`feed:liked:{fanId}`, TTL 30s)으로 캐싱하거나, `isLiked` 필드를 viewer-specific 캐시 키에 포함하는 방식으로 추가 DB 쿼리 제거 | 캐시 히트 경로 P95 50~80ms → 10ms 이하 목표 |
+| 🔴 High | CPU 포화 해소 | t3.small 2 vCPU 환경에서 Spring Boot + Prometheus + Grafana 공존. 565 RPS 이상에서 CPU 100% 포화. 프로파일링으로 CPU 핫스팟 확인 또는 모니터링 스택을 별도 인스턴스로 분리 | CPU 여유 확보 → tail latency 안정화 |
+| 🟡 Mid | Cold start 워밍업 구간 개선 | 테스트 초반 250ms 피크가 P95 집계를 끌어올리는 구조. k6 시나리오에 1분 `ramping-vus` warm-up 단계 추가 또는 Nginx readiness probe로 트래픽 인가 전 캐시 프리워밍 | 집계 P95 정확도 향상 |
+| 🟢 Low | `FeedListResult` 직렬화 최적화 | Redis 저장 시 Jackson 직렬화 오버헤드 측정. `@JsonView` 또는 컴팩트 DTO로 직렬화 페이로드 축소 | 캐시 put/get 레이턴시 감소 |
 
 ---
 
@@ -241,9 +293,24 @@ k6 run -e BASE_URL=http://10.0.1.114:8081 \
 
 > `screenshots/tuned/s01_order_concurrency_tuned.png`
 
+### 문제 정의
+
+> 측정 완료 후 작성. 아래 항목을 기준으로 서술한다.
+> - k6 로그: P95(전체/성공 요청), 에러율, 처리량(RPS), max 응답시간
+> - Grafana 스크린샷: P95 시계열 패턴(200 VU 동시 발화 직후 급등 여부), `orders_reserved` 카운트 확인
+> - 핵심 문제: `orders_reserved` 오버셀 발생 여부 + P95 300ms SLO 달성 여부 + 병목 구간 특정
+
 ### 관찰 및 오너 피드백
 
 > 측정 후 작성
+
+### 개선 방향
+
+> 측정 완료 후 작성. 예상 검토 항목:
+> - `reserveAtomic` Lua 스크립트 실행 시간 및 Redis 분산 락 경합 현황 (RedisInsight 또는 SLOWLOG 조회)
+> - `UPDATE inventory SET available_qty = available_qty - qty WHERE available_qty >= qty` 실행 계획 (EXPLAIN) — `product_id` 인덱스 적용 여부
+> - HikariCP `connection-timeout` 로그 — DB 커넥션 풀 대기 발생 여부
+> - P95 300ms 초과 시 원인 구간(Redis 락 대기 vs DB UPDATE 경합 vs 커넥션 풀 대기) 분리
 
 ---
 
@@ -327,9 +394,24 @@ k6 run -e BASE_URL=https://api.fandrops.site \
 
 > `screenshots/tuned/s04_drop_spike_tuned.png`
 
+### 문제 정의
+
+> 측정 완료 후 작성. 아래 항목을 기준으로 서술한다.
+> - k6 로그: P95(전체/성공 요청), 에러율(전체/429/409/5xx 구분), 처리량(RPS), VU 램프업 구간별 응답 패턴
+> - Grafana 스크린샷: 0→1,000 VU 급상승 구간 P95 시계열, 5xx 에러율 패널, `spike_orders_reserved` 카운트
+> - 핵심 문제: 스파이크 구간 오버셀 발생 여부 + Rate Limit 429 흡수 비율 + P95 300ms SLO 달성 여부
+
 ### 관찰 및 오너 피드백
 
 > 측정 후 작성
+
+### 개선 방향
+
+> 측정 완료 후 작성. 예상 검토 항목:
+> - 베이스라인(SLO 달성)이므로 추가 개선보다 회귀 방지 초점
+> - 스파이크 구간(100→1,000 VU) Rate Limit 흡수 후 성공 요청 P95 확인 — 640ms(베이스라인) 대비 개선 여부
+> - 오버셀 0건 재확인 (`SELECT COUNT(*) FROM orders WHERE status = 'RESERVED'` = 100)
+> - Nginx rate limit이 스파이크를 흡수하는 동안 앱 서버 스레드 풀·커넥션 풀 여유 확인
 
 ---
 
@@ -446,9 +528,24 @@ BASE_URL=http://10.0.1.114:8081 k6 run \
 
 > `screenshots/tuned/s03_payment_confirm_tuned.png`
 
+### 문제 정의
+
+> 측정 완료 후 작성. 아래 항목을 기준으로 서술한다.
+> - k6 로그: P95, max 응답시간, 에러율, 처리량(RPS), iterations 완료 수
+> - Grafana 스크린샷: P95 시계열(2,000ms SLO 기준선 대비), 5xx 에러율 패널
+> - 핵심 문제: `TOSS_API_READ_TIMEOUT=2s` 적용 후 max 응답시간이 SLO(2,000ms) 이내로 수렴했는지, timeout 시나리오 요청이 2s 내 처리됐는지
+
 ### 관찰 및 오너 피드백
 
 > 측정 후 작성
+
+### 개선 방향
+
+> 측정 완료 후 작성. 예상 검토 항목:
+> - `TOSS_API_READ_TIMEOUT=2s` 주입 후 P95가 베이스라인(1,540ms) 대비 개선됐는지 확인
+> - timeout 시나리오(Wiremock 5s 지연) 요청이 2s 내 `ReadTimeoutException`으로 처리되는지 확인
+> - max 응답시간이 SLO(2,000ms) 이하로 수렴했는지 확인 (베이스라인 max 3.03s)
+> - mixed 시나리오(70/10/10/10%) 에러 유형별 응답시간 분포 기록 — PG 장애 대응 기준선
 
 ---
 
@@ -555,9 +652,24 @@ GitHub Actions → **Run k6 Load Test** → `scenario: 05` → `confirm: yes`
 
 > `screenshots/tuned/s05_sse_queue_tuned.png`
 
+### 문제 정의
+
+> 측정 완료 후 작성. 아래 항목을 기준으로 서술한다.
+> - k6 로그: 구간별(1,000 / 1,800 / 2,100 VU) 에러율, 429 발생 비율, checks 통과율
+> - Grafana 스크린샷: 구간별 5xx/429 에러율 패널, 활성 SSE 연결 수(`emitters.size()`) 추이
+> - 핵심 문제: heartbeat 적용 후 1,000 VU 정상 구간 에러율 0.1% 이하 달성 여부 + stale emitter 정리 속도 + 2,100 VU 초과 구간 429 `retryable:true` 계약 이행 여부
+
 ### 관찰 및 오너 피드백
 
 > 측정 후 작성
+
+### 개선 방향
+
+> 측정 완료 후 작성. 예상 검토 항목:
+> - heartbeat 스케줄 적용 후 1,000 VU 구간 에러율이 0.1% 이하로 수렴했는지 확인
+> - stale emitter 정리 속도 확인 — `emitters.size()` 모니터링으로 2,000 한도 도달 여부 추적
+> - 2,100 VU 초과 구간에서 429 + `retryable:true` 응답 계약 이행 확인
+> - heartbeat 전송 주기(5s) 적절성 검토 — 부하 상황에서 heartbeat 처리가 추가 스레드 압박 주는지 확인
 
 ---
 
@@ -678,16 +790,31 @@ k6 run -e BASE_URL=https://api.fandrops.site \
 
 > `screenshots/tuned/s06_workload_model_tuned.png`
 
+### 문제 정의
+
+> 측정 완료 후 작성. 아래 항목을 기준으로 서술한다.
+> - k6 로그: Write P95, Read P95, 에러율(전체/엔드포인트별), 처리량(RPS), `orders_reserved` 카운트
+> - Grafana 스크린샷: 엔드포인트별 P95 시계열(피드·주문·결제 간섭 효과), 5xx 에러율, 워밍업→정상→스파이크 구간별 패턴
+> - 핵심 문제: 혼합 부하에서 피드 조회(60%)가 DB 커넥션 풀을 점유해 주문(15%) P95가 단독 테스트 대비 증가하는 간섭 효과 발생 여부
+
 ### 관찰 및 오너 피드백
 
 > 측정 후 작성
+
+### 개선 방향
+
+> 측정 완료 후 작성. 예상 검토 항목:
+> - 블로커 수정(ROLE_FAN SecurityConfig, Wiremock wildcard stub, vuToken 초기화) 후 Write/Read P95 동시 측정 가능 여부 확인
+> - 피드 조회(60%) + 주문(15%) 간 DB 커넥션 풀 간섭 효과 확인 — 개별 시나리오 대비 P95 증가폭
+> - 오버셀 0건 재확인 (`orders WHERE status = 'RESERVED'` ≤ 200)
+> - Rate Limit 429가 check 실패로 집계되지 않는지 확인 (지영재 수정 반영 여부)
 
 ---
 
 ## 시나리오 07: 상품 조회 처리량 기준선 (Product Read)
 
 **파일**: `infra/k6/scenarios/07_product_read.js`
-**담당 오너**: 지영재
+**담당 오너**: 형성빈
 **SLO**: P95 < 120ms, 에러율 < 0.1%
 
 ### 목적
@@ -710,35 +837,105 @@ k6 run -e BASE_URL=https://api.fandrops.site \
 
 ### 실행 명령어
 
-> ⚠️ **BASE_URL 예외**: s07은 `http://10.0.1.114:8081` (Spring Boot 직접 연결, Nginx 우회).
+> ⚠️ **BASE_URL 예외**: s07은 Spring Boot 직접 연결, Nginx 우회.
 > EC2-2 단일 IP에서 300 RPS 발화 시 Nginx IP 기반 rate limit이 개입할 수 있어 s01과 동일하게 Nginx를 우회한다. 실제 프로덕션에서는 다수 IP에서 분산 요청이 들어오므로 Nginx 제한 없이 처리된다.
+> 활성 슬롯 포트 확인 후 적용 (blue: 8081, green: 8082). 측정 시 **8082** 사용 (green 활성). EC2-1 보안 그룹에 8082 인바운드 규칙 추가 완료 (10.0.1.47/32 허용).
 
 ```bash
-cd /opt/fandrops/k6
-export K6_PROMETHEUS_RW_SERVER_URL=http://10.0.1.114:9090/api/v1/write
-export K6_PROMETHEUS_RW_TREND_STATS="p(95),p(99)"
-
-k6 run -e BASE_URL=http://10.0.1.114:8081 \
-  --out experimental-prometheus-rw \
-  scenarios/07_product_read.js
+cd /opt/fandrops/k6 && BASE_URL=http://10.0.1.114:8082 K6_PROMETHEUS_RW_SERVER_URL=http://10.0.1.114:9090/api/v1/write K6_PROMETHEUS_RW_TREND_STATS="p(95),p(99),avg,min,max" k6 run --out experimental-prometheus-rw scenarios/07_product_read.js
 ```
 
 ### 결과 (튜닝 후)
 
 | 지표 | 베이스라인 | 결과 | 목표 | 상태 |
 |---|---|---|---|---|
-| P95 응답시간 | — | — | < 120ms | 미측정 |
-| 에러율 | — | — | < 0.1% | 미측정 |
-| 처리량(RPS) | — | — | 300 RPS 유지 | 미측정 |
-| dropped_iterations | — | — | ≈ 0 | 미측정 |
+| P95 응답시간 | — (신규) | 133.45ms | < 120ms | ❌ SLO 미달 |
+| P90 응답시간 | — | 45.38ms | — | — |
+| 평균 응답시간 | — | 34.07ms | — | — |
+| 중앙값 응답시간 | — | 7.19ms | — | — |
+| 에러율 | — | 0.00% | < 0.1% | ✅ |
+| 처리량(RPS) | — | ~298/s | 300 RPS | ≈ 근접 |
+| dropped_iterations | — | 251건 | ≈ 0 | ⚠️ 처리량 병목 신호 |
+| 최대 활성 VU | — | 168 / 200 | — | ⚠️ 한도 근접 |
 
 ### 스크린샷
 
-> `screenshots/tuned/s07_product_read_tuned.png`
+![s07_product_read_tuned](screenshots/tuned/s07_product_read_tuned.png)
+
+### 문제 정의
+
+**k6 측정 결과 (지영재, 2026-06-22)**
+
+| 지표 | 측정값 | SLO | 판정 |
+|---|---|---|---|
+| P95 응답시간 | 133.45ms | < 120ms | ❌ +13ms 초과 |
+| P90 응답시간 | 45.38ms | — | — |
+| 평균 응답시간 | 34.07ms | — | — |
+| 중앙값 응답시간 | 7.19ms | — | — |
+| 최대 응답시간 | 1.33s | — | ⚠️ 꼬리 레이턴시 |
+| 에러율 | 0.00% | < 0.1% | ✅ |
+| 실제 RPS | ~298/s | 300 RPS | ⚠️ 목표 미달 |
+| dropped_iterations | 251건 | ≈ 0 | ⚠️ 처리량 병목 |
+| 최대 활성 VU | 168 / 200 | — | ⚠️ 한도 근접 |
+
+**Grafana 스크린샷에서 확인된 패턴**
+
+- **P95 3단계 변화**: 초반(~18:55:00) ~175ms cold start → 중반(18:55~18:56:30) ~100ms DB 버퍼 워밍업 → 후반(18:56:30~) ~125~150ms 재상승(DB 커넥션 풀 압박 누적)
+- **RPS 최대 ~250 req/s**: 목표 300 RPS에 미달. `dropped_iterations: 251`로 k6가 목표 RPS를 완전히 소화하지 못함을 확인
+- **VU 168/200 도달**: maxVUs 한도에 근접. 꼬리 레이턴시(max 1.33s)가 VU를 점유하는 구조
+
+**핵심 문제**: `ProductService.getProducts()`에 캐시가 없어 300 RPS 전량이 DB로 직행. 매 요청마다 product + inventory + product_image 3-way DB 쿼리(900 q/s) 발생. 연속 부하 후반부에 DB 커넥션 풀 압박이 누적되어 P95가 재상승하는 패턴.
 
 ### 관찰 및 오너 피드백
 
-> 측정 후 작성
+**관찰 (지영재 — 2026-06-22)**
+
+1. **P95 133.45ms, SLO 미달**: 목표 120ms 대비 +13ms 초과. 에러율 0.00%로 안정성은 문제없음. s02 피드 Read와 동일한 초과폭.
+
+2. **Grafana P95 3단계 패턴 확인**:
+   - 초반(18:54:30~18:55:00): P95 ~175ms — cold start, JVM JIT 미워밍업
+   - 중반(18:55:00~18:56:30): P95 ~100ms — DB 버퍼 풀 워밍업 후 안정화, SLO 일시 달성 구간
+   - 후반(18:56:30~18:57:30): P95 재상승 ~125~150ms — 연속 부하로 DB 커넥션 풀 압박 누적
+
+3. **RPS 목표 미달 및 VU 한도 근접**: Grafana RPS 패널에서 `GET /api/v1/products` 실제 처리량이 최대 ~250 req/s에 그침. `dropped_iterations: 251`, maxVUs 168/200 도달. 꼬리 레이턴시(max 1.33s)가 VU를 잡아두어 300 RPS 목표 완전 달성 불가.
+
+4. **이중 레이턴시 분포**: avg 34ms vs med 7ms. 중앙값 7ms는 빠른 응답 경로(소량 데이터 또는 DB 버퍼 히트), 평균 34ms는 느린 경로가 혼재하는 이분화 분포. 캐시가 없으므로 DB 버퍼 풀 상태에 따라 레이턴시가 크게 흔들리는 구조.
+
+**오너 피드백 (→ 형성빈)**
+
+- **SLO 미달**: P95 133.45ms — 목표 120ms 대비 +13ms. 에러율 0%로 안정성은 문제없으나, 처리량 관점에서 300 RPS를 안정적으로 소화하지 못함.
+
+- **근본 원인 — 캐시 없는 3-way DB 조회**:
+
+  `ProductService.getProducts()` 코드 분석 결과, 매 요청마다 아래 3개 DB 쿼리가 직렬 실행됨:
+
+  ```
+  1. productRepository.findRegularProducts(artistId, cursor, size)   — product 테이블
+  2. inventoryReadPort.getByProductIds(productIds)                   — inventory 테이블
+  3. productImageRepository.findThumbnailsByProductIds(productIds)   — product_image 테이블
+  ```
+
+  300 RPS × 3 DB 쿼리 = **900 queries/s** DB 압박. 캐시 레이어가 전혀 없어 모든 요청이 DB로 직행하는 구조. Grafana 후반부 P95 재상승은 연속 부하로 DB 커넥션 풀이 포화되어 대기가 발생하는 패턴과 일치함.
+
+- **개선 방향**:
+
+  1. **상품·이미지 캐시 적용 (우선순위 높음)**: `product`, `product_image`는 변경 빈도가 낮으므로 Redis 캐시 적용(TTL 120~300s)으로 쿼리 1, 3 제거 가능. 캐시 히트 시 P95 7ms(중앙값 수준)로 수렴 예상.
+
+  2. **inventory 캐시 분리**: 재고(`available_qty`)는 주문 시마다 변동하므로 TTL을 짧게(5~10s) 가져가거나, 상품 목록 조회 시 재고 표시 정확도 요건을 팀 합의로 완화(예: "약 N개 남음" 표시)하면 캐시 TTL을 늘릴 수 있음.
+
+  3. **`findRegularProducts` 인덱스 확인**: 커서 페이지네이션 쿼리(`WHERE status = 'ON_SALE' AND id < cursor ORDER BY id DESC LIMIT size`)에 `(status, id DESC)` 복합 인덱스가 없으면 Full Scan 발생. `EXPLAIN` 실행 계획 확인 필요.
+
+  4. **꼬리 레이턴시(max 1.33s) 원인 추적**: 1.33s는 단순 DB 쿼리 범위를 벗어난 수치. 커넥션 풀 대기 또는 GC pause 가능성이 있음. HikariCP `connection-timeout` 로그 및 GC 로그 확인 권장.
+
+### 개선 방향
+
+| 우선순위 | 항목 | 설명 | 기대 효과 |
+|---|---|---|---|
+| 🔴 High | 상품·이미지 캐시 적용 | `productRepository.findRegularProducts()` + `productImageRepository.findThumbnailsByProductIds()` 결과를 Redis 캐시(TTL 120~300s)로 저장. 상품·이미지는 변경 빈도가 낮아 캐시 적합도 높음. 상품 변경 시 이벤트 기반 evict 적용 | 쿼리 1·3 제거 → 900 q/s → 300 q/s, P95 120ms 이하 목표 |
+| 🔴 High | `findRegularProducts` 인덱스 확인 | `WHERE status = 'ON_SALE' AND id < cursor ORDER BY id DESC LIMIT size` 쿼리에 `(status, id DESC)` 복합 인덱스 미적용 시 Full Scan 발생. `EXPLAIN` 실행 계획 확인 필수 | 쿼리 응답 시간 단축 및 꼬리 레이턴시 개선 |
+| 🟡 Mid | inventory 조회 분리 캐싱 | `inventoryReadPort.getByProductIds()` 재고 정보는 변동 빈도가 높으므로 TTL 5~10s 짧은 캐시 적용. 또는 상품 목록에 재고 실시간 표시 대신 "재고 있음/없음" 단순 필드만 반환하도록 응답 경량화 | 900 q/s DB 압박 해소 |
+| 🟡 Mid | 꼬리 레이턴시(max 1.33s) 원인 제거 | HikariCP `connectionTimeout` 로그로 커넥션 풀 대기 확인. GC 로그(`-Xlog:gc`) 분석으로 Full GC pause 여부 확인. t3.small `-Xmx768m` 힙 제한 하에서 GC 압박 발생 가능 | `dropped_iterations ≈ 0` 달성, 300 RPS 완전 소화 |
+| 🟢 Low | maxVUs 상향 (임시 조치) | 캐시·인덱스 개선 전 임시로 `maxVUs: 200 → 300` 상향 시 `dropped_iterations` 감소. 근본 원인 해결 후 원복 권장 | dropped_iterations 251 → 0 (단, P95 개선은 미보장) |
 
 ---
 
@@ -747,9 +944,9 @@ k6 run -e BASE_URL=http://10.0.1.114:8081 \
 | 시나리오 | 베이스라인 P95 | 튜닝 후 P95 | 베이스라인 에러율 | 튜닝 후 에러율 | 오버셀 | SLO |
 |---|---|---|---|---|---|---|
 | 01 주문 동시성 | 1,750ms / 865ms(성공) | — | 75%\* | — | 0건 ✅ | 미측정 |
-| 02 피드 Read | 133.02ms | — | 0.00% | — | — | 미측정 |
+| 02 피드 Read | 133.02ms | 168~172ms ❌ | 0.00% | 0.00% ✅ | — | ❌ SLO 미달 (FeedCache 오버헤드) |
 | 03 결제 확인 | 1,540ms ✅ | — | 0.00% ✅ | — | — | 미측정 |
 | 04 드롭스 스파이크 | 266.24ms ✅ | — | 99.98%\* | — | 0건 ✅ | 미측정 |
 | 05 SSE 대기열 | — | — | 100% ❌ | — | — | 미측정 |
 | 06 통합 워크로드 | 측정 불가 | — | ~65% ❌ | — | — | 미측정 |
-| 07 상품 조회 처리량 | — (신규) | — | — (신규) | — | — | 미측정 |
+| 07 상품 조회 처리량 | — (신규) | 133.45ms ❌ | — (신규) | 0.00% ✅ | — | ❌ SLO 미달 (캐시 미적용 추정, +13ms) |
