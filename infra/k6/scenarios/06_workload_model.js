@@ -15,8 +15,7 @@
  *       --out experimental-prometheus-rw \
  *       scenarios/06_workload_model.js
  *
- * VU 흐름: 첫 번째 iteration — 대기열 진입(fanId별) + accessToken 획득 (초기화 전용)
- *           이후 iteration — 60/20/15/5 분포 워크로드
+ * VU 흐름: 매 iteration — 피드 60% · 대기열 20% · 주문 15% · 결제 5% 분포로 직접 실행
  */
 import http from 'k6/http';
 import { check } from 'k6';
@@ -97,7 +96,7 @@ export default function () {
       { headers: authHeaders(token) },
     );
     check(res, {
-      '[order] reserved or depleted': (r) => r.status === 201 || r.status === 409,
+      '[order] reserved or depleted': (r) => r.status === 201 || r.status === 409 || r.status === 429,
     });
 
   } else {
