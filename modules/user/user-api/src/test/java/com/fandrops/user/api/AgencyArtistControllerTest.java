@@ -12,8 +12,11 @@ import com.fandrops.user.application.dto.PresignedUploadResult;
 import com.fandrops.user.application.exception.ArtistNotFoundException;
 import com.fandrops.user.application.exception.InvalidContentTypeException;
 import com.fandrops.user.application.exception.InvalidImageUrlException;
+import com.fandrops.user.application.service.ArtistMemberService;
 import com.fandrops.user.application.service.ArtistProfileService;
+import com.fandrops.user.domain.ArtistMember;
 import com.fandrops.user.domain.ArtistProfile;
+import com.fandrops.user.domain.UserRole;
 import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -41,6 +44,7 @@ import static org.mockito.Mockito.when;
 class AgencyArtistControllerTest {
 
     @Mock ArtistProfileService artistProfileService;
+    @Mock ArtistMemberService artistMemberService;
     @Mock Environment environment;
     @Mock Authentication authentication;
     @Mock HttpServletRequest httpRequest;
@@ -49,7 +53,7 @@ class AgencyArtistControllerTest {
 
     @BeforeEach
     void setUp() {
-        controller = new AgencyArtistController(artistProfileService, environment);
+        controller = new AgencyArtistController(artistProfileService, artistMemberService, environment);
     }
 
     private void givenAuthenticated(Long agencyId) {
@@ -263,5 +267,49 @@ class AgencyArtistControllerTest {
 
         assertThrows(InvalidImageUrlException.class,
                 () -> controller.confirmProfileImage(1L, request, authentication, httpRequest));
+    }
+
+    // ── GET /api/v1/agency/artists/{id}/members ───────────────────────────────
+
+    @Test
+    @DisplayName("소유 아티스트 멤버 목록 조회 성공 → 200 OK, 멤버 2건 반환")
+    void listMembers_success_returns200WithMembers() {
+        givenAuthenticated(20L);
+        when(artistMemberService.listByArtistId(1L, 20L))
+                .thenReturn(List.of(dummyMember(10L), dummyMember(11L)));
+
+        ResponseEntity<?> response = controller.listMembers(1L, authentication);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        verify(artistMemberService).listByArtistId(1L, 20L);
+    }
+
+    @Test
+    @DisplayName("타 소속사 아티스트 멤버 조회 → ArtistNotFoundException 전파")
+    void listMembers_notOwned_propagatesArtistNotFoundException() {
+        givenAuthenticated(20L);
+        when(artistMemberService.listByArtistId(1L, 20L))
+                .thenThrow(new ArtistNotFoundException("존재하지 않는 아티스트입니다."));
+
+        assertThrows(ArtistNotFoundException.class,
+                () -> controller.listMembers(1L, authentication));
+    }
+
+    @Test
+    @DisplayName("멤버 없는 아티스트 → 200 OK, 빈 목록 반환")
+    void listMembers_noMembers_returnsEmptyList() {
+        givenAuthenticated(20L);
+        when(artistMemberService.listByArtistId(1L, 20L)).thenReturn(List.of());
+
+        ResponseEntity<?> response = controller.listMembers(1L, authentication);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+    }
+
+    private ArtistMember dummyMember(Long id) {
+        return ArtistMember.builder()
+                .id(id).artistId(1L).loginId("member" + id)
+                .passwordHash("hash").memberName("멤버" + id)
+                .role(UserRole.ARTIST).build();
     }
 }

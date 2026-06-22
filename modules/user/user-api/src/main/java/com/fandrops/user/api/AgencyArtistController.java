@@ -1,6 +1,7 @@
 package com.fandrops.user.api;
 
 import com.fandrops.common.ApiResponse;
+import com.fandrops.user.api.dto.ArtistMemberSummaryResponse;
 import com.fandrops.user.api.dto.ArtistProfileListResponse;
 import com.fandrops.user.api.dto.ArtistProfileResponse;
 import com.fandrops.user.api.dto.UpdateArtistProfileRequest;
@@ -9,6 +10,7 @@ import com.fandrops.user.api.dto.UploadPresignedUrlRequest;
 import com.fandrops.user.api.dto.UploadPresignedUrlResponse;
 import com.fandrops.user.application.dto.ArtistProfileListResult;
 import com.fandrops.user.application.dto.PresignedUploadResult;
+import com.fandrops.user.application.service.ArtistMemberService;
 import com.fandrops.user.application.service.ArtistProfileService;
 import com.fandrops.user.domain.ArtistProfile;
 import jakarta.servlet.http.HttpServletRequest;
@@ -26,6 +28,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/v1/agency/artists")
 @PreAuthorize("hasRole('AGENCY')")
@@ -34,10 +38,14 @@ public class AgencyArtistController extends UserControllerSupport {
     private static final int MAX_PAGE_SIZE = 100;
 
     private final ArtistProfileService artistProfileService;
+    private final ArtistMemberService artistMemberService;
 
-    public AgencyArtistController(ArtistProfileService artistProfileService, Environment environment) {
+    public AgencyArtistController(ArtistProfileService artistProfileService,
+                                   ArtistMemberService artistMemberService,
+                                   Environment environment) {
         super(environment);
         this.artistProfileService = artistProfileService;
+        this.artistMemberService = artistMemberService;
     }
 
     @GetMapping
@@ -91,5 +99,16 @@ public class AgencyArtistController extends UserControllerSupport {
                 id, agencyId, request.imageUrl(),
                 resolveClientIp(httpRequest), traceId());
         return ResponseEntity.ok(ApiResponse.ok(ArtistProfileResponse.from(updated), traceId()));
+    }
+
+    @GetMapping("/{id}/members")
+    public ResponseEntity<ApiResponse<List<ArtistMemberSummaryResponse>>> listMembers(
+            @PathVariable Long id,
+            Authentication authentication) {
+        Long agencyId = resolveAgencyId(authentication);
+        List<ArtistMemberSummaryResponse> members = artistMemberService.listByArtistId(id, agencyId).stream()
+                .map(ArtistMemberSummaryResponse::from)
+                .toList();
+        return ResponseEntity.ok(ApiResponse.ok(members, traceId()));
     }
 }

@@ -27,6 +27,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -439,6 +440,39 @@ class ArtistMemberServiceTest {
                         1L, validUrl, ACTOR_ID, CLIENT_IP, TRACE_ID));
 
         verify(artistMemberRepository, never()).save(any());
+    }
+
+    // ── listByArtistId ────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("소유 아티스트 — 소속 멤버 목록 반환")
+    void listByArtistId_ownerMatches_returnsMemberList() {
+        when(artistProfileRepository.findById(1L)).thenReturn(Optional.of(dummyProfile()));
+        when(artistMemberRepository.findByArtistId(1L)).thenReturn(List.of(dummyMember()));
+
+        List<ArtistMember> result = artistMemberService.listByArtistId(1L, 10L);
+
+        assertEquals(1, result.size());
+        verify(artistMemberRepository).findByArtistId(1L);
+    }
+
+    @Test
+    @DisplayName("타 소속사 아티스트 — ArtistNotFoundException")
+    void listByArtistId_agencyMismatch_throwsArtistNotFoundException() {
+        when(artistProfileRepository.findById(1L)).thenReturn(Optional.of(dummyProfile())); // agencyId=10
+
+        assertThrows(ArtistNotFoundException.class,
+                () -> artistMemberService.listByArtistId(1L, 99L));
+        verify(artistMemberRepository, never()).findByArtistId(any());
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 아티스트 — ArtistNotFoundException")
+    void listByArtistId_artistNotFound_throwsArtistNotFoundException() {
+        when(artistProfileRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThrows(ArtistNotFoundException.class,
+                () -> artistMemberService.listByArtistId(99L, 10L));
     }
 
     // ── 헬퍼 ─────────────────────────────────────────────────────────────────

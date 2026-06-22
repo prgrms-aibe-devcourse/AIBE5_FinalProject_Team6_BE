@@ -44,7 +44,6 @@ public class ApiSecurityConfig {
                         .requestMatchers("/actuator/health", "/actuator/prometheus").permitAll()
                         // 공개 피드 조회 — 비인증 브라우징 허용 (타 모듈 공개 경로 추가 시 여기에 등록)
                         .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/artists/*/feeds").permitAll()
-                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/artists/*/members").permitAll()
                         .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/artists/*").permitAll()
                         .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/artists").permitAll()
                         .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/banners/main").permitAll()

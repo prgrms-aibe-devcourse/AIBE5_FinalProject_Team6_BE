@@ -28,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -208,6 +209,18 @@ public class ArtistMemberService {
                 .build());
 
         return updated;
+    }
+
+    @Transactional(readOnly = true)
+    public List<ArtistMember> listByArtistId(Long artistId, Long agencyId) {
+        ArtistProfile profile = artistProfileRepository.findById(artistId)
+                .orElseThrow(() -> new ArtistNotFoundException(
+                        "존재하지 않는 아티스트입니다. artistId=" + artistId));
+        if (!profile.getAgencyId().equals(agencyId)) {
+            throw new ArtistNotFoundException(
+                    "존재하지 않는 아티스트입니다. artistId=" + artistId);
+        }
+        return artistMemberRepository.findByArtistId(artistId);
     }
 
     private ArtistMember findMemberWithOwnership(Long memberId, Long actorId) {
