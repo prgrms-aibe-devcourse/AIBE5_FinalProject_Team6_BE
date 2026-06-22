@@ -1,6 +1,10 @@
 spring:
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:local}
+  task:
+    scheduling:
+      pool:
+        size: 2
   jackson:
     serialization:
       write-dates-as-timestamps: false
