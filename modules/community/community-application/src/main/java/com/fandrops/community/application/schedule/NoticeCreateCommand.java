@@ -9,5 +9,7 @@ public record NoticeCreateCommand(
         String title,
         String content,
         List<String> imageUrls,
-        OffsetDateTime scheduledAt
+        OffsetDateTime scheduledAt,
+        boolean autoSyncCalendar,
+        String calendarType           // DROP | EVENT | LIVE, autoSyncCalendar=true 시만 사용
 ) {}

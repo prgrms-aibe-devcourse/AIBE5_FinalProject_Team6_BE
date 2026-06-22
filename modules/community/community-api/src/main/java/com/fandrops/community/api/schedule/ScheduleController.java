@@ -47,7 +47,8 @@ public class ScheduleController extends CommunityControllerSupport {
         Long artistMemberId = resolveArtistMemberId(authentication, artistMemberIdHeader);
         ScheduleResult result = scheduleService.createEvent(
                 new EventCreateCommand(artistId, artistMemberId, request.title(),
-                        request.type(), request.scheduledAt(), request.externalTicketUrl()));
+                        request.type(), request.scheduledAt(), request.externalTicketUrl(),
+                        request.linkNoticeId()));
         return ResponseEntity.status(201).body(ApiResponse.ok(Map.of("eventId", result.id()), traceId()));
     }
 
@@ -107,7 +108,8 @@ public class ScheduleController extends CommunityControllerSupport {
         Long artistMemberId = resolveArtistMemberId(authentication, artistMemberIdHeader);
         NoticeResult result = scheduleService.createNotice(
                 new NoticeCreateCommand(artistId, artistMemberId, request.title(),
-                        request.content(), request.imageUrls(), request.scheduledAt()));
+                        request.content(), request.imageUrls(), request.scheduledAt(),
+                        request.autoSyncCalendar(), request.calendarType()));
         return ResponseEntity.status(201).body(ApiResponse.ok(Map.of("noticeId", result.id()), traceId()));
     }
 
