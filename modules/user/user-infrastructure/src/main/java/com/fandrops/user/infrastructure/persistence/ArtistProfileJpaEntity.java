@@ -43,6 +43,9 @@ public class ArtistProfileJpaEntity {
     @Column(name = "instagram_url")
     private String instagramUrl;
 
+    @Column(name = "twitter_url")
+    private String twitterUrl;
+
     protected ArtistProfileJpaEntity() {}
 
     public Long getId() { return id; }
@@ -62,6 +65,7 @@ public class ArtistProfileJpaEntity {
         e.homepageUrl = domain.getHomepageUrl();
         e.youtubeUrl = domain.getYoutubeUrl();
         e.instagramUrl = domain.getInstagramUrl();
+        e.twitterUrl = domain.getTwitterUrl();
         return e;
     }
 
@@ -69,6 +73,6 @@ public class ArtistProfileJpaEntity {
         return ArtistProfile.reconstitute(
                 id, agencyId, name, fanCount, joinedAt,
                 profileImageUrl, coverImageUrl, bio,
-                homepageUrl, youtubeUrl, instagramUrl);
+                homepageUrl, youtubeUrl, instagramUrl, twitterUrl);
     }
 }

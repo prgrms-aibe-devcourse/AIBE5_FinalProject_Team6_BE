@@ -2,8 +2,11 @@ package com.fandrops.user.api;
 
 import com.fandrops.user.application.dto.ArtistProfileListResult;
 import com.fandrops.user.application.exception.ArtistNotFoundException;
+import com.fandrops.user.application.service.ArtistMemberService;
 import com.fandrops.user.application.service.ArtistProfileService;
+import com.fandrops.user.domain.ArtistMember;
 import com.fandrops.user.domain.ArtistProfile;
+import com.fandrops.user.domain.UserRole;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -20,6 +23,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
@@ -30,13 +34,14 @@ import static org.mockito.Mockito.when;
 class ArtistProfileControllerTest {
 
     @Mock ArtistProfileService artistProfileService;
+    @Mock ArtistMemberService artistMemberService;
     @Mock Environment environment;
 
     ArtistProfileController controller;
 
     @BeforeEach
     void setUp() {
-        controller = new ArtistProfileController(artistProfileService, environment);
+        controller = new ArtistProfileController(artistProfileService, artistMemberService, environment);
     }
 
     private ArtistProfile dummyProfile(Long id) {
@@ -124,5 +129,46 @@ class ArtistProfileControllerTest {
         controller.listArtistProfiles(null, 0);
 
         assertEquals(1, sizeCaptor.getValue());
+    }
+
+    // ── GET /api/v1/artists/{artistId}/members (공개) ─────────────────────────
+
+    @Test
+    @DisplayName("공개 멤버 목록 조회 성공 → 200 OK, 멤버 2건 반환")
+    void listMembers_success_returns200WithMembers() {
+        when(artistMemberService.listByArtistIdPublic(1L))
+                .thenReturn(List.of(dummyMember(10L), dummyMember(11L)));
+
+        ResponseEntity<?> response = controller.listMembers(1L);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        verify(artistMemberService).listByArtistIdPublic(1L);
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 아티스트 멤버 목록 조회 → ArtistNotFoundException 전파")
+    void listMembers_artistNotFound_propagatesArtistNotFoundException() {
+        when(artistMemberService.listByArtistIdPublic(99L))
+                .thenThrow(new ArtistNotFoundException("존재하지 않는 아티스트입니다."));
+
+        assertThrows(ArtistNotFoundException.class,
+                () -> controller.listMembers(99L));
+    }
+
+    @Test
+    @DisplayName("멤버 없는 아티스트 → 200 OK, 빈 목록 반환")
+    void listMembers_noMembers_returnsEmptyList() {
+        when(artistMemberService.listByArtistIdPublic(1L)).thenReturn(List.of());
+
+        ResponseEntity<?> response = controller.listMembers(1L);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+    }
+
+    private ArtistMember dummyMember(Long id) {
+        return ArtistMember.builder()
+                .id(id).artistId(1L).loginId("member" + id)
+                .passwordHash("hash").memberName("멤버" + id)
+                .role(UserRole.ARTIST).build();
     }
 }

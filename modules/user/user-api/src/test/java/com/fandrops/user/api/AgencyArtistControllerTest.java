@@ -2,9 +2,22 @@ package com.fandrops.user.api;
 
 import com.fandrops.common.ApiResponse;
 import com.fandrops.user.api.dto.ArtistProfileListResponse;
+import com.fandrops.user.api.dto.ArtistProfileResponse;
+import com.fandrops.user.api.dto.UpdateArtistProfileRequest;
+import com.fandrops.user.api.dto.UpdateProfileImageRequest;
+import com.fandrops.user.api.dto.UploadPresignedUrlRequest;
+import com.fandrops.user.api.dto.UploadPresignedUrlResponse;
 import com.fandrops.user.application.dto.ArtistProfileListResult;
+import com.fandrops.user.application.dto.PresignedUploadResult;
+import com.fandrops.user.application.exception.ArtistNotFoundException;
+import com.fandrops.user.application.exception.InvalidContentTypeException;
+import com.fandrops.user.application.exception.InvalidImageUrlException;
+import com.fandrops.user.application.service.ArtistMemberService;
 import com.fandrops.user.application.service.ArtistProfileService;
+import com.fandrops.user.domain.ArtistMember;
 import com.fandrops.user.domain.ArtistProfile;
+import com.fandrops.user.domain.UserRole;
+import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -16,10 +29,14 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -27,14 +44,16 @@ import static org.mockito.Mockito.when;
 class AgencyArtistControllerTest {
 
     @Mock ArtistProfileService artistProfileService;
+    @Mock ArtistMemberService artistMemberService;
     @Mock Environment environment;
     @Mock Authentication authentication;
+    @Mock HttpServletRequest httpRequest;
 
     AgencyArtistController controller;
 
     @BeforeEach
     void setUp() {
-        controller = new AgencyArtistController(artistProfileService, environment);
+        controller = new AgencyArtistController(artistProfileService, artistMemberService, environment);
     }
 
     private void givenAuthenticated(Long agencyId) {
@@ -148,5 +167,149 @@ class AgencyArtistControllerTest {
         assertEquals(1, body.items().size());
         assertTrue(body.hasMore());
         assertEquals("1", body.nextCursor());
+    }
+
+    // ── PATCH /api/v1/agency/artists/{id} ────────────────────────────────────
+
+    @Test
+    @DisplayName("아티스트 프로필 수정 성공 → 200 OK, 수정된 프로필 반환")
+    void update_success_returns200() {
+        givenAuthenticated(20L);
+        ArtistProfile updated = dummyProfile(1L, 20L);
+        when(artistProfileService.updateArtistProfile(
+                eq(1L), eq(20L), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(updated);
+        UpdateArtistProfileRequest request = new UpdateArtistProfileRequest(
+                "새 바이오", null, null, null, null, null);
+
+        ResponseEntity<ApiResponse<ArtistProfileResponse>> response =
+                controller.update(1L, request, authentication, httpRequest);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertNotNull(response.getBody().data());
+    }
+
+    @Test
+    @DisplayName("소유권 불일치 → ArtistNotFoundException 전파")
+    void update_agencyMismatch_propagatesArtistNotFoundException() {
+        givenAuthenticated(20L);
+        when(artistProfileService.updateArtistProfile(
+                eq(1L), eq(20L), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenThrow(new ArtistNotFoundException("아티스트를 찾을 수 없습니다."));
+        UpdateArtistProfileRequest request = new UpdateArtistProfileRequest(
+                "bio", null, null, null, null, null);
+
+        assertThrows(ArtistNotFoundException.class,
+                () -> controller.update(1L, request, authentication, httpRequest));
+    }
+
+    // ── POST /api/v1/agency/artists/{id}/profile-image/presigned-url ─────────
+
+    @Test
+    @DisplayName("presigned URL 발급 성공 → 200 OK, presignedUrl·imageUrl 반환")
+    void generateProfileImagePresignedUrl_success_returns200() {
+        givenAuthenticated(20L);
+        PresignedUploadResult stubResult = new PresignedUploadResult(
+                "https://s3.example.com/presigned", "https://s3.example.com/img.jpg",
+                Instant.now().plusSeconds(300));
+        when(artistProfileService.generateProfileImagePresignedUrl(
+                eq(1L), eq(20L), eq("image/jpeg"), eq(1000L), any(), any()))
+                .thenReturn(stubResult);
+        UploadPresignedUrlRequest request = new UploadPresignedUrlRequest("image/jpeg", 1000L);
+
+        ResponseEntity<ApiResponse<UploadPresignedUrlResponse>> response =
+                controller.generateProfileImagePresignedUrl(1L, request, authentication, httpRequest);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals("https://s3.example.com/presigned", response.getBody().data().presignedUrl());
+    }
+
+    @Test
+    @DisplayName("허용되지 않는 contentType → InvalidContentTypeException 전파")
+    void generateProfileImagePresignedUrl_invalidContentType_propagates() {
+        givenAuthenticated(20L);
+        when(artistProfileService.generateProfileImagePresignedUrl(
+                eq(1L), eq(20L), eq("application/pdf"), eq(1000L), any(), any()))
+                .thenThrow(new InvalidContentTypeException("application/pdf"));
+        UploadPresignedUrlRequest request = new UploadPresignedUrlRequest("application/pdf", 1000L);
+
+        assertThrows(InvalidContentTypeException.class,
+                () -> controller.generateProfileImagePresignedUrl(1L, request, authentication, httpRequest));
+    }
+
+    // ── PATCH /api/v1/agency/artists/{id}/profile-image ──────────────────────
+
+    @Test
+    @DisplayName("이미지 URL 확정 성공 → 200 OK, 업데이트된 프로필 반환")
+    void confirmProfileImage_success_returns200() {
+        givenAuthenticated(20L);
+        ArtistProfile updated = dummyProfile(1L, 20L);
+        when(artistProfileService.confirmProfileImageUrl(
+                eq(1L), eq(20L), eq("https://cdn.fandrops.com/img.jpg"), any(), any()))
+                .thenReturn(updated);
+        UpdateProfileImageRequest request = new UpdateProfileImageRequest("https://cdn.fandrops.com/img.jpg");
+
+        ResponseEntity<ApiResponse<ArtistProfileResponse>> response =
+                controller.confirmProfileImage(1L, request, authentication, httpRequest);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertNotNull(response.getBody().data());
+    }
+
+    @Test
+    @DisplayName("외부 도메인 이미지 URL → InvalidImageUrlException 전파")
+    void confirmProfileImage_invalidUrl_propagates() {
+        givenAuthenticated(20L);
+        when(artistProfileService.confirmProfileImageUrl(
+                eq(1L), eq(20L), eq("https://attacker.com/img.jpg"), any(), any()))
+                .thenThrow(new InvalidImageUrlException("https://attacker.com/img.jpg"));
+        UpdateProfileImageRequest request = new UpdateProfileImageRequest("https://attacker.com/img.jpg");
+
+        assertThrows(InvalidImageUrlException.class,
+                () -> controller.confirmProfileImage(1L, request, authentication, httpRequest));
+    }
+
+    // ── GET /api/v1/agency/artists/{id}/members ───────────────────────────────
+
+    @Test
+    @DisplayName("소유 아티스트 멤버 목록 조회 성공 → 200 OK, 멤버 2건 반환")
+    void listMembers_success_returns200WithMembers() {
+        givenAuthenticated(20L);
+        when(artistMemberService.listByArtistId(1L, 20L))
+                .thenReturn(List.of(dummyMember(10L), dummyMember(11L)));
+
+        ResponseEntity<?> response = controller.listMembers(1L, authentication);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        verify(artistMemberService).listByArtistId(1L, 20L);
+    }
+
+    @Test
+    @DisplayName("타 소속사 아티스트 멤버 조회 → ArtistNotFoundException 전파")
+    void listMembers_notOwned_propagatesArtistNotFoundException() {
+        givenAuthenticated(20L);
+        when(artistMemberService.listByArtistId(1L, 20L))
+                .thenThrow(new ArtistNotFoundException("존재하지 않는 아티스트입니다."));
+
+        assertThrows(ArtistNotFoundException.class,
+                () -> controller.listMembers(1L, authentication));
+    }
+
+    @Test
+    @DisplayName("멤버 없는 아티스트 → 200 OK, 빈 목록 반환")
+    void listMembers_noMembers_returnsEmptyList() {
+        givenAuthenticated(20L);
+        when(artistMemberService.listByArtistId(1L, 20L)).thenReturn(List.of());
+
+        ResponseEntity<?> response = controller.listMembers(1L, authentication);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+    }
+
+    private ArtistMember dummyMember(Long id) {
+        return ArtistMember.builder()
+                .id(id).artistId(1L).loginId("member" + id)
+                .passwordHash("hash").memberName("멤버" + id)
+                .role(UserRole.ARTIST).build();
     }
 }

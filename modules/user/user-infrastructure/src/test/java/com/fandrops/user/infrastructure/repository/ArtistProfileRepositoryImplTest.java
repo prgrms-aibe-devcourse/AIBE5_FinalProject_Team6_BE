@@ -38,7 +38,7 @@ class ArtistProfileRepositoryImplTest {
     private ArtistProfileJpaEntity buildEntity(Long id, long fanCount) {
         ArtistProfile domain = ArtistProfile.reconstitute(
                 id, 1L, "아티스트" + id, fanCount, LocalDateTime.now(),
-                null, null, null, null, null, null);
+                null, null, null, null, null, null, null);
         return ArtistProfileJpaEntity.from(domain);
     }
 

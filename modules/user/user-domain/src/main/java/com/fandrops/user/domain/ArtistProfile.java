@@ -16,6 +16,7 @@ public class ArtistProfile {
     private String homepageUrl;
     private String youtubeUrl;
     private String instagramUrl;
+    private String twitterUrl;
 
     private ArtistProfile(Builder builder) {
         this.id = builder.id;
@@ -29,12 +30,13 @@ public class ArtistProfile {
         this.homepageUrl = builder.homepageUrl;
         this.youtubeUrl = builder.youtubeUrl;
         this.instagramUrl = builder.instagramUrl;
+        this.twitterUrl = builder.twitterUrl;
     }
 
     public static ArtistProfile reconstitute(
             Long id, Long agencyId, String name, long fanCount, LocalDateTime joinedAt,
             String profileImageUrl, String coverImageUrl, String bio,
-            String homepageUrl, String youtubeUrl, String instagramUrl) {
+            String homepageUrl, String youtubeUrl, String instagramUrl, String twitterUrl) {
         Objects.requireNonNull(id, "id는 필수입니다");
         Objects.requireNonNull(agencyId, "agencyId는 필수입니다");
         Objects.requireNonNull(name, "name은 필수입니다");
@@ -42,6 +44,7 @@ public class ArtistProfile {
                 .id(id).agencyId(agencyId).name(name).fanCount(fanCount).joinedAt(joinedAt)
                 .profileImageUrl(profileImageUrl).coverImageUrl(coverImageUrl).bio(bio)
                 .homepageUrl(homepageUrl).youtubeUrl(youtubeUrl).instagramUrl(instagramUrl)
+                .twitterUrl(twitterUrl)
                 .build();
     }
 
@@ -58,15 +61,22 @@ public class ArtistProfile {
     public String getHomepageUrl() { return homepageUrl; }
     public String getYoutubeUrl() { return youtubeUrl; }
     public String getInstagramUrl() { return instagramUrl; }
+    public String getTwitterUrl() { return twitterUrl; }
 
     public void updateProfile(String profileImageUrl, String coverImageUrl, String bio,
-                              String homepageUrl, String youtubeUrl, String instagramUrl) {
+                              String homepageUrl, String youtubeUrl, String instagramUrl,
+                              String twitterUrl) {
         this.profileImageUrl = profileImageUrl;
         this.coverImageUrl = coverImageUrl;
         this.bio = bio;
         this.homepageUrl = homepageUrl;
         this.youtubeUrl = youtubeUrl;
         this.instagramUrl = instagramUrl;
+        this.twitterUrl = twitterUrl;
+    }
+
+    public void updateProfileImageUrl(String profileImageUrl) {
+        this.profileImageUrl = profileImageUrl;
     }
 
     public static class Builder {
@@ -81,6 +91,7 @@ public class ArtistProfile {
         private String homepageUrl;
         private String youtubeUrl;
         private String instagramUrl;
+        private String twitterUrl;
 
         public Builder id(Long id) { this.id = id; return this; }
         public Builder agencyId(Long agencyId) { this.agencyId = agencyId; return this; }
@@ -93,6 +104,7 @@ public class ArtistProfile {
         public Builder homepageUrl(String v) { this.homepageUrl = v; return this; }
         public Builder youtubeUrl(String v) { this.youtubeUrl = v; return this; }
         public Builder instagramUrl(String v) { this.instagramUrl = v; return this; }
+        public Builder twitterUrl(String v) { this.twitterUrl = v; return this; }
 
         public ArtistProfile build() {
             Objects.requireNonNull(agencyId, "agencyId는 필수입니다");

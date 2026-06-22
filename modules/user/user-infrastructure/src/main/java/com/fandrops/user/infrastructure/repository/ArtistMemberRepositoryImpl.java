@@ -6,6 +6,7 @@ import com.fandrops.user.infrastructure.persistence.ArtistMemberJpaEntity;
 import com.fandrops.user.infrastructure.persistence.ArtistMemberJpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -36,5 +37,12 @@ public class ArtistMemberRepositoryImpl implements ArtistMemberRepository {
     @Override
     public boolean existsByLoginId(String loginId) {
         return jpaRepository.existsByLoginId(loginId);
+    }
+
+    @Override
+    public List<ArtistMember> findByArtistId(Long artistId) {
+        return jpaRepository.findByArtistIdAndDeletedAtIsNull(artistId).stream()
+                .map(ArtistMemberJpaEntity::toDomain)
+                .toList();
     }
 }
