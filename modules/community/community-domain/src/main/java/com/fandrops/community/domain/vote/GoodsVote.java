@@ -46,6 +46,10 @@ public class GoodsVote {
         return active && endsAt.isAfter(now);
     }
 
+    public GoodsVote close() {
+        return new GoodsVote(id, artistId, title, endsAt, false, createdAt);
+    }
+
     public Long getId() { return id; }
     public Long getArtistId() { return artistId; }
     public String getTitle() { return title; }

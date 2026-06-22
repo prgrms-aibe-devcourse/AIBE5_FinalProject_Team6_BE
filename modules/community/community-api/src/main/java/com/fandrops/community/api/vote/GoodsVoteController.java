@@ -5,6 +5,7 @@ import com.fandrops.community.api.CommunityControllerSupport;
 import com.fandrops.community.application.exception.ForbiddenException;
 import com.fandrops.community.application.vote.GoodsBallotCommand;
 import com.fandrops.community.application.vote.GoodsBallotResult;
+import com.fandrops.community.application.vote.GoodsVoteCloseResult;
 import com.fandrops.community.application.vote.GoodsVoteCreateCommand;
 import com.fandrops.community.application.vote.GoodsVoteResult;
 import com.fandrops.community.application.vote.GoodsVoteService;
@@ -69,6 +70,21 @@ public class GoodsVoteController extends CommunityControllerSupport {
         Long voteId = goodsVoteService.createVote(
                 new GoodsVoteCreateCommand(artistId, request.title(), request.endsAt(), options));
         return ResponseEntity.status(201).body(ApiResponse.ok(Map.of("voteId", voteId), traceId()));
+    }
+
+    // PATCH /api/v1/goods-votes/{voteId}/close — 굿즈 투표 강제 종료 (AGENCY 운영 계정 전용)
+    @PatchMapping("/api/v1/goods-votes/{voteId}/close")
+    public ResponseEntity<ApiResponse<GoodsVoteCloseResult>> closeVote(
+            @PathVariable Long voteId,
+            Authentication authentication,
+            @RequestHeader(value = "X-Agency-Account-Id", required = false) Long agencyAccountIdHeader) {
+
+        if (!isLocalProfile() && (authentication == null || !hasAgencyRole(authentication))) {
+            throw new ForbiddenException("AGENCY 권한이 필요합니다.");
+        }
+        Long agencyAccountId = resolveAgencyAccountId(authentication, agencyAccountIdHeader);
+        GoodsVoteCloseResult result = goodsVoteService.closeVote(voteId, agencyAccountId);
+        return ResponseEntity.ok(ApiResponse.ok(result, traceId()));
     }
 
     // POST /api/v1/goods-votes/{id}/ballots — 투표 참여 (팬 가입자 전용, 1인 1표)

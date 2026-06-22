@@ -69,6 +69,14 @@ public class ArtistProfileAdapter implements ArtistProfilePort {
     }
 
     @Override
+    public boolean isOwnedByAgency(Long artistId, Long agencyAccountId) {
+        Integer count = jdbc.queryForObject(
+                "SELECT COUNT(1) FROM artist_profile WHERE id = ? AND agency_id = ?",
+                Integer.class, artistId, agencyAccountId);
+        return count != null && count > 0;
+    }
+
+    @Override
     public Map<Long, ArtistSummary> findAllByIds(Collection<Long> artistIds) {
         if (artistIds.isEmpty()) {
             return Collections.emptyMap();

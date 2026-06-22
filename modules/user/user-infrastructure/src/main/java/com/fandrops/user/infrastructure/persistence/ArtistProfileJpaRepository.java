@@ -29,6 +29,8 @@ public interface ArtistProfileJpaRepository extends JpaRepository<ArtistProfileJ
            "ORDER BY a.fanCount DESC, a.id ASC")
     List<ArtistProfileJpaEntity> findAfterCursor(@Param("cursorId") Long cursorId, Pageable pageable);
 
+    boolean existsByIdAndAgencyId(Long id, Long agencyId);
+
     List<ArtistProfileJpaEntity> findAllByAgencyIdOrderByFanCountDescIdAsc(Long agencyId, Pageable pageable);
 
     @Query("SELECT a FROM ArtistProfileJpaEntity a " +

@@ -87,4 +87,23 @@ class GoodsVoteTest {
         GoodsVote vote = GoodsVote.reconstruct(1L, 1L, "투표", PAST, true, NOW.minusDays(10));
         assertFalse(vote.isVotable(NOW));
     }
+
+    @Test
+    @DisplayName("close — active=false 새 인스턴스 반환, id·artistId 유지")
+    void close_returnsInactiveInstance() {
+        GoodsVote active = GoodsVote.reconstruct(1L, 10L, "투표", FUTURE, true, NOW);
+        GoodsVote closed = active.close();
+        assertFalse(closed.isActive());
+        assertEquals(1L, closed.getId());
+        assertEquals(10L, closed.getArtistId());
+        assertTrue(active.isActive());  // 원본 불변
+    }
+
+    @Test
+    @DisplayName("close — 이미 is_active=false인 투표도 close() 가능 (idempotent)")
+    void close_alreadyInactive_succeeds() {
+        GoodsVote inactive = GoodsVote.reconstruct(2L, 10L, "투표", FUTURE, false, NOW);
+        GoodsVote closed = inactive.close();
+        assertFalse(closed.isActive());
+    }
 }
