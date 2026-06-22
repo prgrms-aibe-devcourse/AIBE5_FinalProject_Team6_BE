@@ -19,7 +19,7 @@
 | Redis | ElastiCache (별도 인스턴스) |
 | 모니터링 | Prometheus Remote Write → EC2-1 (`http://10.0.1.114:9090/api/v1/write`) |
 | 토큰 | `/opt/fandrops/k6/seed/tokens.csv` — fan_id 1~2100 JWT |
-| 적용 시나리오 | s01·s02·s03·s04·s06 (s05는 Actions runner 유지) |
+| 적용 시나리오 | s01·s02·s03·s04·s06·s07 (s05는 Actions runner 유지) |
 
 ---
 
@@ -42,7 +42,7 @@ k6 run -e BASE_URL=$BASE_URL \
 
 | 유형 | P95 목표 | 에러율 목표 | 적용 시나리오 |
 |---|---|---|---|
-| Read | < 120ms | < 0.1% | 02 |
+| Read | < 120ms | < 0.1% | 02, 07 |
 | Write | < 300ms | < 0.1% | 01, 04, 06 |
 | Payment | < 2,000ms | < 0.1% | 03 |
 | SSE | 연결 거부 없음 (정상 구간) | — | 05 |
@@ -54,11 +54,12 @@ k6 run -e BASE_URL=$BASE_URL \
 | 순서 | 시나리오 | 사전 준비 | 실행 위치 |
 |---|---|---|---|
 | 1 | s02 피드 Read | 없음 | EC2-2 |
-| 2 | s01 주문 동시성 | inventory 리셋(100) + Redis 티켓 재적재 | EC2-2 |
-| 3 | s04 드롭스 스파이크 | inventory 리셋(100) + Redis 티켓 재적재 | EC2-2 |
-| 4 | s03 결제 확인 | Wiremock 기동 확인 | EC2-2 |
-| 5 | s05 SSE 대기열 | — | **Actions runner** |
-| 6 | s06 통합 워크로드 | inventory 리셋(200) + Wiremock 확인 | EC2-2 |
+| 2 | s07 상품 조회 처리량 | 없음 | EC2-2 |
+| 3 | s01 주문 동시성 | inventory 리셋(100) + Redis 티켓 재적재 | EC2-2 |
+| 4 | s04 드롭스 스파이크 | inventory 리셋(100) + Redis 티켓 재적재 | EC2-2 |
+| 5 | s03 결제 확인 | Wiremock 기동 확인 | EC2-2 |
+| 6 | s05 SSE 대기열 | — | **Actions runner** |
+| 7 | s06 통합 워크로드 | inventory 리셋(200) + Wiremock 확인 | EC2-2 |
 
 > ⚠️ **s05 먼저 실행 금지**: s05 실행 후 Redis 티켓이 UUID로 오염되어 s01·s04 전원 403 실패. 반드시 s04 이후 s05 실행.
 
@@ -70,6 +71,22 @@ k6 run -e BASE_URL=$BASE_URL \
 **담당 오너**: 정환철
 **SLO**: P95 < 120ms, 에러율 < 0.1%
 
+### 목적
+
+팬이 아티스트 피드를 조회하는 가장 빈번한 읽기 동작의 성능 기준선을 측정한다. 드롭스 오픈런 전후로 팬들이 아티스트 피드를 집중적으로 조회하는 패턴을 재현한다.
+
+Read SLO(P95 < 120ms)는 쓰기 SLO(300ms)보다 엄격하다. 이 엔드포인트는 인증 없이 `permitAll`로 누구나 호출 가능하므로 트래픽 집중 시 가장 먼저 병목이 나타난다.
+
+검증 핵심:
+- **P95 < 120ms**: 50 VU 2분 지속 부하에서 달성 여부
+- **Redis 캐시 효과**: `FeedCacheAdapter` SingleFlight + TTL jitter 적용 후 개선폭 확인
+- **N+1 제거 효과**: 인덱스·쿼리 최적화 적용 후 tail latency 감소 여부
+
+### 실행 흐름
+
+- 50 VU가 2분간 `/api/v1/artists/1/feeds` 지속 호출
+- VU별 JWT 토큰은 `tokens.csv`에서 순환 분배
+
 ### 이전 피드백 (정환철)
 
 > 출처: `k6-baseline-results.md` — 오너 피드백 (→ 정환철)
@@ -79,11 +96,26 @@ k6 run -e BASE_URL=$BASE_URL \
 
 ### 피드백 반영 내용 (정환철)
 
-> (정환철 작성)
+**어떻게 반영했는지**
+
+베이스라인 P95 133ms의 주요 원인은 두 가지였다. 첫째, `FeedService.getFeeds()` 내 이미지·좋아요 조회가 N+1 개별 쿼리로 실행되어 DB 왕복 비용이 누적됐다. 둘째, 커서 페이지네이션 쿼리에 인덱스가 없어 Full Scan이 발생했다. Redis 캐시는 이미 PR #341에서 적용됐으나, 캐시 미스 시 N+1 문제가 그대로 집계를 끌어올렸다.
+
+**어떤 기술/방법을 적용했는지**
+
+- **N+1 제거 (PR #330)**: `FeedService.getFeeds()` 이미지·좋아요 조회를 `findByFeedIdIn` / `findLikedFeedIdsByFanId` bulk IN 쿼리로 변경. `CommentService.getComments()` 대댓글 조회를 N번 개별 쿼리 → `findRepliesByParentIds` bulk 조회로 변경.
+- **인덱스 추가**: `idx_artist_feed_artist_cursor (artist_id, id DESC)` 추가 — 커서 페이지네이션 Full Scan 제거.
+- **Redis 캐시 (PR #341)**: `FeedCachePort` / `FeedCacheAdapter` 구현. 캐시 키 `community:feed:{artistId}:cursor:{cursorId}:size:{size}`, TTL 60s + 0~30s jitter(캐시 스탬피드 방지), SingleFlight(`ConcurrentHashMap<String, CompletableFuture>`) 적용으로 캐시 미스 시 DB 쿼리 1건으로 수렴. viewer-agnostic 캐시 + `applyIsLiked()` 후처리, Redis fail-open(DB fallback), `@TransactionalEventListener(AFTER_COMMIT)` evict.
+
+**어떻게 해결했는지**
+
+캐시 히트 시 Redis 응답(~5ms)으로 P95가 크게 낮아지고, 캐시 미스 시에도 N+1이 제거된 bulk 쿼리 + 인덱스로 DB 응답이 단축된다. SingleFlight로 워밍업 구간의 동시 DB 쿼리가 1건으로 수렴하여 초반 250ms 피크가 해소될 것으로 예상. P95 120ms 이하 달성 가능할 것으로 추정.
 
 | 항목 | 변경 전 | 변경 내용 | 적용 기술 |
 |---|---|---|---|
-| — | — | — | — |
+| 이미지·좋아요 조회 | N+1 개별 쿼리 | `findByFeedIdIn` / `findLikedFeedIdsByFanId` bulk IN 쿼리 | Spring Data JPA (PR #330) |
+| 대댓글 조회 | N번 개별 쿼리 | `findRepliesByParentIds` bulk 조회 | Spring Data JPA (PR #330) |
+| 커서 페이지네이션 인덱스 | 없음 (Full Scan) | `idx_artist_feed_artist_cursor (artist_id, id DESC)` 추가 | MySQL 인덱스 |
+| Redis 캐시 | 없음 | TTL jitter + SingleFlight + viewer-agnostic 캐시 | `FeedCacheAdapter` (PR #341) |
 
 ### 실행 명령어
 
@@ -123,6 +155,22 @@ k6 run -e BASE_URL=https://api.fandrops.site \
 **담당 오너**: 형성빈
 **SLO**: `orders_reserved ≤ 100` (오버셀 0건), P95 < 300ms, 에러율 < 0.1%
 
+### 목적
+
+드롭스 오픈런 상황에서 팬들이 동시에 주문을 요청할 때 재고 오버셀이 발생하지 않는지 검증하는 핵심 시나리오다.
+
+FANDROPS의 주문 흐름은 **대기열 진입 → accessToken 발급 → 주문 API 호출** 순서로 진행된다. 재고 차감은 Redis 분산 락(`reserveAtomic`) + DB `WHERE available_qty >= qty` 원자적 UPDATE로 보호되며, 200 VU가 동시에 발화해도 `orders_reserved ≤ 100`(재고 수량)이어야 한다.
+
+검증 핵심:
+- **오버셀 0건**: `SELECT COUNT(*) FROM orders WHERE status = 'RESERVED'` = 100
+- **락 정합성**: Redis 분산 락이 동시 요청을 직렬화하는지
+- **P95 < 300ms**: 예비 측정 P95 2.85s 대비 EC2 경합 제거 후 개선폭 확인
+
+### 실행 흐름
+
+1. **iteration 1**: 대기열 진입 (`queue/join`) + accessToken 획득 — 200 VU 단일 배치 처리
+2. **iteration 2**: 200 VU 동시 `POST /orders` 발화 → 재고 100개 → 100건 RESERVED, 100건 409 DEPLETED 기대
+
 ### 이전 피드백 (형성빈)
 
 > 출처: `k6-baseline-results.md` — 오너 피드백 (→ 형성빈)
@@ -133,11 +181,21 @@ k6 run -e BASE_URL=https://api.fandrops.site \
 
 ### 피드백 반영 내용 (형성빈)
 
-> (형성빈 작성)
+**어떻게 반영했는지**
+
+운영 환경(`application-prod.yml`)에 `lock-strategy` 미설정 → 기본값 `atomic-update` 동작 확인. 재고 예약은 Redis 분산 락이 아닌 MySQL `UPDATE inventory SET available_qty = available_qty - qty WHERE available_qty >= qty` 원자적 UPDATE로 처리되고 있었다.
+
+**어떤 기술/방법을 적용했는지**
+
+`OrderService.createOrder()`에 `@Transactional` 확인 — 주문 생성 + 재고 예약이 단일 TX 내에서 실행됨. 경계 이슈 없음.
+
+**어떻게 해결했는지**
+
+P95 865ms 원인이 Redis 분산 락 경합이 아닌 MySQL 동시 UPDATE 경합 + 커넥션 풀 대기로 추정됨. 코드 수정 없이 EC2-2 재측정 후 DB 슬로우 쿼리 로그로 병목 구간을 확인할 예정.
 
 | 항목 | 변경 전 | 변경 내용 | 적용 기술 |
 |---|---|---|---|
-| — | — | — | — |
+| 운영 `lock-strategy` | 미확인 | `atomic-update` 기본값 동작 확인 | `application-prod.yml` 설정 확인 |
 
 ### 사전 준비
 
@@ -194,6 +252,26 @@ k6 run -e BASE_URL=http://10.0.1.114:8081 \
 **파일**: `infra/k6/scenarios/04_drop_spike.js`
 **담당 오너**: 형성빈
 **SLO**: `spike_orders_reserved ≤ 100` (오버셀 0건), P95 < 300ms, 에러율 < 0.1%
+
+### 목적
+
+드롭스 상품이 오픈되는 순간 팬들이 일제히 몰려드는 오픈런 트래픽을 재현한다. 0 → 1,000 VU가 30초 만에 급증하는 `ramping-vus` 패턴으로 Rate Limit, 대기열, 재고 차감이 스파이크 하에서도 정합성을 유지하는지 확인한다.
+
+s01(200 VU 동시성)과 달리 스파이크 자체가 검증 대상이다. 램프업 구간에서 들어온 요청이 Rate Limit(`5r/s`)에 의해 큐에 쌓이고, 대기열 스케줄러가 처리하는 동안 오버셀이 발생하지 않아야 한다.
+
+검증 핵심:
+- **오버셀 0건**: 1,000 VU 스파이크 중 `orders_reserved ≤ 100`
+- **Rate Limit 동작**: 초과 요청이 429로 처리되는지
+- **P95 성공 요청**: 예비 측정 508ms(EC2 경합 환경) 대비 개선폭 확인
+- **에러율 해석**: 409 DEPLETED·429는 정상 동작, 500은 이상
+
+### 실행 흐름
+
+| 단계 | VU | 시간 | 설명 |
+|---|---|---|---|
+| 급상승 | 0 → 1,000 | 30s | 드롭스 오픈 순간 모사 |
+| 유지 | 1,000 | 30s | 최고 부하 유지 |
+| 종료 | 1,000 → 0 | 15s | 부하 해제 |
 
 ### 이전 피드백 (형성빈)
 
@@ -262,6 +340,29 @@ k6 run -e BASE_URL=https://api.fandrops.site \
 **SLO**: P95 < 2,000ms, 에러율 < 0.1%
 
 > **SLO 완화 사유 (2026-06-22 팀 합의)**: 기획 원안 300ms → 2,000ms. Wiremock 즉시 응답 조건에서 앱 처리 단독 P95가 1,540ms로 측정됨. 외부 Toss PG 레이턴시(네트워크 왕복 + 카드사 승인) 추가 시 300ms는 현재 동기 TX 구조에서 달성 불가. 2,000ms는 데이터 기반으로 방어 가능한 최솟값.
+
+### 목적
+
+주문 후 결제 확인 단계에서 Toss PG 응답 지연·오류 상황에서도 중복 결제 없이 정상 처리되는지 검증한다. Wiremock으로 PG를 모킹해 제어된 환경에서 부하를 가한다.
+
+검증 핵심:
+- **중복 결제 0건**: 동일 `payment_key`로 중복 confirm 요청 시 409 반환 여부
+- **타임아웃 처리**: Wiremock 지연 응답(2,000ms) 시 앱이 적절히 처리하는지
+- **P95 < 2,000ms**: 결제 SLO — PG 응답 대기 포함
+- **에러율 < 1%**: 성공 시나리오 기준
+
+### 실행 흐름
+
+- `shared-iterations` executor — 50 VU가 500 iterations를 동적으로 분배 처리
+- 각 iteration은 `iterationInTest` 인덱스로 고유 orderId 할당 → orderId 재사용 없음
+
+| SCENARIO | Wiremock 응답 | 기대 결과 |
+|---|---|---|
+| `success` (기본) | 200 즉시 | 정상 처리 |
+| `timeout` | 200, 5초 지연 | P95 < 2s 내 처리 |
+| `balance-error` | 400 잔액부족 | 400 정상 반환 |
+| `server-error` | 500 PG 오류 | 5xx 에러율 < 1% |
+| `mixed` | 70/10/10/10% 혼합 | 전체 에러율 < 1% |
 
 ### 이전 피드백 (장성재)
 
@@ -358,6 +459,21 @@ BASE_URL=http://10.0.1.114:8081 k6 run \
 **SLO**: 정상 구간 에러율 < 0.1%, 경계 구간 에러율 < 1%, 2,100 VU 초과 시 429 응답 필수
 **실행 위치**: **GitHub Actions runner** (t3.small 메모리 초과 위험으로 EC2-2 사용 불가)
 
+### 목적
+
+드롭스 오픈런 시 팬들이 대기열 상태를 실시간으로 전달받는 SSE 연결의 안정성을 검증한다. 3단계 VU 증가로 각 구간의 동작을 구분해 확인한다.
+
+| 구간 | VU | 검증 목표 |
+|---|---|---|
+| 정상 | 1,000 VU | 에러율 < 0.1% — 안정적 연결 유지 |
+| 경계 | 1,800 VU | 에러율 < 1% — 한계 근접 동작 확인 |
+| 초과 | 2,100 VU | 429 `retryable:true` 응답 계약 이행 여부 |
+
+검증 핵심:
+- **연결 안정성**: 1,000 VU 구간에서 SSE 스트림이 끊기지 않고 유지되는지
+- **429 계약**: 2,100 VU 초과 시 `retryable:true` 반환 여부
+- **Nginx FD**: `worker_connections ≥ 2048` 설정 하에서 연결 거부 없는지
+
 ### 이전 피드백 (장성재, 지영재)
 
 > 출처: `k6-baseline-results.md` — 오너 피드백 (→ 장성재, 지영재)
@@ -450,6 +566,30 @@ GitHub Actions → **Run k6 Load Test** → `scenario: 05` → `confirm: yes`
 **파일**: `infra/k6/scenarios/06_workload_model.js`
 **담당 오너**: 전체
 **SLO**: Write P95 < 300ms, Read P95 < 120ms, 에러율 < 0.1%, 오버셀 0건
+
+### 목적
+
+개별 시나리오(s01~s05)는 단일 엔드포인트만 검증하지만, 실제 서비스에서는 피드 조회·주문·결제가 동시에 발생한다. s06은 실제 트래픽 비율을 반영한 혼합 부하로 전체 SLO를 한 번에 측정한다.
+
+개별 테스트에서는 발견되지 않는 **시스템 전체 병목**이 드러난다. 피드 조회(Read)가 DB 커넥션 풀을 점유하면 동시 주문(Write) 응답 시간이 올라가는 식의 간섭 효과를 확인한다.
+
+### 워크로드 분포
+
+| 엔드포인트 | 비율 | 담당 |
+|---|---|---|
+| `GET /api/v1/artists/{id}/feeds` | 60% | 정환철 |
+| `POST /api/v1/queue/join/{productId}` | 20% | 장성재, 지영재 |
+| `POST /api/v1/orders` | 15% | 형성빈 |
+| `POST /api/v1/payments/toss/confirm` | 5% | 장성재 |
+
+### 실행 흐름
+
+| 단계 | VU | 시간 | 설명 |
+|---|---|---|---|
+| 워밍업 | 0 → 50 | 1m | 캐시·커넥션 풀 준비 |
+| 정상 부하 | 50 → 100 | 3m | 기준 측정 구간 |
+| 스파이크 | 100 → 150 | 1m | 순간 부하 |
+| 쿨다운 | 150 → 0 | 30s | 종료 |
 
 ### 이전 피드백 (전체)
 
@@ -544,6 +684,64 @@ k6 run -e BASE_URL=https://api.fandrops.site \
 
 ---
 
+## 시나리오 07: 상품 조회 처리량 기준선 (Product Read)
+
+**파일**: `infra/k6/scenarios/07_product_read.js`
+**담당 오너**: 지영재
+**SLO**: P95 < 120ms, 에러율 < 0.1%
+
+### 목적
+
+팬이 드롭스 상품 목록을 조회하는 Read 엔드포인트의 처리량 기준선을 측정한다. `constant-arrival-rate` executor로 300 RPS를 직접 제어해 Read SLO(P95 < 120ms)를 검증한다.
+
+`constant-vus`(VU 수 고정) 방식과 달리 `constant-arrival-rate`는 응답 지연과 무관하게 목표 RPS를 유지한다. 처리량 관점 SLO를 직접 검증하기 적합하다.
+
+검증 핵심:
+- **처리량 300 RPS 유지**: `preAllocatedVUs 50 / maxVUs 200`으로 RPS 달성 여부
+- **P95 < 120ms**: Read SLO 달성 여부
+- **에러율 < 0.1%**: 인증 토큰 기반 상품 조회에서 5xx 발생 없음
+- **dropped_iterations ≈ 0**: 200 VU로도 300 RPS를 소화하지 못하면 처리량 병목 신호
+
+### 실행 흐름
+
+- `constant-arrival-rate` executor — 2분간 300 RPS 고정 발화
+- VU별 JWT 토큰은 `tokens.csv`에서 순환 분배 (fan_id 1~2100)
+- `GET /api/v1/products?type=regular` 인증 요청
+
+### 실행 명령어
+
+> ⚠️ **BASE_URL 예외**: s07은 `http://10.0.1.114:8081` (Spring Boot 직접 연결, Nginx 우회).
+> EC2-2 단일 IP에서 300 RPS 발화 시 Nginx IP 기반 rate limit이 개입할 수 있어 s01과 동일하게 Nginx를 우회한다. 실제 프로덕션에서는 다수 IP에서 분산 요청이 들어오므로 Nginx 제한 없이 처리된다.
+
+```bash
+cd /opt/fandrops/k6
+export K6_PROMETHEUS_RW_SERVER_URL=http://10.0.1.114:9090/api/v1/write
+export K6_PROMETHEUS_RW_TREND_STATS="p(95),p(99)"
+
+k6 run -e BASE_URL=http://10.0.1.114:8081 \
+  --out experimental-prometheus-rw \
+  scenarios/07_product_read.js
+```
+
+### 결과 (튜닝 후)
+
+| 지표 | 베이스라인 | 결과 | 목표 | 상태 |
+|---|---|---|---|---|
+| P95 응답시간 | — | — | < 120ms | 미측정 |
+| 에러율 | — | — | < 0.1% | 미측정 |
+| 처리량(RPS) | — | — | 300 RPS 유지 | 미측정 |
+| dropped_iterations | — | — | ≈ 0 | 미측정 |
+
+### 스크린샷
+
+> `screenshots/tuned/s07_product_read_tuned.png`
+
+### 관찰 및 오너 피드백
+
+> 측정 후 작성
+
+---
+
 ## SLO 달성 현황 요약
 
 | 시나리오 | 베이스라인 P95 | 튜닝 후 P95 | 베이스라인 에러율 | 튜닝 후 에러율 | 오버셀 | SLO |
@@ -554,3 +752,4 @@ k6 run -e BASE_URL=https://api.fandrops.site \
 | 04 드롭스 스파이크 | 266.24ms ✅ | — | 99.98%\* | — | 0건 ✅ | 미측정 |
 | 05 SSE 대기열 | — | — | 100% ❌ | — | — | 미측정 |
 | 06 통합 워크로드 | 측정 불가 | — | ~65% ❌ | — | — | 미측정 |
+| 07 상품 조회 처리량 | — (신규) | — | — (신규) | — | — | 미측정 |
