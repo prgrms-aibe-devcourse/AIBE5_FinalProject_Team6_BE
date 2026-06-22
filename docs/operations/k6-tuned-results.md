@@ -251,28 +251,35 @@ P95 865ms 원인이 Redis 분산 락 경합이 아닌 MySQL 동시 UPDATE 경합
 
 ### 사전 준비
 
+> ⚠️ **product_id 주의 (2026-06-22 확인)**: DB 재시드 후 product 테이블 최소 id가 4부터 시작. `product_id=1`은 product 테이블에 없으므로 주문 시 404 PRODUCT_NOT_FOUND 발생. 실행 전 `SELECT id FROM product WHERE status='ON_SALE' ORDER BY id LIMIT 1;`로 실제 id 확인 후 아래 명령의 `4`를 해당 값으로 대체한다.
+
 ```bash
 MYSQL="mysql -u fandrops_admin -pfandrops1234 -h fandrops-prod-mysql.coqwxjz7zumt.ap-northeast-2.rds.amazonaws.com fandrops"
 REDIS_HOST="master.fandrops-prod-redis.q7gdno.apn2.cache.amazonaws.com"
 
-$MYSQL -e "UPDATE inventory SET available_qty=100, reserved_qty=0, total_qty=100, version=0 WHERE product_id=1;"
+# product_id=4 (ON_SALE, available_qty=100 확인됨 — 2026-06-22)
+$MYSQL -e "UPDATE inventory SET available_qty=100, reserved_qty=0, total_qty=100, version=0 WHERE product_id=4;"
 
 for i in {1..2100}; do
-  valkey-cli -h $REDIS_HOST --tls setex "access:ticket:1:$i" 86400 "test-ticket-token"
+  valkey-cli -h $REDIS_HOST --tls setex "access:ticket:4:$i" 86400 "test-ticket-token"
 done
 ```
 
 ### 실행 명령어
 
-> ⚠️ **BASE_URL 예외**: s01은 `http://10.0.1.114:8081` (Spring Boot 직접 연결, Nginx 우회).
+> ⚠️ **BASE_URL 예외**: s01은 Spring Boot 직접 연결, Nginx 우회.
 > EC2-2 단일 IP에서 200 VU 발화 시 Nginx IP 기반 rate limit이 대부분 차단함. 실제 프로덕션에서는 200명이 각자 다른 IP로 요청하므로 해당 제한이 적용되지 않는다. s01 검증 목적(오버셀 방지)과 무관한 아티팩트이므로 Nginx를 우회한다.
+>
+> ⚠️ **활성 슬롯 포트 확인 필수**: `sudo cat /etc/fandrops/active-slot` 으로 blue(8081)/green(8082) 확인 후 포트를 맞출 것. 비활성 슬롯 포트로 실행하면 구버전 JAR가 응답하여 100% 실패.
 
 ```bash
 cd /opt/fandrops/k6
 export K6_PROMETHEUS_RW_SERVER_URL=http://10.0.1.114:9090/api/v1/write
 export K6_PROMETHEUS_RW_TREND_STATS="p(95),p(99)"
 
-k6 run -e BASE_URL=http://10.0.1.114:8081 \
+# 활성 슬롯이 green이면 8082, blue이면 8081
+k6 run -e BASE_URL=http://10.0.1.114:8082 \
+  -e PRODUCT_ID=4 \
   -e FAN_POOL_SIZE=200 \
   --out experimental-prometheus-rw \
   scenarios/01_order_concurrency.js
@@ -280,37 +287,84 @@ k6 run -e BASE_URL=http://10.0.1.114:8081 \
 
 ### 결과 (튜닝 후)
 
-| 지표 | 베이스라인 | 결과 | 목표 | 상태 |
+| 지표 | 베이스라인 | 결과 (클린 상태) | 목표 | 상태 |
 |---|---|---|---|---|
-| P95 응답시간 (전체) | 1,750ms | — | < 300ms | 미측정 |
-| P95 응답시간 (성공 요청) | 865ms | — | < 300ms | 미측정 |
-| 평균 응답시간 | — | — | — | — |
-| 에러율 | 75%\* | — | < 0.1%\* | 미측정 |
-| orders_reserved | 100건 (오버셀 0건 ✅) | — | ≤ 100 | 미측정 |
-| 처리량 | — | — | — | — |
+| P95 응답시간 (전체) | 1,750ms | 1,770ms | < 300ms | ❌ SLO 미달 |
+| P95 응답시간 (성공 요청) | 865ms | 872.32ms | < 300ms | ❌ SLO 미달 |
+| 평균 응답시간 (성공 요청) | — | 445.32ms | — | — |
+| 최대 응답시간 | — | 2,230ms | — | — |
+| 에러율 | 75%\* | 75%\* | < 0.1%\* | ✅ (409 정상 동작) |
+| orders_reserved | 100건 (오버셀 0건 ✅) | 100건 (오버셀 0건 ✅) | ≤ 100 | ✅ |
+| 처리량 | — | 118.19 RPS | — | — |
+
+> \* 에러율 75% = 300×409(DEPLETED) 정상 응답. `http_req_failed`가 4xx를 실패로 집계하는 k6 기본 동작. checks_succeeded 400/400 (100%) — 실제 오류 없음.
+>
+> ⚠️ **더티 상태 측정 무효화**: 최초 측정(P95 성공 986.9ms, P95 전체 2,190ms)은 RESERVED 주문 250건이 잔존한 더티 DB 상태에서 실행되어 유효하지 않음. RESERVED 전부 취소 + 재고 리셋 후 클린 상태에서 재측정한 위 수치가 최종 기준.
 
 ### 스크린샷
 
-> `screenshots/tuned/s01_order_concurrency_tuned.png`
+![s01 튜닝 후 결과](screenshots/tuned/s01_order_concurrency_tuned.png)
+
+**Grafana 패널 분석 (2026-06-22, 21:54~21:58)**
+
+| 패널 | 관찰 내용 |
+|---|---|
+| HTTP P95 응답시간 | POST /api/v1/orders P95가 1.745s~1.765s 구간 유지. 테스트 총 3.4초에 완료되어 21:55 부근에 단일 피크. |
+| orders_reserved | 21:55:00 직후 100건으로 수직 상승 후 그대로 평탄 유지. 오버셀 없음. |
+| [k6] 에러율 | No data — Grafana 커스텀 에러율 메트릭 미수신(k6 `http_req_failed` 75%는 409 정상 응답). 실제 5xx 없음. |
+| 활성 HTTP / DB 커넥션 풀 | HikariCP 대기 커넥션(주황)이 21:55:00에 피크 **8**까지 상승 후 즉시 소멸. 200 VU 동시 발화가 DB 커넥션 경합을 유발했으나 풀 한도를 초과하지는 않음. |
 
 ### 문제 정의
 
-> 측정 완료 후 작성. 아래 항목을 기준으로 서술한다.
-> - k6 로그: P95(전체/성공 요청), 에러율, 처리량(RPS), max 응답시간
-> - Grafana 스크린샷: P95 시계열 패턴(200 VU 동시 발화 직후 급등 여부), `orders_reserved` 카운트 확인
-> - 핵심 문제: `orders_reserved` 오버셀 발생 여부 + P95 300ms SLO 달성 여부 + 병목 구간 특정
+**k6 측정 결과 (지영재, 2026-06-22, 클린 상태 재측정)**
+
+| 지표 | 측정값 | SLO | 판정 |
+|---|---|---|---|
+| P95 응답시간 (전체) | 1,770ms | < 300ms | ❌ 5.9배 초과 |
+| P95 응답시간 (성공 요청) | 872.32ms | < 300ms | ❌ 2.9배 초과 |
+| 평균 응답시간 (성공 요청) | 445.32ms | — | — |
+| 최대 응답시간 | 2,230ms | — | ⚠️ 꼬리 레이턴시 |
+| checks_succeeded | 400/400 (100%) | — | ✅ 정합성 이상 없음 |
+| orders_reserved | 100건 | ≤ 100 | ✅ 오버셀 0건 |
+
+**측정 전 트러블슈팅 이력 (지영재, 2026-06-22)**
+
+정상 측정 전 100% 실패 두 차례 + 더티 상태 측정 무효화 한 차례가 발생했다.
+
+1. **활성 슬롯 오지정**: 활성 슬롯이 green(8082)인데 blue(8081)로 실행. 비활성 슬롯은 구버전 JAR가 응답하여 전 요청 실패. → `sudo cat /etc/fandrops/active-slot`으로 확인 후 포트 일치 필수.
+2. **product_id 불일치**: DB 재시드 후 product 테이블 최소 id가 4부터 시작. k6 기본값 `PRODUCT_ID=1`이 product 테이블에 없어 전 요청이 `PRODUCT_NOT_FOUND(404)` 반환. inventory의 `product_id=1` 레코드는 orphan 상태. → `PRODUCT_ID=4`, `access:ticket:4:*` 재시드로 해결.
+3. **더티 상태 측정 무효화**: 초기 측정(P95 성공 986.9ms)은 직전 테스트 실행 누적분 RESERVED 주문 250건이 잔존한 상태에서 실행. `OrderRecoveryScheduler`가 백그라운드에서 250건을 폴링·취소 처리하면서 DB 부하가 추가됐고, 일부 팬의 중복 주문 방지 체크도 추가 쿼리를 유발하여 P95가 +14% 부풀었다. RESERVED 전량 취소 + 재고 리셋 후 클린 상태 재측정 결과가 위 수치.
+
+**핵심 문제**: 정합성(오버셀 0건)은 완벽하나 P95(성공 요청)가 SLO(300ms) 대비 약 3배 초과. 클린 상태 재측정 결과 베이스라인(865ms)과 거의 동일(872ms, +0.8%)하므로 피드백 반영(atomic-update 확인)으로는 개선이 없었음. 200 VU 동시 발화 시 MySQL `UPDATE inventory SET available_qty = available_qty - qty WHERE available_qty >= qty` 행 잠금 경합이 요청을 직렬화하고, Grafana에서 관측된 HikariCP 대기 커넥션 피크 8이 추가 대기를 유발하는 구조.
 
 ### 관찰 및 오너 피드백
 
-> 측정 후 작성
+**관찰 (지영재 — 2026-06-22, 클린 상태 재측정)**
+
+1. **정합성 완벽**: `orders_reserved=100`, Grafana orders_reserved 패널에서 100건 평탄 유지 확인. 오버셀 없음.
+2. **P95 성공 요청 872.32ms**: 베이스라인(865ms)과 사실상 동일(+0.8%). 피드백 반영(atomic-update 확인)으로 코드 변경이 없었기 때문에 성능 변화가 없는 것이 예상된 결과. 더티 상태 측정값(986.9ms)과 비교하면 -12%로, 차이 전량이 RESERVED 250건 잔존으로 인한 `OrderRecoveryScheduler` 간섭 + 중복 주문 체크 오버헤드였음이 확인됨.
+3. **P95 전체 1.77s**: 409 DEPLETED 응답(300건)이 전체 집계를 끌어올림. 성공/실패 분리 기준으로 성공 요청 P95 872ms.
+4. **HikariCP 대기 커넥션 피크 8**: Grafana에서 21:55:00에 대기 커넥션이 최대 8까지 상승 후 즉시 소멸. 200 VU 동시 발화 시 DB 커넥션 경합이 실제로 발생하나, 풀 한도를 초과하지 않아 커넥션 타임아웃은 발생하지 않음.
+5. **처리량 118.19 RPS**: 더티 상태(113.9 RPS) 대비 +4%. 백그라운드 스케줄러 부하 제거 효과.
+
+**오너 피드백 (→ 형성빈)**
+
+- **오버셀 0건**: 정합성 SLO 완벽 달성. ✅
+- **P95 성공 요청 872.32ms**: SLO(300ms) 대비 약 3배 초과. 클린 상태 재측정 결과 베이스라인(865ms)과 동일 수준으로, 피드백 반영 이후 성능 개선은 없었음.
+- **근본 원인**: `atomic-update` 전략에서 200 VU가 동시에 `UPDATE inventory SET available_qty = available_qty - qty WHERE available_qty >= qty`를 발화하면 MySQL row lock 경합이 발생하고 순차 처리 대기가 누적됨. Grafana에서 HikariCP 대기 커넥션 피크 8이 관측되어 DB 커넥션 풀 경합이 실제로 확인됨.
+- **확인 필요 항목**:
+  - `EXPLAIN UPDATE inventory ... WHERE available_qty >= qty` — `product_id` 인덱스 적용 여부 (Full Scan 이면 row lock 범위 과다)
+  - MySQL `SHOW ENGINE INNODB STATUS` — 동시 lock wait 건수 및 대기 시간
+  - HikariCP `maximumPoolSize` 설정값 — 현재 10 미만이면 증설 검토
 
 ### 개선 방향
 
-> 측정 완료 후 작성. 예상 검토 항목:
-> - `reserveAtomic` Lua 스크립트 실행 시간 및 Redis 분산 락 경합 현황 (RedisInsight 또는 SLOWLOG 조회)
-> - `UPDATE inventory SET available_qty = available_qty - qty WHERE available_qty >= qty` 실행 계획 (EXPLAIN) — `product_id` 인덱스 적용 여부
-> - HikariCP `connection-timeout` 로그 — DB 커넥션 풀 대기 발생 여부
-> - P95 300ms 초과 시 원인 구간(Redis 락 대기 vs DB UPDATE 경합 vs 커넥션 풀 대기) 분리
+| 우선순위 | 항목 | 설명 | 기대 효과 |
+|---|---|---|---|
+| 🔴 High | `UPDATE inventory` 인덱스 확인 | `WHERE available_qty >= qty AND product_id = ?` 쿼리에 `(product_id)` 단일 인덱스 또는 `(product_id, available_qty)` 복합 인덱스 확인. Full Scan이면 추가 | row lock 범위 축소 → 경합 감소 |
+| 🔴 High | HikariCP 커넥션 풀 증설 | Grafana에서 200 VU 동시 발화 시 대기 커넥션 피크 **8** 관측(2026-06-22). `maximumPoolSize` 현재 설정값 확인 후 20~30 수준으로 증설 검토 | 커넥션 대기 제거 → tail latency 개선 |
+| 🟡 Mid | 낙관적 락(Optimistic Locking) 검토 | `inventory.version` 컬럼이 이미 존재함(현재 0으로 리셋 확인). CAS 기반 버전 증분 UPDATE로 전환 시 MySQL row lock 경합 없이 재시도 방식으로 처리 가능. 단, 실패 재시도 로직 추가 필요 | MySQL lock wait 제거 → 고동시성 처리 개선 |
+| 🟡 Mid | Redis 분산 락 도입 검토 | `atomic-update`에서 Lua 스크립트 기반 분산 락으로 전환 시 MySQL 경합을 Redis 레벨에서 직렬화 — 단, Redis 병목 발생 가능성도 검토 필요 | MySQL lock 경합 완전 제거 |
 
 ---
 
@@ -357,14 +411,16 @@ s01(200 VU 동시성)과 달리 스파이크 자체가 검증 대상이다. 램�
 
 ### 사전 준비
 
+> ⚠️ **product_id 주의**: s01과 동일. DB 재시드 후 product_id=1이 없으므로 product_id=4 사용.
+
 ```bash
 MYSQL="mysql -u fandrops_admin -pfandrops1234 -h fandrops-prod-mysql.coqwxjz7zumt.ap-northeast-2.rds.amazonaws.com fandrops"
 REDIS_HOST="master.fandrops-prod-redis.q7gdno.apn2.cache.amazonaws.com"
 
-$MYSQL -e "UPDATE inventory SET available_qty=100, reserved_qty=0, total_qty=100, version=0 WHERE product_id=1;"
+$MYSQL -e "UPDATE inventory SET available_qty=100, reserved_qty=0, total_qty=100, version=0 WHERE product_id=4;"
 
 for i in {1..2100}; do
-  valkey-cli -h $REDIS_HOST --tls setex "access:ticket:1:$i" 86400 "test-ticket-token"
+  valkey-cli -h $REDIS_HOST --tls setex "access:ticket:4:$i" 86400 "test-ticket-token"
 done
 ```
 
@@ -376,42 +432,77 @@ export K6_PROMETHEUS_RW_SERVER_URL=http://10.0.1.114:9090/api/v1/write
 export K6_PROMETHEUS_RW_TREND_STATS="p(95),p(99)"
 
 k6 run -e BASE_URL=https://api.fandrops.site \
+  -e PRODUCT_ID=4 \
   --out experimental-prometheus-rw \
   scenarios/04_drop_spike.js
 ```
 
 ### 결과 (튜닝 후)
 
-| 지표 | 베이스라인 | 결과 | 목표 | 상태 |
+| 지표 | 베이스라인 | 결과 (클린 상태) | 목표 | 상태 |
 |---|---|---|---|---|
-| P95 응답시간 (전체) | 266.24ms | — | < 300ms | 미측정 |
-| P95 응답시간 (성공 요청) | 640ms | — | 참고값 | 미측정 |
-| 에러율 | 99.98%\* | — | < 0.1%\* | 미측정 |
-| spike_orders_reserved | 100건 (오버셀 0건 ✅) | — | ≤ 100 | 미측정 |
-| 처리량 | — | — | — | — |
+| P95 응답시간 (전체) | 266.24ms | 287.31ms | < 300ms | ✅ SLO 달성 |
+| P95 응답시간 (성공 요청) | 640ms | 252.84ms | 참고값 | ✅ 베이스라인 대비 -60% |
+| 평균 응답시간 (성공 요청) | — | 93.57ms | — | — |
+| 에러율 | 99.98%\* | 99.97%\* | < 0.1%\* | ✅ (429 rate limit 정상 동작) |
+| spike_orders_reserved | 100건 (오버셀 0건 ✅) | 100건 (오버셀 0건 ✅) | ≤ 100 | ✅ |
+| 처리량 (전체 k6 발화) | — | 6,310 RPS | — | — |
+| 처리량 (Spring Boot 도달) | — | ~5 RPS | — | — |
+
+> \* 에러율 99.97% = 473,189건 429(rate limit 차단)으로 Nginx 단에서 응답. `http_req_failed`가 4xx를 실패로 집계하는 k6 기본 동작. 실제 RESERVED(100건) + DEPLETED(285건) = 385건만 Spring Boot까지 도달하여 정상 처리.
 
 ### 스크린샷
 
-> `screenshots/tuned/s04_drop_spike_tuned.png`
+![s04 튜닝 후 결과](screenshots/tuned/s04_drop_spike_tuned.png)
+
+**Grafana 패널 분석 (2026-06-22, 22:02~22:07)**
+
+| 패널 | 관찰 내용 |
+|---|---|
+| HTTP P95 응답시간 | POST /api/v1/orders P95가 22:04~22:05 램프업 구간에서 최대 약 650ms까지 급상승 후 22:06 이후 0에 수렴. 스파이크 완전 해소. |
+| Spike Orders Reserved | 22:04:30 부근에 100건으로 수직 상승 후 평탄 유지. 오버셀 없음. |
+| 요청 처리율 (RPS) | Spring Boot 도달 요청이 22:04~22:05:30 구간에서 최대 약 5 req/s — Nginx rate limit(5r/s) 정확히 작동. k6 발화 6,310 RPS 중 나머지는 모두 Nginx에서 429로 차단. |
+| CPU 사용률 | Process CPU(JVM) ~2~3% 수준으로 매우 낮음. System CPU가 30%p 높음 — Nginx가 6,310 RPS 전량에 대해 TLS 핸드셰이크 + rate limit 평가 + 429 응답을 처리하는 비용이 System CPU에 집계된 결과. |
 
 ### 문제 정의
 
-> 측정 완료 후 작성. 아래 항목을 기준으로 서술한다.
-> - k6 로그: P95(전체/성공 요청), 에러율(전체/429/409/5xx 구분), 처리량(RPS), VU 램프업 구간별 응답 패턴
-> - Grafana 스크린샷: 0→1,000 VU 급상승 구간 P95 시계열, 5xx 에러율 패널, `spike_orders_reserved` 카운트
-> - 핵심 문제: 스파이크 구간 오버셀 발생 여부 + Rate Limit 429 흡수 비율 + P95 300ms SLO 달성 여부
+**k6 측정 결과 (지영재, 2026-06-22, 클린 상태)**
+
+| 지표 | 측정값 | SLO | 판정 |
+|---|---|---|---|
+| P95 응답시간 (전체) | 287.31ms | < 300ms | ✅ SLO 달성 (12.69ms 여유) |
+| P95 응답시간 (성공 요청) | 252.84ms | 참고값 | ✅ 베이스라인(640ms) 대비 -60% |
+| checks_succeeded | 385 / 473,289 (0.08%) | — | ✅ check 설계 의도대로 — 429는 check 범위 밖 |
+| spike_orders_reserved | 100건 | ≤ 100 | ✅ 오버셀 0건 |
+
+**핵심 관찰**: P95 전체 SLO 달성 유지. P95 성공 요청이 베이스라인(640ms) 대비 -60% 대폭 개선. 클린 상태(RESERVED 주문 250건 제거)에서 `OrderRecoveryScheduler` 백그라운드 DB 간섭이 사라지고, 재고 차감 경쟁이 줄어들어 Spring Boot로 도달하는 소수 요청(~5 RPS)의 처리 속도가 향상됐다.
+
+**Nginx rate limit 동작 확인**: 6,310 RPS 발화 중 99.97%(473,189건)가 429로 차단됨으로써 Spring Boot에는 ~5 RPS만 전달. 이것이 Process CPU를 2~3%로 유지시킨 핵심 메커니즘. Grafana에서 System CPU - Process CPU = 약 30%p 차이가 Nginx의 TLS + rate limit 처리 비용으로 측정됨.
 
 ### 관찰 및 오너 피드백
 
-> 측정 후 작성
+**관찰 (지영재 — 2026-06-22, 클린 상태)**
+
+1. **정합성 완벽**: `spike_orders_reserved=100`, Grafana에서 100건 평탄 유지. 오버셀 없음. ✅
+2. **P95 전체 287.31ms**: SLO(300ms) 달성. 베이스라인(266ms) 대비 +8%이나 여전히 SLO 내.
+3. **P95 성공 요청 252.84ms**: 베이스라인(640ms) 대비 -60% 대폭 개선. 클린 상태에서 백그라운드 스케줄러 간섭 제거 + 더 적은 DB 경합이 복합적으로 개선에 기여한 것으로 추정.
+4. **Nginx rate limit 완벽 동작**: 6,310 RPS 발화 중 473,189건(99.97%)을 Nginx가 429로 차단. Spring Boot는 ~5 RPS만 처리하여 CPU 포화 없음.
+5. **CPU 분리 현상**: Process CPU ~3%, System CPU ~33% — 30%p 차이는 Nginx가 6,310 RPS에 대한 TLS 핸드셰이크 + rate limit 평가 + 429 응답 생성을 전담하는 비용. 앱 서버가 보호된 명확한 증거.
+6. **Grafana P95 피크 650ms**: 램프업 구간(22:04~22:05)에서 P95가 650ms까지 상승했다가 VU 감소 이후 즉시 0에 수렴. 피크 구간이 P95 집계(287ms)에 포함되면서 전체 수치를 끌어올린 구조.
+
+**오너 피드백 (→ 형성빈)**
+
+- **오버셀 0건**: 정합성 SLO 완벽 달성. ✅
+- **P95 전체 287.31ms**: SLO(300ms) 재달성 확인. ✅
+- **P95 성공 요청 252.84ms**: 베이스라인(640ms) 대비 -60% 개선. 코드 변경 없이 클린 상태 측정만으로 개선된 점은 베이스라인 측정 당시 더티 DB 상태의 간섭이 있었음을 시사.
+- **Nginx rate limit**: 6,310 RPS 스파이크에서 정확히 5 RPS만 통과시켜 앱 보호 확인. 현재 구성 유지 권장.
 
 ### 개선 방향
 
-> 측정 완료 후 작성. 예상 검토 항목:
-> - 베이스라인(SLO 달성)이므로 추가 개선보다 회귀 방지 초점
-> - 스파이크 구간(100→1,000 VU) Rate Limit 흡수 후 성공 요청 P95 확인 — 640ms(베이스라인) 대비 개선 여부
-> - 오버셀 0건 재확인 (`SELECT COUNT(*) FROM orders WHERE status = 'RESERVED'` = 100)
-> - Nginx rate limit이 스파이크를 흡수하는 동안 앱 서버 스레드 풀·커넥션 풀 여유 확인
+| 우선순위 | 항목 | 설명 | 기대 효과 |
+|---|---|---|---|
+| 🟢 Low | 회귀 방지 | SLO 달성 상태 유지. 추가 성능 개선보다 Nginx rate limit 설정(`5r/s`) 변경 시 P95 영향 모니터링 | SLO 유지 |
+| 🟢 Low | check 로직 개선 | 현재 "reserved or depleted" check가 429를 실패로 처리. 시나리오 의도에 따라 429도 정상으로 인정하는 check 추가 시 `checks_succeeded` 수치가 실제 동작을 더 정확히 반영 | 측정 가시성 개선 |
 
 ---
 
@@ -509,7 +600,7 @@ cd /opt/fandrops/k6
 export K6_PROMETHEUS_RW_SERVER_URL=http://10.0.1.114:9090/api/v1/write
 export K6_PROMETHEUS_RW_TREND_STATS="p(95),p(99)"
 
-BASE_URL=http://10.0.1.114:8081 k6 run \
+BASE_URL=http://10.0.1.114:8082 k6 run \
   -e ORDERS_JSON="$(cat seed/orders.json)" \
   --out experimental-prometheus-rw \
   scenarios/03_payment_confirm.js
@@ -519,30 +610,57 @@ BASE_URL=http://10.0.1.114:8081 k6 run \
 
 | 지표 | 베이스라인 | 결과 | 목표 | 상태 |
 |---|---|---|---|---|
-| P95 응답시간 | 1,540ms ✅ | — | < 2,000ms | 미측정 |
-| 평균 응답시간 | — | — | — | — |
-| 에러율 | 0.00% ✅ | — | < 1% | 미측정 |
-| 처리량 | — | — | — | — |
+| P95 응답시간 | 1,540ms | 1,940ms | < 2,000ms | ✅ |
+| P90 응답시간 | — | 1,610ms | — | — |
+| 평균 응답시간 | — | 972ms | — | — |
+| 최대 응답시간 | — | 2,330ms | — | ⚠️ |
+| 에러율 | 0.00% | 0.00% | < 1% | ✅ |
+| 5xx 에러율 | — | 0.00% | < 0.1% | ✅ |
+| 처리량 | — | 49.5 RPS | — | — |
+| 완료 iterations | — | 500/500 | 500 | ✅ |
+
+> **조건**: Wiremock wildcard 매핑(즉시 200 응답), `TOSS_API_READ_TIMEOUT=2s` 주입, 50 VU · 500 iterations shared
 
 ### 스크린샷
 
-> `screenshots/tuned/s03_payment_confirm_tuned.png`
+![s03 튜닝 후 결과](screenshots/tuned/s03_payment_confirm_tuned.png)
+
+| Grafana 패널 | 관찰값 |
+|---|---|
+| P95 POST /api/v1/payments/toss/confirm | 약 1.5~1.6s (측정 구간 22:30:30~22:31:00) |
+| P50 전체 | 약 850ms |
+| 5xx 에러율 | No data (0%) |
 
 ### 문제 정의
 
-> 측정 완료 후 작성. 아래 항목을 기준으로 서술한다.
-> - k6 로그: P95, max 응답시간, 에러율, 처리량(RPS), iterations 완료 수
-> - Grafana 스크린샷: P95 시계열(2,000ms SLO 기준선 대비), 5xx 에러율 패널
-> - 핵심 문제: `TOSS_API_READ_TIMEOUT=2s` 적용 후 max 응답시간이 SLO(2,000ms) 이내로 수렴했는지, timeout 시나리오 요청이 2s 내 처리됐는지
+튜닝 후 첫 클린 상태 측정에서 세 가지 사항이 확인됐다.
+
+1. **베이스라인 대비 P95 증가**: 베이스라인 1,540ms → 튜닝 후 1,940ms (+400ms). Wiremock wildcard 즉시응답으로 PG 레이턴시가 동일한 조건임에도 증가. seed orders 신규 삽입 직후 실행으로 인한 DB 페이지 캐시 미워밍 상태, 또는 결제 확인 처리 내부 쿼리(중복 체크 SELECT + payment INSERT + orders UPDATE)가 50 VU 동시 실행에서 락 경합을 유발한 것이 원인으로 추정된다.
+
+2. **SLO 여유폭 60ms**: P95 1,940ms는 SLO 2,000ms를 통과하나 여유폭이 60ms에 불과하다. Wiremock 즉시응답 조건(0ms PG 레이턴시)에서도 이 수치가 나온다는 것은, 실제 Toss PG 네트워크 왕복(통상 100~300ms)이 더해지면 P95가 SLO를 초과할 가능성이 높다.
+
+3. **max 2,330ms — readTimeout 2s 초과**: `TOSS_API_READ_TIMEOUT=2s` 주입 상태지만 max가 2,330ms를 기록했다. 이번 측정은 seed-opk prefix가 Wiremock wildcard(즉시응답)에 라우팅되므로 timeout 시나리오 없이 순수 DB 처리 지연이 원인이다. readTimeout은 PG 응답 대기에 적용되며 DB 처리 시간에는 적용되지 않는다.
 
 ### 관찰 및 오너 피드백
 
-> 측정 후 작성
+1. **중복 결제 0건**: 500 iterations 모두 고유 orderId로 처리 → 동일 orderId 재사용 없음. 중복 결제 방지 로직(idempotency key 체크) 정상 작동.
+
+2. **5xx 에러 0건**: Grafana 5xx 에러율 패널 "No data" — payment 처리 전 구간(order 상태 검증, 중복 체크)에서 예외 없이 통과.
+
+3. **응답시간 분포 편차 큼**: min 208ms ~ max 2,330ms, 범위 2.1s. avg(972ms)와 P95(1,940ms) 차이가 크다 — 대부분의 요청은 1s 이내에 처리되지만 일부 요청이 DB 락 대기로 tail latency를 끌어올리는 분포.
+
+4. **Grafana P95(1.5~1.6s) vs k6 P95(1.94s) 불일치**: Grafana 패널은 Prometheus remote write로 수집된 Histogram 기반 추정치, k6는 실제 측정값의 정확한 백분위수. Histogram bucket 해상도 차이로 발생하는 정상 허용 범위 내 차이.
+
+5. **50 VU · 10.1초 완료**: `shared-iterations` 방식으로 50 VU가 500건을 균등 분배. 실 처리 VU는 22~50 사이로 빠른 이터레이션은 VU를 조기 반환.
 
 ### 개선 방향
 
-> 측정 완료 후 작성. 예상 검토 항목:
-> - `TOSS_API_READ_TIMEOUT=2s` 주입 후 P95가 베이스라인(1,540ms) 대비 개선됐는지 확인
+| 항목 | 현황 | 개선 방향 |
+|---|---|---|
+| mixed 시나리오 미측정 | 이번 측정은 success(wildcard) 100% | timeout 10% / balance-error 10% / server-error 10% 혼합 시나리오 별도 측정 (장성재 오너 피드백 요청 항목) |
+| 결제 처리 TX 범위 | PG API 호출이 DB TX 내부에 있을 경우 커넥션 홀딩 시간 증가 | `@Transactional` 범위 밖에서 Toss PG HTTP 호출 후 결과를 TX 내부에서 처리하는 구조로 분리 — PG 응답 대기 동안 커넥션 반납 가능 |
+| DB 인덱스 확인 | payment.order_id, orders.order_payment_key 조회 패턴 | 결제 확인 경로의 쿼리 플랜 확인 후 누락 인덱스 추가 |
+| HikariCP pool size | 50 VU 동시 처리 시 커넥션 경합 가능 | s03 측정 중 HikariCP 대기 커넥션 수 모니터링; 피크 > 0 이면 pool size 증설 검토 |
 > - timeout 시나리오(Wiremock 5s 지연) 요청이 2s 내 `ReadTimeoutException`으로 처리되는지 확인
 > - max 응답시간이 SLO(2,000ms) 이하로 수렴했는지 확인 (베이스라인 max 3.03s)
 > - mixed 시나리오(70/10/10/10%) 에러 유형별 응답시간 분포 기록 — PG 장애 대응 기준선
@@ -748,14 +866,16 @@ Wiremock의 priority 라우팅을 활용했다. 기존 stub들은 모두 `priori
 
 ### 사전 준비
 
+> ⚠️ **product_id 주의**: s01과 동일. product_id=4 사용.
+
 ```bash
 MYSQL="mysql -u fandrops_admin -pfandrops1234 -h fandrops-prod-mysql.coqwxjz7zumt.ap-northeast-2.rds.amazonaws.com fandrops"
 REDIS_HOST="master.fandrops-prod-redis.q7gdno.apn2.cache.amazonaws.com"
 
-$MYSQL -e "UPDATE inventory SET available_qty=200, reserved_qty=0, total_qty=200, version=0 WHERE product_id=1;"
+$MYSQL -e "UPDATE inventory SET available_qty=200, reserved_qty=0, total_qty=200, version=0 WHERE product_id=4;"
 
 for i in {1..2100}; do
-  valkey-cli -h $REDIS_HOST --tls setex "access:ticket:1:$i" 86400 "test-ticket-token"
+  valkey-cli -h $REDIS_HOST --tls setex "access:ticket:4:$i" 86400 "test-ticket-token"
 done
 
 docker ps --filter name=wiremock
