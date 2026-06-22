@@ -295,6 +295,28 @@ class ArtistProfileServiceTest {
                         99L, 10L, "bio", null, null, null, null, null, "127.0.0.1", "trace"));
     }
 
+    @Test
+    @DisplayName("null 필드는 기존 값 유지 — PATCH null-safe 검증")
+    void updateArtistProfile_nullFields_preserveExistingValues() {
+        ArtistProfile profileWithData = ArtistProfile.builder()
+                .id(1L).agencyId(10L).name("BTS")
+                .fanCount(500L)
+                .joinedAt(LocalDateTime.of(2013, 6, 13, 0, 0))
+                .bio("기존 바이오")
+                .instagramUrl("https://instagram.com/bts")
+                .youtubeUrl("https://youtube.com/bts")
+                .build();
+        when(artistProfileRepository.findById(1L)).thenReturn(Optional.of(profileWithData));
+        when(artistProfileRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        ArtistProfile result = artistProfileService.updateArtistProfile(
+                1L, 10L, "새 바이오", null, null, null, null, null, "127.0.0.1", "trace");
+
+        assertEquals("새 바이오", result.getBio());
+        assertEquals("https://instagram.com/bts", result.getInstagramUrl());
+        assertEquals("https://youtube.com/bts", result.getYoutubeUrl());
+    }
+
     // ── generateProfileImagePresignedUrl ──────────────────────────────────────
 
     @Test

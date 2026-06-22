@@ -223,6 +223,14 @@ public class ArtistMemberService {
         return artistMemberRepository.findByArtistId(artistId);
     }
 
+    @Transactional(readOnly = true)
+    public List<ArtistMember> listByArtistIdPublic(Long artistId) {
+        artistProfileRepository.findById(artistId)
+                .orElseThrow(() -> new ArtistNotFoundException(
+                        "존재하지 않는 아티스트입니다. artistId=" + artistId));
+        return artistMemberRepository.findByArtistId(artistId);
+    }
+
     private ArtistMember findMemberWithOwnership(Long memberId, Long actorId) {
         ArtistMember member = artistMemberRepository.findById(memberId)
                 .orElseThrow(() -> new ArtistMemberNotFoundException(

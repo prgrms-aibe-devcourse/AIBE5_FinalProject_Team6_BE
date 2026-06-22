@@ -20,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -92,9 +93,25 @@ public class ArtistProfileService {
             String instagramUrl, String youtubeUrl, String twitterUrl, String officialUrl,
             String clientIp, String traceId) {
         ArtistProfile profile = findWithOwnership(artistId, agencyId);
-        profile.updateProfile(profileImageUrl, profile.getCoverImageUrl(), bio,
-                officialUrl, youtubeUrl, instagramUrl, twitterUrl);
+        profile.updateProfile(
+                profileImageUrl != null ? profileImageUrl : profile.getProfileImageUrl(),
+                profile.getCoverImageUrl(),
+                bio             != null ? bio             : profile.getBio(),
+                officialUrl     != null ? officialUrl     : profile.getHomepageUrl(),
+                youtubeUrl      != null ? youtubeUrl      : profile.getYoutubeUrl(),
+                instagramUrl    != null ? instagramUrl    : profile.getInstagramUrl(),
+                twitterUrl      != null ? twitterUrl      : profile.getTwitterUrl()
+        );
         ArtistProfile saved = artistProfileRepository.save(profile);
+
+        Map<String, Object> changes = new LinkedHashMap<>();
+        changes.put("artistId", artistId);
+        if (bio != null)             changes.put("bio", bio);
+        if (profileImageUrl != null) changes.put("profileImageUrl", profileImageUrl);
+        if (instagramUrl != null)    changes.put("instagramUrl", instagramUrl);
+        if (youtubeUrl != null)      changes.put("youtubeUrl", youtubeUrl);
+        if (twitterUrl != null)      changes.put("twitterUrl", twitterUrl);
+        if (officialUrl != null)     changes.put("officialUrl", officialUrl);
 
         auditLogPort.save(AuditLog.builder()
                 .occurredAt(Instant.now())
@@ -104,13 +121,14 @@ public class ArtistProfileService {
                 .resourceType("ARTIST_PROFILE")
                 .resourceId(artistId)
                 .traceId(traceId)
-                .afterJson(toJson(Map.of("bio", String.valueOf(bio), "artistId", artistId)))
+                .afterJson(toJson(changes))
                 .clientIp(clientIp)
                 .build());
 
         return saved;
     }
 
+    @Transactional
     public PresignedUploadResult generateProfileImagePresignedUrl(
             Long artistId, Long agencyId, String contentType, long contentLength,
             String clientIp, String traceId) {

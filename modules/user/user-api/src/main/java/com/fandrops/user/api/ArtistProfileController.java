@@ -1,9 +1,11 @@
 package com.fandrops.user.api;
 
 import com.fandrops.common.ApiResponse;
+import com.fandrops.user.api.dto.ArtistMemberSummaryResponse;
 import com.fandrops.user.api.dto.ArtistProfileListResponse;
 import com.fandrops.user.api.dto.ArtistProfileResponse;
 import com.fandrops.user.application.dto.ArtistProfileListResult;
+import com.fandrops.user.application.service.ArtistMemberService;
 import com.fandrops.user.application.service.ArtistProfileService;
 import org.springframework.core.env.Environment;
 import org.springframework.http.ResponseEntity;
@@ -13,6 +15,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/v1/artists")
 public class ArtistProfileController extends UserControllerSupport {
@@ -20,10 +24,14 @@ public class ArtistProfileController extends UserControllerSupport {
     private static final int MAX_PAGE_SIZE = 100;
 
     private final ArtistProfileService artistProfileService;
+    private final ArtistMemberService artistMemberService;
 
-    public ArtistProfileController(ArtistProfileService artistProfileService, Environment environment) {
+    public ArtistProfileController(ArtistProfileService artistProfileService,
+                                    ArtistMemberService artistMemberService,
+                                    Environment environment) {
         super(environment);
         this.artistProfileService = artistProfileService;
+        this.artistMemberService = artistMemberService;
     }
 
     @GetMapping("/{id}")
@@ -39,5 +47,14 @@ public class ArtistProfileController extends UserControllerSupport {
         int safeSize = Math.max(1, Math.min(size, MAX_PAGE_SIZE));
         ArtistProfileListResult result = artistProfileService.listArtistProfiles(cursor, safeSize);
         return ResponseEntity.ok(ApiResponse.ok(ArtistProfileListResponse.from(result), traceId()));
+    }
+
+    @GetMapping("/{artistId}/members")
+    public ResponseEntity<ApiResponse<List<ArtistMemberSummaryResponse>>> listMembers(
+            @PathVariable Long artistId) {
+        List<ArtistMemberSummaryResponse> members = artistMemberService.listByArtistIdPublic(artistId).stream()
+                .map(ArtistMemberSummaryResponse::from)
+                .toList();
+        return ResponseEntity.ok(ApiResponse.ok(members, traceId()));
     }
 }

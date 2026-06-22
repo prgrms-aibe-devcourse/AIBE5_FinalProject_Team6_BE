@@ -475,6 +475,42 @@ class ArtistMemberServiceTest {
                 () -> artistMemberService.listByArtistId(99L, 10L));
     }
 
+    // ── listByArtistIdPublic ──────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("공개 멤버 목록 — 존재하는 아티스트 → 소속 멤버 목록 반환")
+    void listByArtistIdPublic_artistExists_returnsMemberList() {
+        when(artistProfileRepository.findById(1L)).thenReturn(Optional.of(dummyProfile()));
+        when(artistMemberRepository.findByArtistId(1L)).thenReturn(List.of(dummyMember()));
+
+        List<ArtistMember> result = artistMemberService.listByArtistIdPublic(1L);
+
+        assertEquals(1, result.size());
+        verify(artistMemberRepository).findByArtistId(1L);
+    }
+
+    @Test
+    @DisplayName("공개 멤버 목록 — 존재하지 않는 아티스트 → ArtistNotFoundException")
+    void listByArtistIdPublic_artistNotFound_throwsArtistNotFoundException() {
+        when(artistProfileRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThrows(ArtistNotFoundException.class,
+                () -> artistMemberService.listByArtistIdPublic(99L));
+
+        verify(artistMemberRepository, never()).findByArtistId(any());
+    }
+
+    @Test
+    @DisplayName("공개 멤버 목록 — 멤버 없는 아티스트 → 빈 목록 반환")
+    void listByArtistIdPublic_noMembers_returnsEmptyList() {
+        when(artistProfileRepository.findById(1L)).thenReturn(Optional.of(dummyProfile()));
+        when(artistMemberRepository.findByArtistId(1L)).thenReturn(List.of());
+
+        List<ArtistMember> result = artistMemberService.listByArtistIdPublic(1L);
+
+        assertTrue(result.isEmpty());
+    }
+
     // ── 헬퍼 ─────────────────────────────────────────────────────────────────
 
     private ArtistProfile dummyProfile() {
