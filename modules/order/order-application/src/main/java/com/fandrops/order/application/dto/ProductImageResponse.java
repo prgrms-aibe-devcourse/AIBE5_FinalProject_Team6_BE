@@ -7,7 +7,8 @@ import lombok.Getter;
 public class ProductImageResponse {
     private final String imageUrl;
     private final int sortOrder;
-    private final boolean isPrimary;
+    /** Boolean(wrapper) 사용 — Lombok이 getIsPrimary() 생성 → Jackson이 "isPrimary"로 직렬화 */
+    private final Boolean isPrimary;
 
     public ProductImageResponse(String imageUrl, int sortOrder, boolean isPrimary) {
         this.imageUrl = imageUrl;
