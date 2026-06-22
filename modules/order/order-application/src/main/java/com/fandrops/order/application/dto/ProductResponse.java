@@ -3,6 +3,7 @@ package com.fandrops.order.application.dto;
 import lombok.Getter;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Getter
 public class ProductResponse {
@@ -17,11 +18,12 @@ public class ProductResponse {
     private final LocalDateTime dropsStartAt;
     private final LocalDateTime dropsEndAt;
     private final LocalDateTime updatedAt;
+    private final List<ProductImageResponse> images;
 
     public ProductResponse(Long id, Long artistId, String name, BigDecimal price,
                            String status, int totalQty, int reservedQty, int availableQty,
                            LocalDateTime dropsStartAt, LocalDateTime dropsEndAt,
-                           LocalDateTime updatedAt) {
+                           LocalDateTime updatedAt, List<ProductImageResponse> images) {
         this.id = id;
         this.artistId = artistId;
         this.name = name;
@@ -33,5 +35,6 @@ public class ProductResponse {
         this.dropsStartAt = dropsStartAt;
         this.dropsEndAt = dropsEndAt;
         this.updatedAt = updatedAt;
+        this.images = images != null ? images : List.of();
     }
 }

@@ -16,6 +16,7 @@ import com.fandrops.order.domain.port.InventoryReadPort;
 import com.fandrops.order.domain.port.InventoryReservePort;
 import com.fandrops.order.domain.port.InventoryRestorePort;
 import com.fandrops.order.domain.port.OrderRepository;
+import com.fandrops.order.domain.port.ProductImageRepository;
 import com.fandrops.order.domain.port.ProductPricePort;
 import com.fandrops.order.domain.port.ProductRepository;
 import com.fandrops.order.domain.port.RestockAlertRepository;
@@ -25,6 +26,7 @@ import com.fandrops.order.infrastructure.adapter.CartRepositoryAdapter;
 import com.fandrops.order.infrastructure.adapter.InventoryConfirmAdapter;
 import com.fandrops.order.infrastructure.adapter.InventoryReserveAdapter;
 import com.fandrops.order.infrastructure.adapter.InventoryRestoreAdapter;
+import com.fandrops.order.infrastructure.adapter.ProductImageRepositoryAdapter;
 import com.fandrops.order.infrastructure.adapter.ProductPriceAdapter;
 import com.fandrops.order.infrastructure.adapter.ProductRepositoryAdapter;
 import com.fandrops.order.infrastructure.adapter.RestockAlertRepositoryAdapter;
@@ -33,6 +35,7 @@ import com.fandrops.order.infrastructure.persistence.CartItemJpaRepository;
 import com.fandrops.order.infrastructure.persistence.CartJpaRepository;
 import com.fandrops.order.infrastructure.persistence.OrderJpaRepository;
 import com.fandrops.order.infrastructure.persistence.OrderRepositoryAdapter;
+import com.fandrops.order.infrastructure.persistence.ProductImageJpaRepository;
 import com.fandrops.order.infrastructure.persistence.ProductJpaRepository;
 import com.fandrops.order.infrastructure.persistence.RestockAlertJpaRepository;
 import com.fandrops.order.infrastructure.persistence.StoreBannerJpaRepository;
@@ -90,10 +93,17 @@ public class OrderConfig implements AsyncConfigurer {
     }
 
     @Bean
+    public ProductImageRepository productImageRepository(ProductImageJpaRepository jpaRepository) {
+        return new ProductImageRepositoryAdapter(jpaRepository);
+    }
+
+    @Bean
     public ProductService productService(ProductRepository productRepository,
                                          InventoryCreatePort inventoryCreatePort,
-                                         InventoryReadPort inventoryReadPort) {
-        return new ProductService(productRepository, inventoryCreatePort, inventoryReadPort);
+                                         InventoryReadPort inventoryReadPort,
+                                         ProductImageRepository productImageRepository) {
+        return new ProductService(productRepository, inventoryCreatePort, inventoryReadPort,
+                productImageRepository);
     }
 
     @Bean

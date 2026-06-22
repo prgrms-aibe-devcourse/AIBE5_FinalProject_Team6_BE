@@ -10,6 +10,7 @@ import com.fandrops.order.domain.ProductStatus;
 import com.fandrops.order.domain.exception.ProductNotFoundException;
 import com.fandrops.order.domain.port.InventoryCreatePort;
 import com.fandrops.order.domain.port.InventoryReadPort;
+import com.fandrops.order.domain.port.ProductImageRepository;
 import com.fandrops.order.domain.port.ProductRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -41,6 +42,7 @@ class ProductServiceTest {
     @Mock private ProductRepository productRepository;
     @Mock private InventoryCreatePort inventoryCreatePort;
     @Mock private InventoryReadPort inventoryReadPort;
+    @Mock private ProductImageRepository productImageRepository;
 
     @InjectMocks
     private ProductService sut;
@@ -75,6 +77,7 @@ class ProductServiceTest {
             given(productRepository.findRegularProducts(null, null, 20)).willReturn(List.of(p));
             given(inventoryReadPort.getByProductIds(anyList()))
                     .willReturn(Map.of(PRODUCT_ID, inventoryInfo()));
+            given(productImageRepository.findThumbnailsByProductIds(anyList())).willReturn(Map.of());
 
             ProductListResponse result = sut.getProducts("regular", null, null, 20);
 
@@ -94,6 +97,7 @@ class ProductServiceTest {
             );
             given(productRepository.findRegularProducts(null, null, 3)).willReturn(products);
             given(inventoryReadPort.getByProductIds(anyList())).willReturn(Map.of());
+            given(productImageRepository.findThumbnailsByProductIds(anyList())).willReturn(Map.of());
 
             ProductListResponse result = sut.getProducts("regular", null, null, 3);
 
@@ -106,6 +110,7 @@ class ProductServiceTest {
         void getProducts_inventoryMissing_fallbackZero() {
             given(productRepository.findRegularProducts(null, null, 20)).willReturn(List.of(product()));
             given(inventoryReadPort.getByProductIds(anyList())).willReturn(Map.of());
+            given(productImageRepository.findThumbnailsByProductIds(anyList())).willReturn(Map.of());
 
             var item = sut.getProducts("regular", null, null, 20).getItems().get(0);
 
@@ -118,6 +123,7 @@ class ProductServiceTest {
         void getProducts_withArtistId_filtersCorrectly() {
             given(productRepository.findRegularProducts(ARTIST_ID, null, 20)).willReturn(List.of(product()));
             given(inventoryReadPort.getByProductIds(anyList())).willReturn(Map.of());
+            given(productImageRepository.findThumbnailsByProductIds(anyList())).willReturn(Map.of());
 
             ProductListResponse result = sut.getProducts("regular", ARTIST_ID, null, 20);
 
@@ -135,6 +141,7 @@ class ProductServiceTest {
         void getProducts_drops_callsDropsRepository() {
             given(productRepository.findDropsProducts(null, null, 20)).willReturn(List.of(dropsProduct(1L)));
             given(inventoryReadPort.getByProductIds(anyList())).willReturn(Map.of());
+            given(productImageRepository.findThumbnailsByProductIds(anyList())).willReturn(Map.of());
 
             ProductListResponse result = sut.getProducts("drops", null, null, 20);
 
@@ -148,6 +155,7 @@ class ProductServiceTest {
         void getProducts_drops_withArtistId() {
             given(productRepository.findDropsProducts(ARTIST_ID, null, 20)).willReturn(List.of(dropsProduct(1L)));
             given(inventoryReadPort.getByProductIds(anyList())).willReturn(Map.of());
+            given(productImageRepository.findThumbnailsByProductIds(anyList())).willReturn(Map.of());
 
             sut.getProducts("drops", ARTIST_ID, null, 20);
 
@@ -165,6 +173,7 @@ class ProductServiceTest {
         void getProduct_success() {
             given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product()));
             given(inventoryReadPort.getByProductId(PRODUCT_ID)).willReturn(inventoryInfo());
+            given(productImageRepository.findByProductId(PRODUCT_ID)).willReturn(List.of());
 
             ProductResponse result = sut.getProduct(PRODUCT_ID);
 
