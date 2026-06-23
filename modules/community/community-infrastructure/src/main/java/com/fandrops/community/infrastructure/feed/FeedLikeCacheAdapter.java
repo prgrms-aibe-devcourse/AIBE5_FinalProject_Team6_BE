@@ -61,6 +61,8 @@ public class FeedLikeCacheAdapter implements FeedLikeCachePort {
 
     @Override
     public void evictByFanId(Long fanId) {
+        // TODO: keyspace 규모 증가 시 SCAN 지연 재검토 필요
+        // 현재 fan 1명당 활성 키 1~2개로 무해, 향후 모니터링 권장
         String pattern = KEY_PREFIX + fanId + ":*";
         try {
             redisTemplate.execute((RedisCallback<Void>) conn -> {

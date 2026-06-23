@@ -49,6 +49,8 @@ public class FeedLikeService {
                 throw new AlreadyLikedException("이미 좋아요를 눌렀습니다.");
             }
             feedLikeRepository.save(FeedLike.byFan(feedId, fanId, artistId, clock));
+            // evict 실패 시 최대 30s(TTL) 동안 이전 좋아요 목록 반환 허용
+            // like/unlike는 DB 커밋 완료 후이므로 정합성에 영향 없음
             feedLikeCachePort.evictByFanId(fanId);
         } else {
             if (artistMemberId == null) {
@@ -74,6 +76,8 @@ public class FeedLikeService {
         feedLikeRepository.delete(like);
         feedRepository.decrementLikeCount(feedId);
         if (fanId != null) {
+            // evict 실패 시 최대 30s(TTL) 동안 이전 좋아요 목록 반환 허용
+            // like/unlike는 DB 커밋 완료 후이므로 정합성에 영향 없음
             feedLikeCachePort.evictByFanId(fanId);
         }
     }
