@@ -1318,6 +1318,60 @@ if ((now - registeredAt) > sseTimeoutMs - 5_000) { ... }  // 속성값 기반 �
 
 ---
 
+### 8차 실행 트러블슈팅 (2026-06-23)
+
+**GHA Run**: [#28028688794](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/actions/runs/28028688794/job/82963176694)
+
+#### 증상
+
+| 지표 | 값 |
+|---|---|
+| `checks_succeeded` | 0.00% (0 / 14,351) |
+| `http_req_failed` | 100.00% |
+| `http_req_duration` p90 / p95 | 64s / 64s |
+
+```
+time="2026-06-23T13:12:23Z" level=warning msg="Request Failed" error="request timeout"
+```
+
+- **에러 타입이 `unexpected EOF` → `request timeout`으로 변경** — 7차 서버 사이드 fix(sseTimeoutMs 300s) 적용 효과 확인
+- t=~60s에 mass timeout 발생
+
+#### 원인 분석
+
+7차 fix로 서버가 295s까지 연결을 유지하게 됐으나, **k6 스크립트의 HTTP timeout이 여전히 `65s`**로 설정되어 있어 k6가 서버보다 먼저 연결을 포기한다.
+
+```
+[타임아웃 주체 역전]
+
+fix 이전: 서버(55s proactive close) < k6 timeout(65s) → 서버가 먼저 EOF
+fix 이후: 서버(295s proactive close) > k6 timeout(65s) → k6가 먼저 request timeout
+```
+
+| 항목 | 값 |
+|---|---|
+| `sseTimeoutMs` (서버 proactive close) | 295,000ms (300s - 5s) |
+| k6 `timeout` (05_sse_queue.js line 82) | **65s** |
+| `normal_load` 스테이지 최대 지속 | 105s |
+
+`65s` timeout은 서버가 55s에 먼저 닫던 시절 기준값이었다. sseTimeoutMs 증가 이후 기준이 무효화됨.
+
+#### 조치
+
+`infra/k6/scenarios/05_sse_queue.js` timeout 증가:
+
+```js
+// 변경 전
+timeout: '65s',
+
+// 변경 후
+timeout: '310s',  // sseTimeoutMs(300s) + 10s 여유. 서버가 295s에 먼저 graceful close
+```
+
+> **교훈**: k6 timeout과 서버 SseEmitter timeout은 연동된 값이다. 어느 한쪽을 변경하면 반드시 다른 쪽도 검토해야 한다.
+
+---
+
 ### 결과 (튜닝 후)
 
 | 지표 | 베이스라인 | 결과 | 목표 | 상태 |
