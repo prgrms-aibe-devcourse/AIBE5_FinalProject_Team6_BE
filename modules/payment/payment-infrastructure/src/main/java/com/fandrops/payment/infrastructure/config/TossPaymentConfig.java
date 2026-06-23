@@ -1,6 +1,7 @@
 package com.fandrops.payment.infrastructure.config;
 
 import com.fandrops.payment.application.payment.PaymentConfirmService;
+import com.fandrops.payment.application.payment.PaymentConfirmTxHelper;
 import com.fandrops.payment.application.payment.PaymentQueryService;
 import com.fandrops.payment.application.payment.PaymentTimeoutItemProcessor;
 import com.fandrops.payment.application.payment.PaymentTimeoutService;
@@ -65,10 +66,15 @@ public class TossPaymentConfig {
 
 
     @Bean
-    public PaymentConfirmService paymentConfirmService(PaymentRepository paymentRepository,
-                                                       TossPaymentPort tossPaymentPort,
-                                                       ApplicationEventPublisher eventPublisher) {
-        return new PaymentConfirmService(paymentRepository, tossPaymentPort, eventPublisher);
+    public PaymentConfirmTxHelper paymentConfirmTxHelper(PaymentRepository paymentRepository,
+                                                          ApplicationEventPublisher eventPublisher) {
+        return new PaymentConfirmTxHelper(paymentRepository, eventPublisher);
+    }
+
+    @Bean
+    public PaymentConfirmService paymentConfirmService(PaymentConfirmTxHelper paymentConfirmTxHelper,
+                                                       TossPaymentPort tossPaymentPort) {
+        return new PaymentConfirmService(paymentConfirmTxHelper, tossPaymentPort);
     }
 
     @Bean

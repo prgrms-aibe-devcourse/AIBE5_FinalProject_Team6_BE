@@ -1,35 +1,33 @@
 package com.fandrops.payment.application.payment;
 
 import com.fandrops.payment.domain.payment.Payment;
-import com.fandrops.payment.domain.payment.PaymentRepository;
 import com.fandrops.payment.domain.payment.PaymentStatus;
 import java.time.Instant;
-import java.util.Optional;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.context.ApplicationEventPublisher;
+
+import org.springframework.dao.OptimisticLockingFailureException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.doThrow;
 
 @ExtendWith(MockitoExtension.class)
 class PaymentConfirmServiceTest {
 
-    @Mock private PaymentRepository paymentRepository;
+    @Mock private PaymentConfirmTxHelper txHelper;
     @Mock private TossPaymentPort tossPaymentPort;
-    @Mock private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks private PaymentConfirmService service;
 
@@ -38,128 +36,82 @@ class PaymentConfirmServiceTest {
     private static final String ORDER_PAYMENT_KEY = "order-uuid-abc-123";
     private static final long AMOUNT = 50_000L;
 
-    private Payment pendingPayment;
-
-    @BeforeEach
-    void setUp() {
-        pendingPayment = Payment.create(ORDER_ID, AMOUNT);
-    }
+    private final PaymentConfirmCommand command =
+            new PaymentConfirmCommand(ORDER_ID, TOSS_KEY, ORDER_PAYMENT_KEY, AMOUNT);
 
     @Test
-    @DisplayName("P-1: 동일 tossPaymentKey 재요청 → 기존 결제 결과 멱등 반환 (PG 재호출 없음)")
-    void p1_sameTosskeyReturnsExisting() {
-        Payment existing = Payment.create(ORDER_ID, AMOUNT);
-        existing.confirm(TOSS_KEY, "카드", Instant.now());
+    @DisplayName("precheck done → PG 호출 없이 조기 반환")
+    void earlyReturn_whenPrecheckIsDone() {
+        Payment existing = Payment.reconstitute(1L, ORDER_ID, TOSS_KEY, AMOUNT, "카드",
+                PaymentStatus.SUCCESS, Instant.now(), null, Instant.now(), 1);
+        when(txHelper.precheck(command)).thenReturn(PrecheckResult.done(PaymentConfirmResult.from(existing)));
 
-        when(paymentRepository.findByTossPaymentKey(TOSS_KEY)).thenReturn(Optional.of(existing));
-
-        PaymentConfirmResult result = service.confirm(new PaymentConfirmCommand(ORDER_ID, TOSS_KEY, ORDER_PAYMENT_KEY, AMOUNT));
+        PaymentConfirmResult result = service.confirm(command);
 
         assertThat(result.getStatus()).isEqualTo(PaymentStatus.SUCCESS);
         verify(tossPaymentPort, never()).confirm(anyString(), anyLong(), anyString());
     }
 
     @Test
-    @DisplayName("P-2: confirm 성공 → Payment(SUCCESS) 저장, PaymentApprovedEvent 발행")
-    void p2_confirmSuccess_savesSuccessAndPublishesEvent() {
-        when(paymentRepository.findByTossPaymentKey(TOSS_KEY)).thenReturn(Optional.empty());
-        when(paymentRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.of(pendingPayment));
+    @DisplayName("precheck proceed + PG 성공 → applySuccess 호출")
+    void pgSuccess_callsApplySuccess() {
+        Payment payment = Payment.create(ORDER_ID, AMOUNT);
+        when(txHelper.precheck(command)).thenReturn(PrecheckResult.proceed(payment));
         when(tossPaymentPort.confirm(TOSS_KEY, AMOUNT, ORDER_PAYMENT_KEY))
                 .thenReturn(TossConfirmResult.success("카드", Instant.now()));
-        when(paymentRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        Payment confirmed = Payment.reconstitute(1L, ORDER_ID, TOSS_KEY, AMOUNT, "카드",
+                PaymentStatus.SUCCESS, Instant.now(), null, Instant.now(), 1);
+        when(txHelper.applySuccess(eq(payment), eq(TOSS_KEY), eq("카드"), any(Instant.class)))
+                .thenReturn(PaymentConfirmResult.from(confirmed));
 
-        PaymentConfirmResult result = service.confirm(new PaymentConfirmCommand(ORDER_ID, TOSS_KEY, ORDER_PAYMENT_KEY, AMOUNT));
+        PaymentConfirmResult result = service.confirm(command);
 
         assertThat(result.getStatus()).isEqualTo(PaymentStatus.SUCCESS);
-        assertThat(result.getPaidAt()).isNotNull();
-        verify(eventPublisher).publishEvent(any(PaymentApprovedEvent.class));
     }
 
     @Test
-    @DisplayName("P-3: confirm 실패 → Payment(FAILED) 저장, PaymentFailedEvent 발행")
-    void p3_confirmFailure_savesFailedAndPublishesEvent() {
-        when(paymentRepository.findByTossPaymentKey(TOSS_KEY)).thenReturn(Optional.empty());
-        when(paymentRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.of(pendingPayment));
+    @DisplayName("precheck proceed + PG 실패 → applyFailure 호출, PaymentConfirmFailedException 전파")
+    void pgFailure_callsApplyFailure() {
+        Payment payment = Payment.create(ORDER_ID, AMOUNT);
+        when(txHelper.precheck(command)).thenReturn(PrecheckResult.proceed(payment));
         when(tossPaymentPort.confirm(TOSS_KEY, AMOUNT, ORDER_PAYMENT_KEY))
                 .thenReturn(TossConfirmResult.failure("REJECT_CARD_COMPANY", "카드사 거절"));
-        when(paymentRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(txHelper.applyFailure(eq(payment), eq("REJECT_CARD_COMPANY"), eq("카드사 거절")))
+                .thenThrow(new PaymentConfirmFailedException("REJECT_CARD_COMPANY", "카드사 거절"));
 
-        assertThatThrownBy(() -> service.confirm(new PaymentConfirmCommand(ORDER_ID, TOSS_KEY, ORDER_PAYMENT_KEY, AMOUNT)))
-                .isInstanceOf(PaymentConfirmFailedException.class)
-                .hasMessageContaining("카드사 거절");
-
-        verify(eventPublisher).publishEvent(any(PaymentFailedEvent.class));
+        assertThatThrownBy(() -> service.confirm(command))
+                .isInstanceOf(PaymentConfirmFailedException.class);
     }
 
     @Test
-    @DisplayName("orderId 기준 이미 SUCCESS → 멱등 200 반환")
-    void alreadySuccess_idempotentReturn() {
-        Payment successPayment = Payment.create(ORDER_ID, AMOUNT);
-        successPayment.confirm(TOSS_KEY, "카드", Instant.now());
-
-        when(paymentRepository.findByTossPaymentKey(TOSS_KEY)).thenReturn(Optional.empty());
-        when(paymentRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.of(successPayment));
-
-        PaymentConfirmResult result = service.confirm(new PaymentConfirmCommand(ORDER_ID, TOSS_KEY, ORDER_PAYMENT_KEY, AMOUNT));
-
-        assertThat(result.getStatus()).isEqualTo(PaymentStatus.SUCCESS);
-        verify(tossPaymentPort, never()).confirm(anyString(), anyLong(), anyString());
-    }
-
-    @Test
-    @DisplayName("P-5: FAILED 상태 결제 재요청 → PaymentAlreadyFailedException")
-    void p5_failedPayment_throwsAlreadyFailed() {
-        Payment failedPayment = Payment.create(ORDER_ID, AMOUNT);
-        failedPayment.fail(Instant.now());
-
-        when(paymentRepository.findByTossPaymentKey(TOSS_KEY)).thenReturn(Optional.empty());
-        when(paymentRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.of(failedPayment));
-
-        assertThatThrownBy(() -> service.confirm(new PaymentConfirmCommand(ORDER_ID, TOSS_KEY, ORDER_PAYMENT_KEY, AMOUNT)))
-                .isInstanceOf(PaymentAlreadyFailedException.class);
-
-        verify(tossPaymentPort, never()).confirm(anyString(), anyLong(), anyString());
-    }
-
-    @Test
-    @DisplayName("P-6: 금액 불일치 → IllegalArgumentException")
-    void p6_amountMismatch_throwsIllegalArgument() {
-        long wrongAmount = AMOUNT + 1_000L;
-
-        when(paymentRepository.findByTossPaymentKey(TOSS_KEY)).thenReturn(Optional.empty());
-        when(paymentRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.of(pendingPayment));
-
-        assertThatThrownBy(() -> service.confirm(new PaymentConfirmCommand(ORDER_ID, TOSS_KEY, ORDER_PAYMENT_KEY, wrongAmount)))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("결제 금액 불일치");
-
-        verify(tossPaymentPort, never()).confirm(anyString(), anyLong(), anyString());
-    }
-
-    @Test
-    @DisplayName("P-8: Payment 레코드 미존재 → lazy-create 후 confirm 정상 진행")
-    void p8_noExistingPayment_lazyCreateAndConfirm() {
-        when(paymentRepository.findByTossPaymentKey(TOSS_KEY)).thenReturn(Optional.empty());
-        when(paymentRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.empty());
-        when(paymentRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+    @DisplayName("applySuccess 낙관적 락 충돌 → precheck 재시도 후 이미 완료된 결과 멱등 반환")
+    void optimisticLockConflict_retriesPrecheck_returnsDone() {
+        Payment payment = Payment.create(ORDER_ID, AMOUNT);
+        Payment confirmed = Payment.reconstitute(1L, ORDER_ID, TOSS_KEY, AMOUNT, "카드",
+                PaymentStatus.SUCCESS, Instant.now(), null, Instant.now(), 1);
+        when(txHelper.precheck(command))
+                .thenReturn(PrecheckResult.proceed(payment))
+                .thenReturn(PrecheckResult.done(PaymentConfirmResult.from(confirmed)));
         when(tossPaymentPort.confirm(TOSS_KEY, AMOUNT, ORDER_PAYMENT_KEY))
                 .thenReturn(TossConfirmResult.success("카드", Instant.now()));
+        when(txHelper.applySuccess(eq(payment), eq(TOSS_KEY), eq("카드"), any(Instant.class)))
+                .thenThrow(new OptimisticLockingFailureException("version conflict"));
 
-        PaymentConfirmResult result = service.confirm(new PaymentConfirmCommand(ORDER_ID, TOSS_KEY, ORDER_PAYMENT_KEY, AMOUNT));
+        PaymentConfirmResult result = service.confirm(command);
 
         assertThat(result.getStatus()).isEqualTo(PaymentStatus.SUCCESS);
-        verify(eventPublisher).publishEvent(any(PaymentApprovedEvent.class));
     }
 
     @Test
-    @DisplayName("P-7: PG 서버 오류 → TossPaymentUnavailableException 전파")
-    void p7_pgUnavailable_propagatesException() {
-        when(paymentRepository.findByTossPaymentKey(TOSS_KEY)).thenReturn(Optional.empty());
-        when(paymentRepository.findByOrderId(ORDER_ID)).thenReturn(Optional.of(pendingPayment));
+    @DisplayName("PG 서버 오류 → TossPaymentUnavailableException 전파, applyFailure 미호출")
+    void pgUnavailable_propagatesException() {
+        Payment payment = Payment.create(ORDER_ID, AMOUNT);
+        when(txHelper.precheck(command)).thenReturn(PrecheckResult.proceed(payment));
         doThrow(new TossPaymentUnavailableException("Toss PG 일시 오류: 500"))
                 .when(tossPaymentPort).confirm(TOSS_KEY, AMOUNT, ORDER_PAYMENT_KEY);
 
-        assertThatThrownBy(() -> service.confirm(new PaymentConfirmCommand(ORDER_ID, TOSS_KEY, ORDER_PAYMENT_KEY, AMOUNT)))
+        assertThatThrownBy(() -> service.confirm(command))
                 .isInstanceOf(TossPaymentUnavailableException.class);
+        verify(txHelper, never()).applyFailure(any(), anyString(), anyString());
     }
 }
