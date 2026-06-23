@@ -20,7 +20,7 @@ public class SseEmitterRegistry {
     // key: "productId:fanId" → 등록 시각(ms) — heartbeat에서 proactive close 기준
     private final ConcurrentHashMap<String, Long> registrationTimes = new ConcurrentHashMap<>();
 
-    @Value("${fandrops.queue.sse-timeout-ms:60000}")
+    @Value("${fandrops.queue.sse-timeout-ms:300000}")
     private long sseTimeoutMs;
 
     @Value("${fandrops.ratelimit.sse-max-emitters:2000}")
@@ -102,7 +102,7 @@ public class SseEmitterRegistry {
         for (Map.Entry<String, SseEmitter> entry : emitters.entrySet()) {
             String key = entry.getKey();
             Long registeredAt = registrationTimes.get(key);
-            if (registeredAt != null && (now - registeredAt) > 55_000) {
+            if (registeredAt != null && (now - registeredAt) > sseTimeoutMs - 5_000) {
                 // Spring timeout 전에 스케줄러 컨텍스트에서 정상 종료 → HTTP 200 보장
                 try {
                     entry.getValue().complete();

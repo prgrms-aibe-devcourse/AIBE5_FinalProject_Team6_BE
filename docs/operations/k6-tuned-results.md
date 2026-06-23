@@ -1228,6 +1228,96 @@ location /api/v1/queue/stream {
 
 ---
 
+### 7차 실행 트러블슈팅 (2026-06-23)
+
+**GHA Run**: [#28025103211](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/actions/runs/28025103211/job/82950796500)
+
+#### 증상
+
+| 지표 | 값 |
+|---|---|
+| `checks_succeeded` | 0.00% (0 / 12,850) |
+| `http_req_failed` | 100.00% (전 구간) |
+| `http_req_duration` p50 / p95 | 158ms / 60s |
+| `sse_connections_rejected` | 0건 (threshold `count>0` ✗) |
+| `interrupted iterations` | 4,252건 |
+
+```
+time="2026-06-23T12:10:37Z" level=warning msg="Request Failed" error="unexpected EOF"
+time="2026-06-23T12:15:08Z" level=warning msg="Request Failed" error="Get ".../api/v1/queue/stream/4": dial: i/o timeout"
+```
+
+- 시작(12:09:38) + 59초 = 12:10:37에 mass EOF → 6차와 동일한 60초 타임아웃 패턴
+- t=5m30s 이후 overflow 구간에서 `dial: i/o timeout` 추가 발생
+
+#### 원인 분석
+
+두 가지 원인이 독립적으로 작용한다.
+
+**원인 1: nginx `proxy_http_version 1.1` 미배포**
+
+6차에서 `f030197` 커밋으로 nginx SSE 블록에 `proxy_http_version 1.1`을 추가했으나, `deploy-nginx.yml` 워크플로를 수동 실행하지 않아 EC2-1 Nginx에 반영되지 않음. EC2-1은 여전히 HTTP/1.0 기본값으로 Spring과 통신 → chunked 종료자 미전달 → `unexpected EOF`.
+
+**원인 2: `SseEmitterRegistry` 60초 타임아웃 vs 시나리오 지속 시간 불일치**
+
+nginx 배포 후에도 이 문제는 독립적으로 남는다.
+
+```java
+// SseEmitterRegistry.java
+@Value("${fandrops.queue.sse-timeout-ms:60000}")
+private long sseTimeoutMs;  // Spring SseEmitter 수명: 60초
+
+// sendHeartbeat() — 5초 주기 스케줄러
+if ((now - registeredAt) > 55_000) {  // 하드코딩: 55초 초과 시 강제 complete()
+    entry.getValue().complete();
+}
+```
+
+| 항목 | 값 |
+|---|---|
+| heartbeat proactive close 임계값 | **55,000ms (하드코딩)** |
+| `normal_load` 구간 지속 시간 | 105s (1m45s) |
+| `boundary` 구간 지속 시간 | 105s (1m45s) |
+
+`sseTimeoutMs`를 속성 파일로 올려도 `55_000` 하드코딩이 항상 55초에 먼저 `complete()`를 호출하므로 연결이 시나리오 종료 전에 서버 측에서 강제 종료된다.
+
+#### 두 에러 원인 요약
+
+| 에러 | 원인 |
+|---|---|
+| `unexpected EOF` (t=60s) | nginx HTTP/1.0 미배포 (원인 1) + SseEmitter 55초 proactive close (원인 2) |
+| `dial: i/o timeout` (t=5m+) | overflow 2,100 VU 동시 재연결 → OS TCP accept backlog 포화 |
+
+#### 조치
+
+**조치 1 — `deploy-nginx.yml` 수동 실행 (지영재)**
+
+GitHub Actions → `Deploy Nginx Config` → develop 기준 수동 실행. `proxy_http_version 1.1` EC2-1 반영.
+
+**조치 2 — `SseEmitterRegistry.java` 수정 (장성재)**
+
+`sseTimeoutMs` 기본값 증가 + heartbeat 임계값을 `sseTimeoutMs` 기반으로 동적 계산:
+
+```java
+// 변경 전
+@Value("${fandrops.queue.sse-timeout-ms:60000}")
+private long sseTimeoutMs;
+
+// sendHeartbeat() 내
+if ((now - registeredAt) > 55_000) { ... }
+
+// 변경 후
+@Value("${fandrops.queue.sse-timeout-ms:300000}")  // 기본값 5분으로 증가
+private long sseTimeoutMs;
+
+// sendHeartbeat() 내
+if ((now - registeredAt) > sseTimeoutMs - 5_000) { ... }  // 속성값 기반 동적 계산
+```
+
+> **교훈**: `sseTimeoutMs` 속성과 heartbeat 임계값(`55_000`)이 각자 별개 상수로 선언되어 있어, 속성 파일로 timeout을 올려도 heartbeat 하드코딩이 선점한다. 타임아웃 관련 상수는 단일 소스(속성값)에서 파생해야 한다.
+
+---
+
 ### 결과 (튜닝 후)
 
 | 지표 | 베이스라인 | 결과 | 목표 | 상태 |
