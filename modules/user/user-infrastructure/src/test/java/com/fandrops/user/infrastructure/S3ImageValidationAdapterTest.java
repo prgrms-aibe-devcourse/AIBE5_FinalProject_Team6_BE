@@ -61,6 +61,57 @@ class S3ImageValidationAdapterTest {
         assertTrue(adapter.isOwnedUrl(OWNED_URL));
     }
 
+    @Test
+    @DisplayName("isOwnedUrl — CDN baseUrl로 시작하면 true")
+    void isOwnedUrl_cdnUrl_returnsTrue() {
+        properties.setCdnBaseUrl("d3lxwf37p438iz.cloudfront.net");
+        String cdnUrl = "https://d3lxwf37p438iz.cloudfront.net/uploads/profiles/image.jpg";
+        assertTrue(adapter.isOwnedUrl(cdnUrl));
+    }
+
+    @Test
+    @DisplayName("isOwnedUrl — cdnBaseUrl에 https:// 포함된 경우에도 true")
+    void isOwnedUrl_cdnUrlWithHttpsPrefix_returnsTrue() {
+        properties.setCdnBaseUrl("https://d3lxwf37p438iz.cloudfront.net");
+        String cdnUrl = "https://d3lxwf37p438iz.cloudfront.net/uploads/profiles/image.jpg";
+        assertTrue(adapter.isOwnedUrl(cdnUrl));
+    }
+
+    @Test
+    @DisplayName("isOwnedUrl — CDN 미설정 상태에서 CloudFront URL이면 false")
+    void isOwnedUrl_cdnNotConfigured_cloudfrontUrlReturnsFalse() {
+        // cdnBaseUrl 설정 없음 (setUp 기본값)
+        String cdnUrl = "https://d3lxwf37p438iz.cloudfront.net/uploads/profiles/image.jpg";
+        assertFalse(adapter.isOwnedUrl(cdnUrl));
+    }
+
+    @Test
+    @DisplayName("imageExists — CDN URL이면 object key 추출 후 HeadObject")
+    void imageExists_cdnUrl_headObjectsWithExtractedKey() {
+        properties.setCdnBaseUrl("d3lxwf37p438iz.cloudfront.net");
+        String cdnUrl = "https://d3lxwf37p438iz.cloudfront.net/uploads/profiles/image.jpg";
+        when(s3Client.headObject(any(HeadObjectRequest.class)))
+                .thenReturn(HeadObjectResponse.builder().build());
+
+        assertTrue(adapter.imageExists(cdnUrl));
+
+        verify(s3Client).headObject(HeadObjectRequest.builder()
+                .bucket(BUCKET)
+                .key("uploads/profiles/image.jpg")
+                .build());
+    }
+
+    @Test
+    @DisplayName("imageExists — CDN URL이지만 NoSuchKeyException이면 false")
+    void imageExists_cdnUrl_noSuchKey_returnsFalse() {
+        properties.setCdnBaseUrl("d3lxwf37p438iz.cloudfront.net");
+        String cdnUrl = "https://d3lxwf37p438iz.cloudfront.net/uploads/profiles/image.jpg";
+        when(s3Client.headObject(any(HeadObjectRequest.class)))
+                .thenThrow(NoSuchKeyException.builder().build());
+
+        assertFalse(adapter.imageExists(cdnUrl));
+    }
+
     // ── imageExists ───────────────────────────────────────────────────────────
 
     @Test
