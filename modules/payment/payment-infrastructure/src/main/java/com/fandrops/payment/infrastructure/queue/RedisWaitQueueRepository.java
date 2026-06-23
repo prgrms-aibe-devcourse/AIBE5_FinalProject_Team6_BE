@@ -72,6 +72,15 @@ public class RedisWaitQueueRepository implements WaitQueueRepository {
             "return 1",
             Long.class);
 
+    // WAITING → EXPIRED 원자적 전이, 성공 시 1
+    private static final RedisScript<Long> WAITING_EXPIRE_SCRIPT = RedisScript.of(
+            "local s = redis.call('HGET', KEYS[2], 'status') " +
+            "if s ~= 'WAITING' then return 0 end " +
+            "redis.call('ZREM', KEYS[1], ARGV[1]) " +
+            "redis.call('HSET', KEYS[2], 'status', 'EXPIRED') " +
+            "return 1",
+            Long.class);
+
     // PROCESSING → DONE/EXPIRED 전이, 성공 시 1
     private static final RedisScript<Long> TERMINAL_SCRIPT = RedisScript.of(
             "local s = redis.call('HGET', KEYS[2], 'status') " +
@@ -202,6 +211,28 @@ public class RedisWaitQueueRepository implements WaitQueueRepository {
             result.add(Long.parseLong(m));
         }
         return result;
+    }
+
+    @Override
+    public List<Long> findWaitingExpiredFanIds(Long productId, Instant threshold) {
+        Set<String> members = redisTemplate.opsForZSet()
+                .rangeByScore(waitingKey(productId), 0, threshold.toEpochMilli());
+        if (members == null) {
+            return List.of();
+        }
+        List<Long> result = new ArrayList<>(members.size());
+        for (String m : members) {
+            result.add(Long.parseLong(m));
+        }
+        return result;
+    }
+
+    @Override
+    public void transitionWaitingToExpired(Long fanId, Long productId) {
+        redisTemplate.execute(
+                WAITING_EXPIRE_SCRIPT,
+                List.of(waitingKey(productId), fanKey(fanId, productId)),
+                String.valueOf(fanId));
     }
 
     @Override
