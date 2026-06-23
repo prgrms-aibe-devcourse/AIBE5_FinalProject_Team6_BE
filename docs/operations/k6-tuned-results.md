@@ -1318,6 +1318,126 @@ if ((now - registeredAt) > sseTimeoutMs - 5_000) { ... }  // 속성값 기반 �
 
 ---
 
+### 8차 실행 트러블슈팅 (2026-06-23)
+
+**GHA Run**: [#28028688794](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/actions/runs/28028688794/job/82963176694)
+
+#### 증상
+
+| 지표 | 값 |
+|---|---|
+| `checks_succeeded` | 0.00% (0 / 14,351) |
+| `http_req_failed` | 100.00% |
+| `http_req_duration` p90 / p95 | 64s / 64s |
+
+```
+time="2026-06-23T13:12:23Z" level=warning msg="Request Failed" error="request timeout"
+```
+
+- **에러 타입이 `unexpected EOF` → `request timeout`으로 변경** — 7차 서버 사이드 fix(sseTimeoutMs 300s) 적용 효과 확인
+- t=~60s에 mass timeout 발생
+
+#### 원인 분석
+
+7차 fix로 서버가 295s까지 연결을 유지하게 됐으나, **k6 스크립트의 HTTP timeout이 여전히 `65s`**로 설정되어 있어 k6가 서버보다 먼저 연결을 포기한다.
+
+```
+[타임아웃 주체 역전]
+
+fix 이전: 서버(55s proactive close) < k6 timeout(65s) → 서버가 먼저 EOF
+fix 이후: 서버(295s proactive close) > k6 timeout(65s) → k6가 먼저 request timeout
+```
+
+| 항목 | 값 |
+|---|---|
+| `sseTimeoutMs` (서버 proactive close) | 295,000ms (300s - 5s) |
+| k6 `timeout` (05_sse_queue.js line 82) | **65s** |
+| `normal_load` 스테이지 최대 지속 | 105s |
+
+`65s` timeout은 서버가 55s에 먼저 닫던 시절 기준값이었다. sseTimeoutMs 증가 이후 기준이 무효화됨.
+
+#### 조치
+
+`infra/k6/scenarios/05_sse_queue.js` timeout 증가:
+
+```js
+// 변경 전
+timeout: '65s',
+
+// 변경 후
+timeout: '310s',  // sseTimeoutMs(300s) + 10s 여유. 서버가 295s에 먼저 graceful close
+```
+
+> **교훈**: k6 timeout과 서버 SseEmitter timeout은 연동된 값이다. 어느 한쪽을 변경하면 반드시 다른 쪽도 검토해야 한다.
+
+---
+
+### 9차 실행 트러블슈팅 (2026-06-23)
+
+**GHA Run**: [#28030028231](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/actions/runs/28030028231)
+
+#### 증상
+
+| 지표 | 값 |
+|---|---|
+| `normal_load` (1,000 VU) | **PASSED** ✅ |
+| `boundary` (1,800 VU) | **FAILED** — `dial: i/o timeout` |
+| `sse_connections_rejected` | 0 (앱 레벨 2000 상한 미도달) |
+| `http_req_duration` avg | 0s (연결 자체가 미수립) |
+
+```
+time="2026-06-23T..." level=warning msg="Request Failed"
+  error="Get \"…/api/v1/queue/stream/4\": dial: i/o timeout"
+```
+
+- `normal_load` 1,000 VU 구간은 통과 — 8차 k6 timeout 310s 수정 효과 확인
+- `boundary` 진입(t≈3m4s) 후 TCP dial 단계에서 즉시 타임아웃, HTTP 응답 없음
+- `sse_connections_rejected=0` → 앱의 `SseCapacityExceededException`(2000 상한)에는 도달하지 못함
+
+#### 원인 분석
+
+`nginx/fandrops-location.conf`의 `limit_conn fandrops_sse` 설정이 **IP당** 동시 연결 수를 제한한다.
+
+```nginx
+location /api/v1/queue/stream {
+    limit_conn fandrops_sse 2100;   # ← IP 단위
+    ...
+}
+```
+
+k6는 **ec2-2 단일 IP**에서 모든 VU를 발사한다. 따라서:
+
+```
+[연결 수 계산]
+normal_load gracefulRampDown 종료 후 lingering 연결 잔존 + boundary 1,800 VU
+= 단일 IP 기준 합산 > 2,100 → Nginx TCP 레벨 차단 → dial: i/o timeout
+```
+
+| 계층 | 제한 | 작동 방식 | 이번 문제 |
+|---|---|---|---|
+| Nginx `limit_conn` | 2,100 (IP당) | TCP 수립 전 차단 → timeout | ✅ 이것이 원인 |
+| App `SseCapacityExceededException` | 2,000 (전역) | HTTP 429 반환 | ❌ 도달 못 함 |
+
+시나리오가 검증하려는 계약은 **앱 레벨 429**(`sse_connections_rejected count>0`)인데, Nginx `limit_conn`이 그 앞에서 TCP를 차단하므로 앱까지 요청이 전달되지 않는다.
+
+#### 조치
+
+`nginx/fandrops-location.conf` `/api/v1/queue/stream` 블록에서 `limit_conn` 3줄 제거:
+
+```diff
+ location /api/v1/queue/stream {
+-    limit_conn fandrops_sse 2100;
+-    limit_conn_status 429;
+-    add_header Retry-After 1 always;
+     proxy_pass http://fandrops_backend;
+```
+
+> **운영 복원 참고**: `limit_conn`은 단일 IP 과다 연결(DDoS 방어)을 위한 설정이다. 실사용 트래픽은 IP가 분산되므로 의미가 있으나, 단일 IP k6 부하 테스트 환경에서는 앱 레벨 상한 검증을 방해한다. 부하 테스트 완료 후 운영 보호 목적으로 재적용 여부를 검토한다.
+
+> **교훈**: `limit_conn`은 IP 단위이므로 단일 IP 발원 k6 시나리오에서는 사실상 VU 총합 제한이 된다. 앱 레벨 용량 검증 시나리오는 Nginx 레이어 제한을 해제하거나 앱 상한보다 충분히 크게 설정해야 한다.
+
+---
+
 ### 결과 (튜닝 후)
 
 | 지표 | 베이스라인 | 결과 | 목표 | 상태 |
