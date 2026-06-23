@@ -31,7 +31,7 @@ Internet
 VPC  (DNS resolution ON / DNS hostnames ON)
 
   [Public Subnet 2a]               [Public Subnet 2c - 예비]
-       [EC2 t3.small]
+       [EC2-1 t3.medium]
        Nginx :80 -> localhost:8080
        SSM outbound :443 -------------------------------->
        S3 outbound HTTPS -------------------------------->
@@ -138,7 +138,7 @@ VPC  (DNS resolution ON / DNS hostnames ON)
 | 항목 | 값 |
 | --- | --- |
 | AMI | Amazon Linux 2023 |
-| Instance type | t3.small |
+| Instance type | t3.medium |
 | Subnet | Public subnet |
 | IAM Role | `fandrops-prod-ec2-role` |
 | Key Pair | 없음 |
@@ -213,7 +213,7 @@ WantedBy=multi-user.target
 | --- | --- |
 | 서비스명 | `fandrops.service` |
 | 상태 | `enabled` / `active(running)` 확인 완료 |
-| JVM 힙 | `-Xms512m -Xmx1024m` (t3.small 2GB 기준, OS·Nginx 버퍼 확보) |
+| JVM 힙 | `-Xms512m -Xmx1024m` (Phase 1 초기값. t3.medium 스케일업 및 Phase 3 Blue/Green 전환 후 각 슬롯 `-Xms256m -Xmx768m`으로 변경됨 — aws-phase3-runbook.md §8 참고) |
 | 포트 | `--server.port=8080` |
 
 로그 확인:
@@ -356,7 +356,7 @@ curl http://localhost/actuator/health
 - [x] S3 버킷 (`fandrops-prod-storage-495264909330-ap-northeast-2-an`)
 - [x] RDS MySQL 8.0.46 (`fandrops-prod-mysql`)
 - [x] ElastiCache Redis OSS 7.1
-- [x] EC2 (Amazon Linux 2023, t3.small, SSM 접속 확인)
+- [x] EC2-1 (Amazon Linux 2023, t3.medium, SSM 접속 확인)
 - [x] Java 21 / AWS CLI
 - [x] `/etc/fandrops/fandrops-prod.conf` (chmod 600, root:root)
 - [x] systemd `fandrops.service` (enabled / active)
@@ -390,7 +390,7 @@ curl http://localhost/actuator/health
 | S3 CORS 설정 | 프론트 도메인 확정 + 업로드 API 구현 시 |
 | Redis AUTH Token 도입 여부 검토 | `REDIS_PASSWORD` 설정 + ElastiCache Modify |
 | CloudWatch Agent | Phase 2에서 IAM 정책 추가 및 Agent 설치 |
-| Prometheus / Grafana / k6 | 테스트/관측 단계에서 별도 검토 |
+| Prometheus / Grafana / k6 | Phase 1 초기 구축 제외 항목. **Phase 2~4에서 순차 도입됨** (Prometheus/Grafana: aws-phase2-runbook.md §3, k6: aws-phase4-runbook.md 참고) |
 
 ---
 

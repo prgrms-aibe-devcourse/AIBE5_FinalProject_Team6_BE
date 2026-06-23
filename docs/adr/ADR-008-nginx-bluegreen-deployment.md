@@ -23,7 +23,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| EC2 | t3.small (2 vCPU, 2GB RAM), Amazon Linux 2023 |
+| EC2-1 | t3.medium (2 vCPU, 4GB RAM), Amazon Linux 2023 |
 | 배포 방식 | GitHub Actions → S3 → SSM RunCommand → Blue/Green 포트 스위칭 (2026-06-11, PR #221·#222) |
 | 배포 다운타임 | 0~2초 (nginx reload + `proxy_next_upstream` 재시도) |
 | SLO | Write P95 < 300ms, 5xx rate < 0.1%, 오버셀 0건 |
@@ -133,7 +133,7 @@ B안(단일 EC2 Blue/Green)은 추가 비용 없이 배포 다운타임을 0~2�
 
 | 결정 | 이유 |
 | --- | --- |
-| `-Xmx768m` (기존 `-Xmx1024m`에서 축소) | 전환 중 두 프로세스 동시 기동 시 heap 합계 1.5GB + OS 300MB = 1.8GB → t3.small 2GB 내 수용 |
+| `-Xmx768m` (기존 `-Xmx1024m`에서 축소) | 전환 중 두 프로세스 동시 기동 시 heap 합계 1.5GB + OS 300MB = 1.8GB → 당시 t3.small(2GB) 내 수용 (현재 ec2-1은 t3.medium 4GB. Prometheus/Grafana 공존 안정성을 위해 -Xmx768m 유지) |
 | `proxy_next_upstream error timeout http_502` | nginx reload 순간 일시적 502를 Nginx가 자동 재시도, 클라이언트 오류 노출 최소화 |
 | `server.shutdown: graceful` + 30s timeout | 구 슬롯 stop 시 처리 중인 주문·결제 요청을 최대 30초간 안전 완료 후 종료 |
 | `active-slot` 파일 기록 | 재기동·장애 후 현재 active 슬롯을 스크립트가 자동 인식 |
@@ -155,7 +155,7 @@ B안(단일 EC2 Blue/Green)은 추가 비용 없이 배포 다운타임을 0~2�
 | --- | --- | --- |
 | EC2-1 SPOF — 실제 HA 아님 | ALB 없음 (예산 제약) | D 실험 목적이 HA가 아닌 stateless 검증임을 발표에서 명시 |
 | Nginx reload 순간 0~2초 불안정 | 파일 교체 방식 | `proxy_next_upstream`으로 클라이언트 오류 노출 최소화 |
-| 전환 중 메모리 압박 | t3.small 2GB | `-Xmx768m` 제한으로 동시 기동 시 1.8GB 이내 유지 |
+| ~~전환 중 메모리 압박~~ | ~~t3.small 2GB~~ → ec2-1 t3.medium(4GB)으로 스케일업 완료 | ✅ 해소됨 (`-Xmx768m` 유지 근거: Prometheus/Grafana 공존 안정성) |
 | **SseEmitterRegistry 분산 한계** | in-memory `ConcurrentHashMap` | 오버셀·중복결제 정합성에는 영향 없음, SSE UX 한계로 한정 (아래 불변 참고) |
 
 ### 불변
@@ -173,7 +173,7 @@ B안(단일 EC2 Blue/Green)은 추가 비용 없이 배포 다운타임을 0~2�
 
 > AWS 예산 90,000원 제약으로 ALB를 사용할 수 없는 환경에서, Nginx upstream과 systemd 이중 슬롯 구조를 직접 구현해 무중단 Blue/Green 배포를 달성했습니다.
 
-> 배포 중 t3.small(2GB) 메모리에서 두 Spring Boot 프로세스가 동시 기동되는 구간의 OOM 위험을 `-Xmx768m` heap 제한과 Graceful Shutdown 30초 유예로 해소했으며, `proxy_next_upstream`으로 Nginx reload 순간 클라이언트 오류 노출을 최소화했습니다.
+> 배포 중 당시 t3.small(2GB) 메모리에서 두 Spring Boot 프로세스가 동시 기동되는 구간의 OOM 위험을 `-Xmx768m` heap 제한과 Graceful Shutdown 30초 유예로 해소했으며, `proxy_next_upstream`으로 Nginx reload 순간 클라이언트 오류 노출을 최소화했습니다. (현재 ec2-1은 t3.medium 4GB로 스케일업됨. `-Xmx768m`은 Prometheus/Grafana 공존 안정성을 위해 유지)
 
 > Phase 4에서 EC2-2를 단기 기동해 k6 부하 테스트를 분산 환경에서 실행했습니다. 재고는 DB 단일 UPDATE(`WHERE availableQty >= qty`) + 낙관락, 결제는 `PESSIMISTIC_WRITE` + unique index 조합으로 어느 서버에서 요청을 처리해도 오버셀·중복결제가 발생하지 않음을 수치로 검증했습니다.
 

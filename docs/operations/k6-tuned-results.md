@@ -13,8 +13,8 @@
 | 항목 | 값 |
 |---|---|
 | k6 실행 위치 | EC2-2 t3.small (서울 리전, Spring Boot 없음) |
-| 측정 대상 | EC2-1 Spring Boot — `https://api.fandrops.site` (VPC 내부 사설 IP) |
-| 네트워크 | 동일 VPC 내부 통신 — 네트워크 오버헤드 없음 |
+| 측정 대상 | EC2-1 Spring Boot (t3.medium) — `https://api.fandrops.site` (VPC 내부 사설 IP) |
+| 네트워크 | 동일 리전/VPC 내부 경로 기준, 외부 인터넷 왕복보다 변동성이 작음. 단, k6 latency에는 ec2-2 → ec2-1 네트워크 경로가 포함됨 |
 | DB | RDS MySQL (별도 인스턴스) |
 | Redis | ElastiCache (별도 인스턴스) |
 | 모니터링 | Prometheus Remote Write → EC2-1 (`http://10.0.1.114:9090/api/v1/write`) |
@@ -672,7 +672,7 @@ BASE_URL=http://10.0.1.114:8082 k6 run \
 **파일**: `infra/k6/scenarios/05_sse_queue.js`
 **담당 오너**: 장성재, 지영재
 **SLO**: 정상 구간 에러율 < 0.1%, 경계 구간 에러율 < 1%, 2,100 VU 초과 시 429 응답 필수
-**실행 위치**: **GitHub Actions runner** (t3.small 메모리 초과 위험으로 EC2-2 사용 불가)
+**실행 위치**: **GitHub Actions runner** (ec2-2 t3.small k6 runner 측 2,100 VU SSE 연결 생성 부담 — ec2-1 앱 서버는 t3.medium으로 수용 능력이 개선됐으나, k6 runner 측 한계는 별도 검증 필요. ec2-2 조건부 실행 가능 여부는 `ulimit -n`, 메모리, CPU 확인 후 판단)
 
 ### 목적
 

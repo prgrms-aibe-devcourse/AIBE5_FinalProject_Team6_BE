@@ -159,3 +159,54 @@ PR 머지 전 **해당 도메인 오너 리뷰** · API·이벤트 페이로드 
 | RateLimit | 장성재 | `payment` 중심 정책. `apps/api-server` 필터·Nginx 값은 지영재 리뷰 |
 
 헷갈리면 **F코드·명세 표**를 보고, PR은 **해당 오너**에게 리뷰 요청한다.
+
+---
+
+## 운영 인프라 / 배포 구조 요약
+
+FANDROPS 백엔드는 단일 Spring Boot 멀티모듈 모놀리스로 배포되며, 운영 인프라는 EC2-1 앱 서버와 EC2-2 k6 부하 생성 서버로 역할을 분리한다.
+
+### Runtime
+
+| 구성 요소 | 내용 |
+| --- | --- |
+| FE | Vercel (`fandrops.site`) |
+| BE | EC2-1 (`t3.medium`, `api.fandrops.site`) |
+| Reverse Proxy | Nginx |
+| App Runtime | Spring Boot Blue/Green slot (blue: `8081` / green: `8082`) |
+| DB | RDS MySQL |
+| Cache / Queue | ElastiCache Redis |
+| Storage | S3 |
+| Monitoring | Prometheus / Grafana (EC2-1 공존) |
+| Load Test | EC2-2 (`t3.small`, k6 전용 runner — 운영 트래픽 미수신) |
+
+### Blue/Green 배포 요약
+
+단일 EC2-1 내부에서 두 개의 Spring Boot 슬롯을 사용한다.
+
+1. 현재 active slot은 `/etc/fandrops/active-slot`으로 관리한다.
+2. 배포 시 inactive slot에 새 JAR를 기동한다.
+3. `/actuator/health`가 UP인지 확인한다.
+4. Nginx upstream을 새 slot 포트로 전환한다.
+5. `nginx -t` 후 `systemctl reload nginx`를 수행한다.
+6. 기존 slot은 graceful shutdown한다.
+
+상세 명령어와 운영 절차는 [`docs/operations/nginx-bluegreen-strategy.md`](../operations/nginx-bluegreen-strategy.md)를 SSOT로 둔다.
+
+### k6 실행 구조
+
+```text
+ec2-2 (t3.small, k6 runner)
+   |
+   | k6 traffic
+   v
+Nginx on ec2-1
+   |
+active Spring Boot slot on ec2-1 (t3.medium)
+```
+
+- ec2-1은 운영 앱 서버이자 서버 사이드 지표 기준점이다.
+- ec2-2는 운영 트래픽을 받지 않는 k6 전용 부하 생성 서버다.
+- k6를 앱 서버와 분리한 이유: 앱 서버 리소스와 부하 생성기 리소스 경합 방지, 서버 성능과 k6 runner 성능을 분리해서 해석.
+
+상세 실행 방식은 [`docs/operations/k6-tuned-results.md`](../operations/k6-tuned-results.md) 및 [`docs/operations/k6-actions-runner.md`](../operations/k6-actions-runner.md)를 참고한다.

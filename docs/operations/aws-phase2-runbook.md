@@ -112,7 +112,7 @@ scrape_configs:
 
 **왜 이 방식인가:**
 
-- **Docker Compose on 단일 EC2** — Phase 1에서 Prometheus/Grafana는 별도 EC2를 검토했으나, t3.small 비용·팀 규모를 고려해 앱 EC2에 컨테이너로 함께 올렸다.
+- **Docker Compose on 단일 EC2** — Phase 1에서 Prometheus/Grafana는 별도 EC2를 검토했으나, t3.small 비용·팀 규모를 고려해 앱 EC2에 컨테이너로 함께 올렸다. (당시 t3.small 기준 결정. 현재 ec2-1은 t3.medium으로 스케일업됨)
 - **프로비저닝 파일** — Grafana UI에서 수동으로 대시보드·알람을 설정하면 EC2 재배포 시 초기화된다. `infra/monitoring/` 하위 YAML/JSON 파일로 코드 관리하여 재현 가능하게 한다.
 
 ### 3-3. 접속 포트 (EC2 Security Group 추가 필요)

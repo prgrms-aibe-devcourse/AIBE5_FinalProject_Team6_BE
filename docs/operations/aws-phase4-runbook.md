@@ -485,7 +485,7 @@ BASE_URL="https://api.fandrops.site"
 | s02 피드 조회 (50VU) | EC2-2 k6 | 서울 리전, Read P95 < 120ms 검증 |
 | s03 결제 확인 (50VU) | EC2-2 k6 | 서울 리전, Write P95 < 300ms 검증 |
 | s04 드롭스 스파이크 (1000VU) | EC2-2 k6 | 서울 리전, 메모리 모니터링 필수 |
-| s05 SSE 대기열 (2100VU) | Actions runner | t3.small 2GB 메모리 한계 |
+| s05 SSE 대기열 (2100VU) | Actions runner | ec2-2 t3.small(2GB) k6 runner 측 2,100 VU SSE 연결 생성 부담. ec2-1 앱 서버는 t3.medium으로 수용 능력 개선됨 |
 | s06 통합 워크로드 (150VU) | EC2-2 k6 | 서울 리전, 종합 검증 |
 
 ```bash
