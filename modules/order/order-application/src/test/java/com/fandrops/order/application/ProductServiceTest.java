@@ -8,6 +8,7 @@ import com.fandrops.order.domain.InventoryInfo;
 import com.fandrops.order.domain.Product;
 import com.fandrops.order.domain.ProductStatus;
 import com.fandrops.order.domain.exception.ProductNotFoundException;
+import com.fandrops.order.application.port.ProductCachePort;
 import com.fandrops.order.domain.port.InventoryCreatePort;
 import com.fandrops.order.domain.port.InventoryReadPort;
 import com.fandrops.order.domain.port.ProductImageRepository;
@@ -29,6 +30,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -43,6 +45,7 @@ class ProductServiceTest {
     @Mock private InventoryCreatePort inventoryCreatePort;
     @Mock private InventoryReadPort inventoryReadPort;
     @Mock private ProductImageRepository productImageRepository;
+    @Mock private ProductCachePort productCachePort;
 
     @InjectMocks
     private ProductService sut;
@@ -73,6 +76,7 @@ class ProductServiceTest {
         @Test
         @DisplayName("상시 목록 반환 — size 미만이면 nextCursor null, totalQty·availableQty 포함")
         void getProducts_regular_nextCursorNull() {
+            given(productCachePort.get(any(), any(), any(), anyInt())).willReturn(Optional.empty());
             Product p = product();
             given(productRepository.findRegularProducts(null, null, 20)).willReturn(List.of(p));
             given(inventoryReadPort.getByProductIds(anyList()))
@@ -90,6 +94,7 @@ class ProductServiceTest {
         @Test
         @DisplayName("size만큼 채워지면 nextCursor = 마지막 id")
         void getProducts_regular_nextCursorSet() {
+            given(productCachePort.get(any(), any(), any(), anyInt())).willReturn(Optional.empty());
             List<Product> products = List.of(
                     Product.of(3L, ARTIST_ID, "상품3", BigDecimal.valueOf(10000), ProductStatus.ON_SALE, null, null, LocalDateTime.now()),
                     Product.of(2L, ARTIST_ID, "상품2", BigDecimal.valueOf(10000), ProductStatus.ON_SALE, null, null, LocalDateTime.now()),
@@ -108,6 +113,7 @@ class ProductServiceTest {
         @Test
         @DisplayName("재고 미존재 상품은 totalQty·availableQty 0으로 fallback")
         void getProducts_inventoryMissing_fallbackZero() {
+            given(productCachePort.get(any(), any(), any(), anyInt())).willReturn(Optional.empty());
             given(productRepository.findRegularProducts(null, null, 20)).willReturn(List.of(product()));
             given(inventoryReadPort.getByProductIds(anyList())).willReturn(Map.of());
             given(productImageRepository.findThumbnailsByProductIds(anyList())).willReturn(Map.of());
@@ -121,6 +127,7 @@ class ProductServiceTest {
         @Test
         @DisplayName("artistId 전달 시 해당 아티스트 상품만 반환")
         void getProducts_withArtistId_filtersCorrectly() {
+            given(productCachePort.get(any(), any(), any(), anyInt())).willReturn(Optional.empty());
             given(productRepository.findRegularProducts(ARTIST_ID, null, 20)).willReturn(List.of(product()));
             given(inventoryReadPort.getByProductIds(anyList())).willReturn(Map.of());
             given(productImageRepository.findThumbnailsByProductIds(anyList())).willReturn(Map.of());
@@ -129,6 +136,19 @@ class ProductServiceTest {
 
             verify(productRepository).findRegularProducts(ARTIST_ID, null, 20);
             assertEquals(1, result.getItems().size());
+        }
+
+        @Test
+        @DisplayName("캐시 히트 시 DB 쿼리 생략")
+        void getProducts_cacheHit_skipsDb() {
+            ProductListResponse cached = new ProductListResponse(List.of(), null);
+            given(productCachePort.get(any(), any(), any(), anyInt()))
+                    .willReturn(Optional.of(cached));
+
+            sut.getProducts("regular", null, null, 20);
+
+            verify(productRepository, never()).findRegularProducts(any(), any(), anyInt());
+            verify(inventoryReadPort, never()).getByProductIds(anyList());
         }
     }
 
@@ -139,6 +159,7 @@ class ProductServiceTest {
         @Test
         @DisplayName("drops type 요청 시 findDropsProducts 호출")
         void getProducts_drops_callsDropsRepository() {
+            given(productCachePort.get(any(), any(), any(), anyInt())).willReturn(Optional.empty());
             given(productRepository.findDropsProducts(null, null, 20)).willReturn(List.of(dropsProduct(1L)));
             given(inventoryReadPort.getByProductIds(anyList())).willReturn(Map.of());
             given(productImageRepository.findThumbnailsByProductIds(anyList())).willReturn(Map.of());
@@ -153,6 +174,7 @@ class ProductServiceTest {
         @Test
         @DisplayName("drops 타입 + artistId 전달 시 findDropsProducts에 artistId 전달")
         void getProducts_drops_withArtistId() {
+            given(productCachePort.get(any(), any(), any(), anyInt())).willReturn(Optional.empty());
             given(productRepository.findDropsProducts(ARTIST_ID, null, 20)).willReturn(List.of(dropsProduct(1L)));
             given(inventoryReadPort.getByProductIds(anyList())).willReturn(Map.of());
             given(productImageRepository.findThumbnailsByProductIds(anyList())).willReturn(Map.of());

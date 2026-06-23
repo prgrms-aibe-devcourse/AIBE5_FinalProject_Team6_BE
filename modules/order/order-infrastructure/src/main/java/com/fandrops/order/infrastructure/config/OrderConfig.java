@@ -16,6 +16,7 @@ import com.fandrops.order.domain.port.InventoryReadPort;
 import com.fandrops.order.domain.port.InventoryReservePort;
 import com.fandrops.order.domain.port.InventoryRestorePort;
 import com.fandrops.order.domain.port.OrderRepository;
+import com.fandrops.order.application.port.ProductCachePort;
 import com.fandrops.order.domain.port.ProductImageRepository;
 import com.fandrops.order.domain.port.ProductPricePort;
 import com.fandrops.order.domain.port.ProductRepository;
@@ -26,11 +27,13 @@ import com.fandrops.order.infrastructure.adapter.CartRepositoryAdapter;
 import com.fandrops.order.infrastructure.adapter.InventoryConfirmAdapter;
 import com.fandrops.order.infrastructure.adapter.InventoryReserveAdapter;
 import com.fandrops.order.infrastructure.adapter.InventoryRestoreAdapter;
+import com.fandrops.order.infrastructure.adapter.ProductCacheAdapter;
 import com.fandrops.order.infrastructure.adapter.ProductImageRepositoryAdapter;
 import com.fandrops.order.infrastructure.adapter.ProductPriceAdapter;
 import com.fandrops.order.infrastructure.adapter.ProductRepositoryAdapter;
 import com.fandrops.order.infrastructure.adapter.RestockAlertRepositoryAdapter;
 import com.fandrops.order.infrastructure.adapter.StoreBannerRepositoryAdapter;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fandrops.order.infrastructure.persistence.CartItemJpaRepository;
 import com.fandrops.order.infrastructure.persistence.CartJpaRepository;
 import com.fandrops.order.infrastructure.persistence.OrderJpaRepository;
@@ -40,6 +43,7 @@ import com.fandrops.order.infrastructure.persistence.ProductJpaRepository;
 import com.fandrops.order.infrastructure.persistence.RestockAlertJpaRepository;
 import com.fandrops.order.infrastructure.persistence.StoreBannerJpaRepository;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ThreadPoolExecutor;
 import org.slf4j.Logger;
@@ -98,12 +102,19 @@ public class OrderConfig implements AsyncConfigurer {
     }
 
     @Bean
+    public ProductCachePort productCachePort(StringRedisTemplate redisTemplate,
+                                             ObjectMapper objectMapper) {
+        return new ProductCacheAdapter(redisTemplate, objectMapper);
+    }
+
+    @Bean
     public ProductService productService(ProductRepository productRepository,
                                          InventoryCreatePort inventoryCreatePort,
                                          InventoryReadPort inventoryReadPort,
-                                         ProductImageRepository productImageRepository) {
+                                         ProductImageRepository productImageRepository,
+                                         ProductCachePort productCachePort) {
         return new ProductService(productRepository, inventoryCreatePort, inventoryReadPort,
-                productImageRepository);
+                productImageRepository, productCachePort);
     }
 
     @Bean

@@ -11,6 +11,7 @@ import com.fandrops.order.domain.Product;
 import com.fandrops.order.domain.ProductImage;
 import com.fandrops.order.domain.ProductStatus;
 import com.fandrops.order.domain.exception.ProductNotFoundException;
+import com.fandrops.order.application.port.ProductCachePort;
 import com.fandrops.order.domain.port.InventoryCreatePort;
 import com.fandrops.order.domain.port.InventoryReadPort;
 import com.fandrops.order.domain.port.ProductImageRepository;
@@ -18,6 +19,8 @@ import com.fandrops.order.domain.port.ProductRepository;
 import java.util.List;
 import java.util.Map;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 public class ProductService {
 
@@ -25,37 +28,45 @@ public class ProductService {
     private final InventoryCreatePort inventoryCreatePort;
     private final InventoryReadPort inventoryReadPort;
     private final ProductImageRepository productImageRepository;
+    private final ProductCachePort productCachePort;
 
     public ProductService(ProductRepository productRepository,
                           InventoryCreatePort inventoryCreatePort,
                           InventoryReadPort inventoryReadPort,
-                          ProductImageRepository productImageRepository) {
+                          ProductImageRepository productImageRepository,
+                          ProductCachePort productCachePort) {
         this.productRepository = productRepository;
         this.inventoryCreatePort = inventoryCreatePort;
         this.inventoryReadPort = inventoryReadPort;
         this.productImageRepository = productImageRepository;
+        this.productCachePort = productCachePort;
     }
 
     @Transactional(readOnly = true)
     public ProductListResponse getProducts(String type, Long artistId, Long cursor, int size) {
-        List<Product> products = "drops".equals(type)
-                ? productRepository.findDropsProducts(artistId, cursor, size)
-                : productRepository.findRegularProducts(artistId, cursor, size);
-        List<Long> productIds = products.stream().map(Product::getId).toList();
-        if (productIds.isEmpty()) {
-            return new ProductListResponse(List.of(), null);
-        }
-        Map<Long, InventoryInfo> inventoryMap = inventoryReadPort.getByProductIds(productIds);
-        Map<Long, String> thumbnailMap = productImageRepository.findThumbnailsByProductIds(productIds);
-        List<ProductListItemResponse> items = products.stream()
-                .map(p -> ProductListItemResponse.from(p,
-                        inventoryMap.getOrDefault(p.getId(), new InventoryInfo(0, 0, 0)),
-                        thumbnailMap.get(p.getId())))
-                .toList();
-        Long nextCursor = products.size() == size
-                ? products.get(products.size() - 1).getId()
-                : null;
-        return new ProductListResponse(items, nextCursor);
+        // 캐시 히트 시 즉시 반환 — product·image 쿼리 생략 (inventory는 캐시 포함, TTL 120s)
+        return productCachePort.get(type, artistId, cursor, size).orElseGet(() -> {
+            List<Product> products = "drops".equals(type)
+                    ? productRepository.findDropsProducts(artistId, cursor, size)
+                    : productRepository.findRegularProducts(artistId, cursor, size);
+            List<Long> productIds = products.stream().map(Product::getId).toList();
+            if (productIds.isEmpty()) {
+                return new ProductListResponse(List.of(), null);
+            }
+            Map<Long, InventoryInfo> inventoryMap = inventoryReadPort.getByProductIds(productIds);
+            Map<Long, String> thumbnailMap = productImageRepository.findThumbnailsByProductIds(productIds);
+            List<ProductListItemResponse> items = products.stream()
+                    .map(p -> ProductListItemResponse.from(p,
+                            inventoryMap.getOrDefault(p.getId(), new InventoryInfo(0, 0, 0)),
+                            thumbnailMap.get(p.getId())))
+                    .toList();
+            Long nextCursor = products.size() == size
+                    ? products.get(products.size() - 1).getId()
+                    : null;
+            ProductListResponse result = new ProductListResponse(items, nextCursor);
+            productCachePort.put(type, artistId, cursor, size, result);
+            return result;
+        });
     }
 
     @Transactional(readOnly = true)
@@ -92,6 +103,7 @@ public class ProductService {
         if (!images.isEmpty()) {
             productImageRepository.saveAll(images);
         }
+        evictAfterCommit();
         return saved.getId();
     }
 
@@ -115,6 +127,21 @@ public class ProductService {
                 productImageRepository.saveAll(images);
             }
         }
+        evictAfterCommit();
         return product.getStatus();
+    }
+
+    /** 트랜잭션 커밋 이후 캐시를 무효화한다. 커밋 전 evict 시 구데이터가 캐시에 재적재되는 문제 방지. */
+    private void evictAfterCommit() {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    productCachePort.evictAll();
+                }
+            });
+        } else {
+            productCachePort.evictAll();
+        }
     }
 }

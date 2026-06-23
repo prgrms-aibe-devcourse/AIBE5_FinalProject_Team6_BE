@@ -1,5 +1,7 @@
 package com.fandrops.order.application.dto;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fandrops.order.domain.InventoryInfo;
 import com.fandrops.order.domain.Product;
 import lombok.Getter;
@@ -16,9 +18,15 @@ public class ProductListItemResponse {
     private final int availableQty;
     private final String thumbnailUrl;
 
-    public ProductListItemResponse(Long id, Long artistId, String name,
-                                   BigDecimal price, String status,
-                                   int totalQty, int availableQty, String thumbnailUrl) {
+    @JsonCreator
+    public ProductListItemResponse(@JsonProperty("id") Long id,
+                                   @JsonProperty("artistId") Long artistId,
+                                   @JsonProperty("name") String name,
+                                   @JsonProperty("price") BigDecimal price,
+                                   @JsonProperty("status") String status,
+                                   @JsonProperty("totalQty") int totalQty,
+                                   @JsonProperty("availableQty") int availableQty,
+                                   @JsonProperty("thumbnailUrl") String thumbnailUrl) {
         this.id = id;
         this.artistId = artistId;
         this.name = name;
