@@ -921,7 +921,7 @@ sudo nginx -t && sudo systemctl reload nginx
 |---|---|
 | `/actuator/health` Host 헤더 버그 | ✅ 리포 수정 완료 — `deploy-nginx.yml` 트리거로 영구 반영 |
 | tokens.csv JWT 갱신 절차 | ✅ CD 배포 후 재생성 필수 절차로 확인 |
-| CD OOM (t3.small blue+green 동시 기동) | ⚠️ 미해결 — swap 추가 또는 green Xmx 축소 필요 |
+| CD OOM (t3.small blue+green 동시 기동) | ✅ 해결 — EC2-1 swap 2GB 추가 (2026-06-23), 재부팅 후에도 유지 (`/etc/fstab` 등록) |
 
 ---
 
@@ -1214,6 +1214,34 @@ cd /opt/fandrops/k6 && BASE_URL=http://10.0.1.114:8082 K6_PROMETHEUS_RW_SERVER_U
   3. **`findRegularProducts` 인덱스 확인**: 커서 페이지네이션 쿼리(`WHERE status = 'ON_SALE' AND id < cursor ORDER BY id DESC LIMIT size`)에 `(status, id DESC)` 복합 인덱스가 없으면 Full Scan 발생. `EXPLAIN` 실행 계획 확인 필요.
 
   4. **꼬리 레이턴시(max 1.33s) 원인 추적**: 1.33s는 단순 DB 쿼리 범위를 벗어난 수치. 커넥션 풀 대기 또는 GC pause 가능성이 있음. HikariCP `connection-timeout` 로그 및 GC 로그 확인 권장.
+
+**피드백 반영 (형성빈 — 2026-06-23)**
+
+**어떻게 반영했는지**
+
+지영재 관찰·피드백을 토대로 원인을 재확인하고 두 가지 항목을 구현했다.
+
+1. `findRegularProducts` 쿼리의 `WHERE drops_start_at IS NULL AND id < :cursor ORDER BY id DESC`에 적합한 `(drops_start_at, id)` 복합 인덱스가 없어 Full Scan 가능성이 있음을 확인 → V42 Flyway 마이그레이션으로 추가.
+2. `ProductService.getProducts()`의 캐시 레이어 부재가 900 q/s DB 압박의 직접 원인임을 확인 → `ProductCacheAdapter` 구현 및 look-aside 패턴 적용.
+
+**어떤 기술/방법을 적용했는지**
+
+| 항목 | 내용 |
+|---|---|
+| 복합 인덱스 | `ALTER TABLE product ADD INDEX idx_product_regular_cursor (drops_start_at, id)` — V42 Flyway 마이그레이션 |
+| Redis 캐시 | `ProductCachePort / ProductCacheAdapter` — 커뮤니티 모듈 `FeedCacheAdapter`와 동일한 헥사고날 패턴 적용 |
+| TTL jitter | BASE TTL 120s + 최대 30s 랜덤 추가 — Thundering Herd 방지 |
+| evict 시점 | `evictAfterCommit()` — TX 커밋 후 무효화, 커밋 전 evict 시 stale 재적재 방지 |
+| fail-open | Redis 장애 시 `Optional.empty()` 반환 → DB 직접 조회로 자동 fallback |
+| Jackson 역직렬화 | `ProductListResponse` / `ProductListItemResponse`에 `@JsonCreator` + `@JsonProperty` 추가 |
+
+inventory(`getByProductIds`)는 주문 시마다 재고가 변동하므로 이번 캐시 범위에서 제외. 추후 TTL 5~10s 단기 캐시 또는 응답 경량화 방향으로 별도 검토 예정.
+
+**어떻게 해결했는지**
+
+캐시 히트 시 product·image 쿼리(쿼리 1·3)가 생략되어 300 RPS 기준 DB 부하가 900 q/s → 300 q/s로 감소 예상. 중앙값 응답시간(7ms)이 이미 SLO 여유 범위 안에 있으므로, 캐시 히트율이 높아지면 P95가 120ms 이하로 수렴할 것으로 판단.
+
+- **PR**: [#401 perf(order): s07 SLO 달성 — 상품 목록 Redis 캐시 + cursor 인덱스 추가](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/pull/401)
 
 ### 개선 방향
 
