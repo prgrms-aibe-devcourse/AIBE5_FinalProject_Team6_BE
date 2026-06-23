@@ -1372,6 +1372,72 @@ timeout: '310s',  // sseTimeoutMs(300s) + 10s 여유. 서버가 295s에 먼저 g
 
 ---
 
+### 9차 실행 트러블슈팅 (2026-06-23)
+
+**GHA Run**: [#28030028231](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/actions/runs/28030028231)
+
+#### 증상
+
+| 지표 | 값 |
+|---|---|
+| `normal_load` (1,000 VU) | **PASSED** ✅ |
+| `boundary` (1,800 VU) | **FAILED** — `dial: i/o timeout` |
+| `sse_connections_rejected` | 0 (앱 레벨 2000 상한 미도달) |
+| `http_req_duration` avg | 0s (연결 자체가 미수립) |
+
+```
+time="2026-06-23T..." level=warning msg="Request Failed"
+  error="Get \"…/api/v1/queue/stream/4\": dial: i/o timeout"
+```
+
+- `normal_load` 1,000 VU 구간은 통과 — 8차 k6 timeout 310s 수정 효과 확인
+- `boundary` 진입(t≈3m4s) 후 TCP dial 단계에서 즉시 타임아웃, HTTP 응답 없음
+- `sse_connections_rejected=0` → 앱의 `SseCapacityExceededException`(2000 상한)에는 도달하지 못함
+
+#### 원인 분석
+
+`nginx/fandrops-location.conf`의 `limit_conn fandrops_sse` 설정이 **IP당** 동시 연결 수를 제한한다.
+
+```nginx
+location /api/v1/queue/stream {
+    limit_conn fandrops_sse 2100;   # ← IP 단위
+    ...
+}
+```
+
+k6는 **ec2-2 단일 IP**에서 모든 VU를 발사한다. 따라서:
+
+```
+[연결 수 계산]
+normal_load gracefulRampDown 종료 후 lingering 연결 잔존 + boundary 1,800 VU
+= 단일 IP 기준 합산 > 2,100 → Nginx TCP 레벨 차단 → dial: i/o timeout
+```
+
+| 계층 | 제한 | 작동 방식 | 이번 문제 |
+|---|---|---|---|
+| Nginx `limit_conn` | 2,100 (IP당) | TCP 수립 전 차단 → timeout | ✅ 이것이 원인 |
+| App `SseCapacityExceededException` | 2,000 (전역) | HTTP 429 반환 | ❌ 도달 못 함 |
+
+시나리오가 검증하려는 계약은 **앱 레벨 429**(`sse_connections_rejected count>0`)인데, Nginx `limit_conn`이 그 앞에서 TCP를 차단하므로 앱까지 요청이 전달되지 않는다.
+
+#### 조치
+
+`nginx/fandrops-location.conf` `/api/v1/queue/stream` 블록에서 `limit_conn` 3줄 제거:
+
+```diff
+ location /api/v1/queue/stream {
+-    limit_conn fandrops_sse 2100;
+-    limit_conn_status 429;
+-    add_header Retry-After 1 always;
+     proxy_pass http://fandrops_backend;
+```
+
+> **운영 복원 참고**: `limit_conn`은 단일 IP 과다 연결(DDoS 방어)을 위한 설정이다. 실사용 트래픽은 IP가 분산되므로 의미가 있으나, 단일 IP k6 부하 테스트 환경에서는 앱 레벨 상한 검증을 방해한다. 부하 테스트 완료 후 운영 보호 목적으로 재적용 여부를 검토한다.
+
+> **교훈**: `limit_conn`은 IP 단위이므로 단일 IP 발원 k6 시나리오에서는 사실상 VU 총합 제한이 된다. 앱 레벨 용량 검증 시나리오는 Nginx 레이어 제한을 해제하거나 앱 상한보다 충분히 크게 설정해야 한다.
+
+---
+
 ### 결과 (튜닝 후)
 
 | 지표 | 베이스라인 | 결과 | 목표 | 상태 |
