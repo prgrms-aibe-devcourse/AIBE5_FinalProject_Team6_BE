@@ -246,18 +246,6 @@ VALUES
      'INDIE_A', 'REJECTED', '제출 서류 미비 및 팬덤 규모 기준 미달',
      DATEADD('DAY', -20, NOW()), DATEADD('DAY', -18, NOW()));
 
--- A3-1. PRISM 입점 승인(F02-02) — Admin APPROVED = agency_account + artist_profile 생성
---       Fan GET /artists 에 NOVA/LUNA/ECHO 와 함께 PRISM(id=4) 노출
-INSERT INTO agency_account (id, login_id, password_hash, company_name, contact_email, status, role, created_at)
-VALUES (2, 'globalstar@example.com',
-        '$2a$10$IXraSx3hpYkrj8jRqqIsxOkdIfRCZKYxPafAJT7v3ZrlvB43gl7Re',
-        '글로벌 스타 엔터', 'globalstar@example.com', 'ACTIVE', 'AGENCY',
-        DATEADD('DAY', -8, NOW()));
-
-INSERT INTO artist_profile (id, agency_id, name, fan_count, joined_at, bio)
-VALUES (4, 2, 'PRISM', 0, DATEADD('DAY', -8, NOW()),
-        '입점 승인 데모 — Admin 심사 APPROVED 후 생성된 아티스트 그룹');
-
 -- A4. 알림 보강 — fan_id=1 다타입 QA (is_read mix)
 --     기존: NEW_FEED, ARTIST_SCHEDULE
 --     추가: RESTOCK, PAYMENT_SUCCESS, NEW_COMMENT
