@@ -82,6 +82,12 @@ fandrops:
     enabled: false
   order:
     payment-timeout: PT15M
+  queue:
+    processing-timeout-seconds: 10
+    advance-batch-size: 50
+    max-concurrent-processing: 50
+    scheduler:
+      interval-ms: 1000
   s3:
     # S3 버킷 설정은 application-local.override.yml 에서 지정하세요.
     # 템플릿: application-local.example.yml 의 fandrops.s3 섹션 참고

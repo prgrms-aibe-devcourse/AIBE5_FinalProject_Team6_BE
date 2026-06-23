@@ -58,6 +58,20 @@ public class LocalAccessTicketRepository implements AccessTicketRepository {
         store.remove(storeKey(fanId, productId));
     }
 
+    @Override
+    public String get(Long fanId, Long productId) {
+        String key = storeKey(fanId, productId);
+        TokenEntry entry = store.get(key);
+        if (entry == null) {
+            return null;
+        }
+        if (!Instant.now().isBefore(entry.expiresAt)) {
+            store.remove(key);
+            return null;
+        }
+        return entry.token;
+    }
+
     private String storeKey(Long fanId, Long productId) {
         return productId + ":" + fanId;
     }

@@ -12,15 +12,19 @@ import java.util.Set;
 
 public class WaitQueueService {
 
-    private static final long SECONDS_PER_POSITION = 3L;
-
     private final WaitQueueRepository waitQueueRepository;
     private final AccessTicketRepository accessTicketRepository;
+    private final long processingTimeoutSeconds;
+    private final long maxConcurrentProcessing;
 
     public WaitQueueService(WaitQueueRepository waitQueueRepository,
-                            AccessTicketRepository accessTicketRepository) {
+                            AccessTicketRepository accessTicketRepository,
+                            long processingTimeoutSeconds,
+                            long maxConcurrentProcessing) {
         this.waitQueueRepository = waitQueueRepository;
         this.accessTicketRepository = accessTicketRepository;
+        this.processingTimeoutSeconds = processingTimeoutSeconds;
+        this.maxConcurrentProcessing = maxConcurrentProcessing;
     }
 
     public QueueJoinResult join(QueueJoinCommand command) {
@@ -33,9 +37,18 @@ public class WaitQueueService {
                 .orElseThrow(() -> new IllegalStateException("대기열에 등록되지 않은 팬입니다."));
 
         long position = entry.getPosition();
-        long estimatedWaitSec = position > 0 ? position * SECONDS_PER_POSITION : 0L;
+        // throughput = maxConcurrentProcessing / processingTimeoutSeconds (명/초)
+        // 대기 시간 = position / throughput = position × (timeout / maxConcurrent)
+        long estimatedWaitSec = position > 0
+                ? Math.max(1L, Math.round(position * ((double) processingTimeoutSeconds / maxConcurrentProcessing)))
+                : 0L;
 
-        return new QueueStatusResult(position, entry.getStatus().name(), estimatedWaitSec);
+        String token = null;
+        if (entry.getStatus() == WaitQueueStatus.PROCESSING) {
+            token = accessTicketRepository.get(fanId, productId);
+        }
+
+        return new QueueStatusResult(position, entry.getStatus().name(), estimatedWaitSec, token);
     }
 
     /** SSE 연결과 무관하게 WAITING 항목이 존재하는 productId 집합 반환. */

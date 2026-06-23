@@ -80,6 +80,12 @@ fandrops:
       response-header-enabled: true
   feature-flags:
     enabled: false
+  queue:
+    processing-timeout-seconds: 15
+    advance-batch-size: 20
+    max-concurrent-processing: 20
+    scheduler:
+      interval-ms: 1000
   s3:
     bucket: fandrops-prod-storage-495264909330-ap-northeast-2-an
     region: ap-northeast-2
