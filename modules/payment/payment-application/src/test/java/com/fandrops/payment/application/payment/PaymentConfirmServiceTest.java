@@ -10,6 +10,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import org.springframework.dao.OptimisticLockingFailureException;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -79,6 +81,25 @@ class PaymentConfirmServiceTest {
 
         assertThatThrownBy(() -> service.confirm(command))
                 .isInstanceOf(PaymentConfirmFailedException.class);
+    }
+
+    @Test
+    @DisplayName("applySuccess 낙관적 락 충돌 → precheck 재시도 후 이미 완료된 결과 멱등 반환")
+    void optimisticLockConflict_retriesPrecheck_returnsDone() {
+        Payment payment = Payment.create(ORDER_ID, AMOUNT);
+        Payment confirmed = Payment.reconstitute(1L, ORDER_ID, TOSS_KEY, AMOUNT, "카드",
+                PaymentStatus.SUCCESS, Instant.now(), null, Instant.now(), 1);
+        when(txHelper.precheck(command))
+                .thenReturn(PrecheckResult.proceed(payment))
+                .thenReturn(PrecheckResult.done(PaymentConfirmResult.from(confirmed)));
+        when(tossPaymentPort.confirm(TOSS_KEY, AMOUNT, ORDER_PAYMENT_KEY))
+                .thenReturn(TossConfirmResult.success("카드", Instant.now()));
+        when(txHelper.applySuccess(eq(payment), eq(TOSS_KEY), eq("카드"), any(Instant.class)))
+                .thenThrow(new OptimisticLockingFailureException("version conflict"));
+
+        PaymentConfirmResult result = service.confirm(command);
+
+        assertThat(result.getStatus()).isEqualTo(PaymentStatus.SUCCESS);
     }
 
     @Test

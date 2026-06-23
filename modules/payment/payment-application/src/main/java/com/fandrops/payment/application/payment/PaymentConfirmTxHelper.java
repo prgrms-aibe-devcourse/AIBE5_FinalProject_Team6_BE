@@ -60,6 +60,7 @@ public class PaymentConfirmTxHelper {
         return PaymentConfirmResult.from(saved);
     }
 
+    // 항상 throw — 반환 타입은 컴파일러 flow 분석을 위한 관용 선언
     // noRollbackFor: PaymentConfirmFailedException 발생해도 FAILED 상태를 DB에 커밋
     @Transactional(noRollbackFor = PaymentConfirmFailedException.class)
     public PaymentConfirmFailedException applyFailure(Payment payment,

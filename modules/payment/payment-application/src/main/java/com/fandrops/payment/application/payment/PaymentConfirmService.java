@@ -1,5 +1,7 @@
 package com.fandrops.payment.application.payment;
 
+import org.springframework.dao.OptimisticLockingFailureException;
+
 public class PaymentConfirmService {
 
     private final PaymentConfirmTxHelper txHelper;
@@ -24,8 +26,15 @@ public class PaymentConfirmService {
                 command.getTossPaymentKey(), command.getAmount(), command.getOrderPaymentKey());
 
         if (pgResult.isSuccess()) {
-            return txHelper.applySuccess(precheck.payment(), command.getTossPaymentKey(),
-                    pgResult.getPaymentMethod(), pgResult.getApprovedAt());
+            try {
+                return txHelper.applySuccess(precheck.payment(), command.getTossPaymentKey(),
+                        pgResult.getPaymentMethod(), pgResult.getApprovedAt());
+            } catch (OptimisticLockingFailureException e) {
+                // 동시 요청이 먼저 applySuccess를 완료한 경우 → 멱등 반환
+                PrecheckResult retry = txHelper.precheck(command);
+                if (retry.isDone()) return retry.earlyReturn();
+                throw e;
+            }
         }
         throw txHelper.applyFailure(precheck.payment(), pgResult.getErrorCode(), pgResult.getErrorMessage());
     }
