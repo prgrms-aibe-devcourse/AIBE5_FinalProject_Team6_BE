@@ -17,6 +17,9 @@ public class SseEmitterRegistry {
     // key: "productId:fanId" → SseEmitter
     private final ConcurrentHashMap<String, SseEmitter> emitters = new ConcurrentHashMap<>();
 
+    // key: "productId:fanId" → 등록 시각(ms) — heartbeat에서 proactive close 기준
+    private final ConcurrentHashMap<String, Long> registrationTimes = new ConcurrentHashMap<>();
+
     @Value("${fandrops.queue.sse-timeout-ms:60000}")
     private long sseTimeoutMs;
 
@@ -26,19 +29,23 @@ public class SseEmitterRegistry {
     private SseEmitter register(Long productId, Long fanId) {
         String key = key(productId, fanId);
         SseEmitter emitter = new SseEmitter(sseTimeoutMs);
+        registrationTimes.put(key, System.currentTimeMillis());
         emitters.put(key, emitter);
         // [P1] 재연결 시 이전 Emitter의 콜백이 새 Emitter를 삭제하지 않도록 값 비교 제거
-        emitter.onCompletion(() -> emitters.remove(key, emitter));
+        emitter.onCompletion(() -> {
+            emitters.remove(key, emitter);
+            registrationTimes.remove(key);
+        });
+        // onTimeout 안에서 complete()는 Spring이 이미 async context를 닫는 중이라 무효.
+        // proactive close는 sendHeartbeat()에서 55초 기준으로 처리한다.
         emitter.onTimeout(() -> {
             emitters.remove(key, emitter);
-            try {
-                // onTimeout은 complete()를 자동 호출하지 않음 — 명시 호출로 HTTP 200 정상 종료 보장
-                emitter.complete();
-            } catch (IllegalStateException ignored) {
-                // heartbeat 등이 이미 complete 처리한 경우
-            }
+            registrationTimes.remove(key);
         });
-        emitter.onError(e -> emitters.remove(key, emitter));
+        emitter.onError(e -> {
+            emitters.remove(key, emitter);
+            registrationTimes.remove(key);
+        });
         return emitter;
     }
 
@@ -85,12 +92,28 @@ public class SseEmitterRegistry {
         return register(productId, fanId);
     }
 
+    /**
+     * 5초 주기 스케줄러에서 호출.
+     * 55초 초과 emitter는 Spring timeout(60s) 전에 정상 컨텍스트에서 complete() 호출.
+     * onTimeout 안에서의 complete()는 Spring이 이미 async context를 닫는 중이라 효과 없음.
+     */
     public void sendHeartbeat() {
+        long now = System.currentTimeMillis();
         for (Map.Entry<String, SseEmitter> entry : emitters.entrySet()) {
+            String key = entry.getKey();
+            Long registeredAt = registrationTimes.get(key);
+            if (registeredAt != null && (now - registeredAt) > 55_000) {
+                // Spring timeout 전에 스케줄러 컨텍스트에서 정상 종료 → HTTP 200 보장
+                try {
+                    entry.getValue().complete();
+                } catch (IllegalStateException ignored) {}
+                continue;
+            }
             try {
                 entry.getValue().send(SseEmitter.event().comment("heartbeat"));
             } catch (IOException | IllegalStateException e) {
-                emitters.remove(entry.getKey());
+                emitters.remove(key);
+                registrationTimes.remove(key);
             }
         }
     }
