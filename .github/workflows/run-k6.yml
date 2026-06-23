@@ -127,12 +127,13 @@ jobs:
             05)
               echo "=== 시나리오 05: SSE 대기열 안정성 (~6분) ==="
               k6 run -e BASE_URL=$BASE \
+                -e PRODUCT_ID=4 \
                 scenarios/05_sse_queue.js
               ;;
             06)
               echo "=== 시나리오 06: 통합 워크로드 (Wiremock EC2 로컬) ==="
               k6 run -e BASE_URL=$BASE \
-                -e PRODUCT_ID=1 \
+                -e PRODUCT_ID=4 \
                 -e ARTIST_ID=1 \
                 -e ORDERS_JSON="$(cat seed/orders.json)" \
                 scenarios/06_workload_model.js
