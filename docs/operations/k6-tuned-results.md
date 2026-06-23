@@ -1438,6 +1438,71 @@ normal_load gracefulRampDown 종료 후 lingering 연결 잔존 + boundary 1,800
 
 ---
 
+### 10차 실행 트러블슈팅 (2026-06-24)
+
+**GHA Run**: (run ID 기록 필요)
+
+#### 증상
+
+| 구간 | VU | 결과 |
+|---|---|---|
+| normal_load | 1,000 | **PASSED** ✅ — 에러율 0.00% |
+| boundary | 1,800 | **PASSED** ✅ — 에러율 0.00% |
+| overflow | 2,100 | **FAILED** — `sse_connections_rejected=0`, 전 요청 `unexpected status` |
+
+- `normal_load` · `boundary` 통과 — 9차 `limit_conn` 제거 효과 확인
+- overflow: `sse_connections_rejected=0` — Spring 앱 레벨 2,000 상한 미도달
+- overflow: 모든 요청이 200도 429도 아닌 status → k6 스크립트 `else` 브랜치 → `unexpected status: false`
+- overflow 에러 유형: `dial: i/o timeout` (status=0) — HTTP 레벨 응답 없이 TCP 레벨 차단
+
+#### 원인 분석
+
+**Nginx `worker_connections` FD 고갈**
+
+```nginx
+# /etc/nginx/nginx.conf (EC2 실측)
+worker_processes auto;   # 단일 vCPU EC2 → 실질 1 worker
+events {
+    worker_connections 4096;
+}
+```
+
+SSE는 Nginx 프록시 연결 1개당 FD 2개를 소비한다 (client↔Nginx 1개 + Nginx↔Spring upstream 1개).
+
+| 구간 | VU | FD 소비 | 한도(4,096) | 결과 |
+|---|---|---|---|---|
+| boundary | 1,800 | 1,800 × 2 = 3,600 | 3,600 < 4,096 | ✅ 통과 |
+| overflow | 2,100 | 2,100 × 2 = **4,200** | **4,200 > 4,096** | ✗ FD 고갈 |
+
+overflow 구간에서 Nginx worker FD pool이 고갈되면 신규 TCP SYN을 처리하지 못한다 → k6 `dial: i/o timeout` (status=0) → 200·429 아닌 status → `else` 브랜치 → `sse_connections_rejected` 미증가.
+
+Spring의 `SseCapacityExceededException → 429` 매핑(`PaymentControllerAdvice:80`)은 정상이지만, Nginx FD 고갈로 요청이 앱에 도달하지 않아 429가 발생하지 않는다.
+
+9차(limit_conn 제거) 이전에도 overflow 측정이 불가능했으므로 이 문제는 9차에서 처음 관찰 가능해진 새로운 레이어의 병목이다.
+
+#### 조치
+
+`worker_connections 4096 → 8192` 변경 (SSM 즉시 적용 + 레포 코드화):
+
+```nginx
+events {
+    worker_connections 8192;  # 단일 worker 기준 최대 동시 SSE 4,096개 (8192 ÷ 2)
+}
+```
+
+| 항목 | 변경 전 | 변경 후 |
+|---|---|---|
+| `worker_connections` | 4,096 | **8,192** |
+| 최대 동시 SSE 연결 | 2,048 | **4,096** |
+| overflow 2,100 VU 수용 | ✗ (4,200 > 4,096) | ✅ (4,200 < 8,192) |
+
+SSM `sed -i 's/worker_connections 4096/worker_connections 8192/'` → `nginx -t && nginx -s reload` 완료.
+`nginx/nginx.conf` 레포 추가 + `deploy-nginx.yml`에 nginx.conf 배포 단계 추가 → PR #422.
+
+> **교훈**: SSE는 Nginx 통과 시 FD를 2개 소비(client + upstream)한다. `worker_connections`는 단순 HTTP 요청 기준이 아닌 SSE × 2를 고려해 설정해야 한다. boundary(1,800) 통과 + overflow(2,100) 실패의 경계가 `4096 ÷ 2 = 2,048`에 정확히 일치하므로, FD 산술로 상한을 정확히 특정할 수 있다.
+
+---
+
 ### 결과 (튜닝 후)
 
 | 지표 | 베이스라인 | 결과 | 목표 | 상태 |
