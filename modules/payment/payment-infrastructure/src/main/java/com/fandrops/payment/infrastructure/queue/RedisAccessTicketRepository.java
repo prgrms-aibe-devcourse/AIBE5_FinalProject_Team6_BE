@@ -43,6 +43,11 @@ public class RedisAccessTicketRepository implements AccessTicketRepository {
         redisTemplate.delete(ticketKey(fanId, productId));
     }
 
+    @Override
+    public String get(Long fanId, Long productId) {
+        return redisTemplate.opsForValue().get(ticketKey(fanId, productId));
+    }
+
     private String ticketKey(Long fanId, Long productId) {
         return String.format(TICKET_KEY, productId, fanId);
     }

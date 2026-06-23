@@ -25,7 +25,7 @@ class WaitQueueServiceTest {
     void setUp() {
         repository       = new LocalWaitQueueRepository();
         ticketRepository = new LocalAccessTicketRepository(300L);
-        service          = new WaitQueueService(repository, ticketRepository);
+        service          = new WaitQueueService(repository, ticketRepository, 600L, 10L);
     }
 
     @Test
@@ -109,7 +109,7 @@ class WaitQueueServiceTest {
     @DisplayName("Q-1: 만료된 Access Ticket은 isValid false 반환")
     void q1_expiredAccessTicket_isInvalid() {
         LocalAccessTicketRepository expiredTicketRepo = new LocalAccessTicketRepository(0L);
-        WaitQueueService svc = new WaitQueueService(repository, expiredTicketRepo);
+        WaitQueueService svc = new WaitQueueService(repository, expiredTicketRepo, 600L, 10L);
 
         svc.join(new QueueJoinCommand(FAN_ID, PRODUCT_ID));
         List<QueueAdvanceResult> advanced = svc.advanceQueue(PRODUCT_ID, 1, 10);

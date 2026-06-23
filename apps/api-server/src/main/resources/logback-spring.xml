@@ -19,6 +19,8 @@
         <logger name="com.fandrops" level="DEBUG"/>
         <logger name="org.springframework" level="INFO"/>
         <logger name="org.hibernate" level="INFO"/>
+        <!-- SSE 클라이언트 연결 끊김(WSAECONNABORTED) 로그 노이즈 억제 -->
+        <logger name="org.apache.catalina.core.ContainerBase.[Tomcat].[localhost].[/].[dispatcherServlet]" level="OFF"/>
         <root level="INFO">
             <appender-ref ref="CONSOLE"/>
         </root>

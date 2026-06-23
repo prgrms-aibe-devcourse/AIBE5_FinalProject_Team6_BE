@@ -10,4 +10,7 @@ public interface AccessTicketRepository {
 
     /** 토큰 무효화 (주문 완료·EXPIRED 전이 시 호출). */
     void invalidate(Long fanId, Long productId);
+
+    /** 기존 토큰 조회. 없거나 만료된 경우 null 반환. */
+    String get(Long fanId, Long productId);
 }
