@@ -115,10 +115,14 @@ PG HTTP 대기 구간에 DB 커넥션이 없으므로, VU 50개가 동시에 PG 
 
 ```
 요청 A: precheck ──commit── PG 호출 ──────── applySuccess (version=1→2) ✅
-요청 B:     precheck ──commit── PG 호출 ── applySuccess (OptimisticLockException) ❌
+요청 B:     precheck ──commit── PG 호출 ── applySuccess (OptimisticLockException)
+                                                               ↓
+                                               precheck 재시도 → isDone() == true
+                                                               ↓
+                                               A의 결과를 멱등 반환 ✅
 ```
 
-Toss PG는 `tossPaymentKey` 기준 멱등을 자체 보장하므로 두 번째 PG 호출은 성공하더라도 `applySuccess`의 `@Version` 체크가 충돌을 감지해 거부한다. 이는 ADR-006에서 채택한 낙관적 락 전략과 동일 방어선이다.
+Toss PG는 `tossPaymentKey` 기준 멱등을 자체 보장하므로 두 번째 PG 호출은 성공한다. `applySuccess`의 `@Version`이 충돌을 감지하면 `PaymentConfirmService`에서 예외를 잡아 `precheck`를 재시도하고, 이미 완료된 결과를 멱등 반환한다. 클라이언트는 재시도 없이 정상 응답을 받는다.
 
 ### C안 — WebClient 비동기 전환
 
@@ -204,7 +208,7 @@ public PrecheckResult precheck(PaymentConfirmCommand command) {
 
 ### 부정 · 수용
 
-- precheck TX 커밋 ~ applySuccess TX 시작 사이 타임 윈도에서 `@Version` 충돌 발생 가능 → 클라이언트 재시도 필요 (`retryable: true` 응답 계약 유지, ADR-006 불변)
+- precheck TX 커밋 ~ applySuccess TX 시작 사이 타임 윈도에서 `@Version` 충돌 발생 가능 → `PaymentConfirmService`에서 예외를 잡아 `precheck` 재시도 후 이미 완료된 결과를 멱등 반환. 클라이언트 재시도 불필요
 - TX 흐름이 두 클래스로 분산되어 직관성 감소 → 코드 주석과 이 ADR로 보완
 
 ### 불변
@@ -214,7 +218,7 @@ public PrecheckResult precheck(PaymentConfirmCommand command) {
 | PG 호출 위치 | `PaymentConfirmService.confirm()` 안, TX 밖 |
 | TxHelper 호출 방식 | 반드시 Bean 주입 후 `txHelper.메서드()` — `this.` 직접 호출 금지 |
 | `applyFailure` noRollbackFor | `PaymentConfirmFailedException` — 제거 시 FAILED 상태 커밋 불가, 이중 결제 위험 |
-| `@Version` 충돌 응답 | `retryable: true` 포함 (ADR-006 불변 계승) |
+| `@Version` 충돌 처리 | 서버에서 `precheck` 재시도 후 멱등 반환. 재시도 후에도 `proceed`이면 예외 전파 (`retryable: true`) |
 
 ---
 
