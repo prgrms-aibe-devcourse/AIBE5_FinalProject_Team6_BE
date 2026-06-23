@@ -31,12 +31,6 @@ public interface WaitQueueRepository {
     /** processingStartAt이 threshold 이전인 PROCESSING 상태 fanId 반환 (타임아웃 감지). */
     List<Long> findProcessingExpiredFanIds(Long productId, Instant threshold);
 
-    /** joinedAt이 threshold 이전인 WAITING 상태 fanId 반환 (장기 대기 타임아웃 감지). */
-    List<Long> findWaitingExpiredFanIds(Long productId, Instant threshold);
-
-    /** WAITING entry를 EXPIRED로 전이. WAITING 상태가 아니면 무시. */
-    void transitionWaitingToExpired(Long fanId, Long productId);
-
     /** 현재 PROCESSING 상태 entry 수. */
     long countProcessing(Long productId);
 

@@ -29,9 +29,6 @@ public class QueueSsePushService {
     @Value("${fandrops.queue.processing-timeout-seconds:600}")
     private long processingTimeoutSeconds;
 
-    @Value("${fandrops.queue.waiting-timeout-seconds:3600}")
-    private long waitingTimeoutSeconds;
-
     public QueueSsePushService(WaitQueueService waitQueueService, SseEmitterRegistry registry) {
         this.waitQueueService = waitQueueService;
         this.registry = registry;
@@ -39,13 +36,6 @@ public class QueueSsePushService {
 
     @Async("queueSseExecutor")
     public void processProduct(Long productId) {
-        // 0. 장기 WAITING 타임아웃 → EXPIRED 전이 (stale entry 제거)
-        Instant waitingThreshold = Instant.now().minusSeconds(waitingTimeoutSeconds);
-        List<Long> waitingExpired = waitQueueService.expireWaitingTimeouts(productId, waitingThreshold);
-        for (Long fanId : waitingExpired) {
-            registry.sendToFan(productId, fanId, QueueStreamEvent.expired());
-        }
-
         // 1. PROCESSING 타임아웃 → EXPIRED 전이 (invariants §4, W-3)
         Instant threshold = Instant.now().minusSeconds(processingTimeoutSeconds);
         List<Long> expired = waitQueueService.expireTimeouts(productId, threshold);
