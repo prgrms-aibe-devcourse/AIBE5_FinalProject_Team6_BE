@@ -3,6 +3,7 @@ package com.fandrops.user.infrastructure.k6;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
 import javax.crypto.SecretKey;
@@ -30,9 +31,8 @@ class JwtGeneratorTest {
     @Test
     void generateTokensForK6() throws Exception {
         String base64Secret = System.getenv("JWT_SECRET");
-        if (base64Secret == null || base64Secret.isBlank()) {
-            throw new IllegalStateException("JWT_SECRET 환경변수가 설정되지 않았습니다.");
-        }
+        Assumptions.assumeTrue(base64Secret != null && !base64Secret.isBlank(),
+                "JWT_SECRET 환경변수 미설정 — 수동 실행 전용, CI skip");
 
         SecretKey secretKey = Keys.hmacShaKeyFor(Decoders.BASE64.decode(base64Secret));
 
