@@ -61,3 +61,6 @@ infra/k6/seed/tokens.csv
 
 ### 로컬 디버깅 스크립트 (시크릿 하드코딩 가능 — git 노출 금지) ###
 verify_jwt.py
+
+### Vercel CLI 로컬 설정 (BE 레포 불필요) ###
+.vercel/
