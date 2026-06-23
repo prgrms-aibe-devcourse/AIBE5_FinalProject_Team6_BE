@@ -185,6 +185,82 @@ rate limit 응답이 check 실패로 집계되지 않아 s06 재측정 시 실�
 
 ---
 
+### 5. k6 s01 100% 실패 원인 분석 — product_id 불일치 + 활성 슬롯 오지정
+
+**상황**
+
+k6 s01 주문 동시성 시나리오를 EC2-2에서 실행했을 때 `http_req_failed: 100.00%`, `orders_reserved: 0`으로 모든 요청이 실패했다. Redis 티켓과 inventory는 정상이었고, 포트를 blue(8081) → green(8082)으로 바꿔도 동일하게 실패했다.
+
+**원인 분석 — 계층별 검증**
+
+**① 활성 슬롯 확인 (AWS SSM)**
+
+```bash
+aws ec2 describe-instances --filters "Name=private-ip-address,Values=10.0.1.114" \
+  --query "Reservations[0].Instances[0].InstanceId" --output text
+# → i-07d1c60d175cdb8ca
+
+aws ssm send-command ... "sudo cat /etc/fandrops/active-slot"
+# → green (8082)
+```
+
+| 항목 | 실측값 | 판정 |
+|---|---|---|
+| 활성 슬롯 | green (8082) | ⚠️ 사용자가 8081(blue)로 실행 — 구버전 JAR |
+| Redis `access:ticket:1:1` | EXISTS=1 | ✅ 티켓 존재 |
+| inventory available_qty | 100, reserved_qty=0 | ✅ 정상 |
+
+8082로 재실행했지만 동일하게 100% 실패 → 포트가 유일한 원인이 아님.
+
+**② EC2-1 직접 API 호출 (Python via SSM)**
+
+SSM curl 이스케이핑이 복잡하여 Python urllib 방식으로 전환:
+
+```python
+# /tmp 경유 Python heredoc 실행
+import urllib.request, json
+token = open('/opt/fandrops/k6/seed/tokens.csv').readlines()[50].strip().split(',')[1]
+body = json.dumps({'accessTicket':'test-ticket-token','items':[{'productId':1,'quantity':1}]}).encode()
+req = urllib.request.Request('http://localhost:8082/api/v1/orders', ...)
+# → STATUS: 404
+# → {"code":"PRODUCT_NOT_FOUND","message":"상품을 찾을 수 없습니다: productId=1"}
+```
+
+**③ product 테이블 확인**
+
+```sql
+SELECT id, status FROM product ORDER BY id LIMIT 10;
+-- id: 4, 5, 7, 8, 9, 10, 12 ...  (id=1 없음)
+```
+
+**근본 원인**: DB 재시드 후 product 테이블 최소 id가 4부터 시작. k6 스크립트 기본값 `PRODUCT_ID=1`은 product 테이블에 존재하지 않아 주문 시 `PRODUCT_NOT_FOUND(404)` 반환 → 전체 400건 실패. inventory의 `product_id=1` 레코드는 orphan 상태.
+
+**해결 방법**
+
+```bash
+# ON_SALE + inventory 존재 product 확인
+SELECT p.id, i.available_qty FROM product p
+  JOIN inventory i ON p.id = i.product_id
+  WHERE p.status = 'ON_SALE' ORDER BY p.id LIMIT 5;
+# → product_id=4 (available_qty=100) 확인
+
+# Redis 재시드 (product_id=4)
+for i in {1..2100}; do
+  valkey-cli -h $REDIS_HOST --tls setex "access:ticket:4:$i" 86400 "test-ticket-token"
+done
+
+# k6 실행 시 PRODUCT_ID=4 명시
+k6 run -e BASE_URL=http://10.0.1.114:8082 -e PRODUCT_ID=4 -e FAN_POOL_SIZE=200 ...
+```
+
+**배운 점**
+
+1. k6 스크립트의 `PRODUCT_ID` 기본값(1)이 실제 DB 데이터와 일치한다는 전제를 항상 검증해야 한다. 재시드 후 id auto_increment가 달라지면 모든 k6 시나리오가 조용히 실패한다.
+2. SSM으로 복잡한 curl 명령을 보낼 때는 `--cli-input-json file://`(JSON 파일) + Python urllib 방식이 shell 이스케이핑 문제를 원천 차단한다.
+3. 활성 슬롯 확인은 s01·s07 등 Spring Boot 직접 연결 시나리오 실행 전 필수 체크 항목이다. (`sudo cat /etc/fandrops/active-slot`)
+
+---
+
 ## 기술 스택 키워드
 
 `AWS EC2` `AWS SSM` `AWS S3` `Nginx` `Blue-Green 배포` `GitHub Actions`  
