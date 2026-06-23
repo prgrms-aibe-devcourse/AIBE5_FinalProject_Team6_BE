@@ -1,0 +1,16 @@
+{
+  "InstanceIds": ["i-07d1c60d175cdb8ca"],
+  "DocumentName": "AWS-RunShellScript",
+  "Parameters": {
+    "commands": [
+      "echo '--- nginx.conf listen 443 ---'",
+      "grep 'listen.*443' /etc/nginx/nginx.conf",
+      "echo '--- api-ssl.conf listen 443 ---'",
+      "grep 'listen.*443' /etc/nginx/conf.d/api-ssl.conf",
+      "echo '--- nginx -t ---'",
+      "nginx -t 2>&1",
+      "echo '--- ss -tlnp port 443 ---'",
+      "ss -tlnp sport = :443"
+    ]
+  }
+}

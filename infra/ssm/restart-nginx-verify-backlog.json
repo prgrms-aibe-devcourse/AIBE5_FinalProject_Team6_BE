@@ -1,0 +1,13 @@
+{
+  "InstanceIds": ["i-07d1c60d175cdb8ca"],
+  "DocumentName": "AWS-RunShellScript",
+  "Parameters": {
+    "commands": [
+      "systemctl restart nginx && echo 'Nginx restarted OK' || echo 'Nginx restart FAILED'",
+      "sleep 2",
+      "ss -tlnp sport = :443",
+      "echo '--- nginx status ---'",
+      "systemctl is-active nginx"
+    ]
+  }
+}
