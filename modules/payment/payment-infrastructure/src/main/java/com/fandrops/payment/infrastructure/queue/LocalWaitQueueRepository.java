@@ -146,6 +146,31 @@ public class LocalWaitQueueRepository implements WaitQueueRepository {
     }
 
     @Override
+    public synchronized List<Long> findWaitingExpiredFanIds(Long productId, Instant threshold) {
+        LinkedHashMap<Long, WaitQueueEntry> queue = store.get(productId);
+        if (queue == null) {
+            return List.of();
+        }
+        return queue.entrySet().stream()
+                .filter(e -> e.getValue().getStatus() == WaitQueueStatus.WAITING
+                        && e.getValue().getJoinedAt().isBefore(threshold))
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public synchronized void transitionWaitingToExpired(Long fanId, Long productId) {
+        LinkedHashMap<Long, WaitQueueEntry> queue = store.get(productId);
+        if (queue == null) {
+            return;
+        }
+        WaitQueueEntry entry = queue.get(fanId);
+        if (entry != null && entry.getStatus() == WaitQueueStatus.WAITING) {
+            queue.put(fanId, entry.withTerminal(WaitQueueStatus.EXPIRED));
+        }
+    }
+
+    @Override
     public synchronized long countProcessing(Long productId) {
         LinkedHashMap<Long, WaitQueueEntry> queue = store.get(productId);
         if (queue == null) {
