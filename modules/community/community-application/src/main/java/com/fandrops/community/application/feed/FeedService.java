@@ -4,6 +4,7 @@ import com.fandrops.community.application.event.NewFeedEvent;
 import com.fandrops.community.application.exception.FeedNotFoundException;
 import com.fandrops.community.application.exception.FeedOwnershipException;
 import com.fandrops.community.application.port.FeedCachePort;
+import com.fandrops.community.application.port.FeedLikeCachePort;
 import com.fandrops.community.application.port.OutboxEvent;
 import com.fandrops.community.application.port.OutboxEventPort;
 import com.fandrops.community.application.port.OutboxEventType;
@@ -40,6 +41,7 @@ public class FeedService {
     private final ApplicationEventPublisher applicationEventPublisher;
     private final Clock clock;
     private final FeedCachePort feedCachePort;
+    private final FeedLikeCachePort feedLikeCachePort;
 
     public FeedService(ArtistFeedRepository feedRepository,
                        FeedImageRepository imageRepository,
@@ -49,7 +51,8 @@ public class FeedService {
                        OutboxEventPort outboxEventPort,
                        ApplicationEventPublisher applicationEventPublisher,
                        Clock clock,
-                       FeedCachePort feedCachePort) {
+                       FeedCachePort feedCachePort,
+                       FeedLikeCachePort feedLikeCachePort) {
         this.feedRepository = feedRepository;
         this.imageRepository = imageRepository;
         this.feedLikeRepository = feedLikeRepository;
@@ -59,6 +62,7 @@ public class FeedService {
         this.applicationEventPublisher = applicationEventPublisher;
         this.clock = clock;
         this.feedCachePort = feedCachePort;
+        this.feedLikeCachePort = feedLikeCachePort;
     }
 
     @Transactional
@@ -143,7 +147,8 @@ public class FeedService {
             return Set.of();
         }
         if (fanId != null) {
-            return feedLikeRepository.findLikedFeedIdsByFanId(fanId, feedIds);
+            return feedLikeCachePort.getOrLoad(fanId, feedIds,
+                    () -> feedLikeRepository.findLikedFeedIdsByFanId(fanId, feedIds));
         }
         if (artistMemberId != null) {
             return feedLikeRepository.findLikedFeedIdsByArtistMemberId(artistMemberId, feedIds);
