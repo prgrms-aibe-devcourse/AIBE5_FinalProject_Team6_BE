@@ -1,15 +1,19 @@
--- Local dev seed data. Auto-runs on startup. Resets on app restart (ddl-auto: create-drop).
--- H2 in-memory (MODE=MySQL) 전용 — MySQL 전용 문법(NOW(6), INTERVAL 산술) 사용 불가
+-- Local dev seed data — H2 in-memory 최종본 (누적 아님, 매 실행 전체 교체)
+-- 실행: spring.profiles.active=local → ddl-auto:create-drop 후 본 파일 1회 INSERT
+-- MySQL 전용 문법(NOW(6), INTERVAL 산술) 사용 불가 — H2 DATEADD 사용
 -- ============================================================
--- 테스트 계정
---   팬 로그인      : fan@fandrops.test  / Test1234!  (fan id=1, NOVA 팔로우)
---   팬 로그인2     : fan2@fandrops.test / Test1234!  (fan id=2, 팔로우 0명)
---   에이전시 로그인 : agency@fandrops.test / Test1234!
---   어드민 로그인  : admin@fandrops.com / Test1234!
---   아티스트 로그인 : NovaHaneul·NovaSera·NovaMina·NovaYujin / LunaEunbyeol·LunaDal·LunaHaneul·LunaSeoyeon / Echo — 비번 Test1234!
---   아티스트 프로필 : NOVA(id=1) LUNA(id=2) ECHO(id=3)
---   그룹 멤버 수   : NOVA 4명 · LUNA 4명 · ECHO 1명 (이미지/수정본 프로필 기준, URL은 업로드로 채움)
---   팬 팔로우      : fan(id=1) -> NOVA(id=1) 초기 팔로우 상태
+-- 데모 세계관 (Admin · Agency · Fan · Artist 동일 기준)
+--   기획사 id=1 「테스트 기획사」→ 아티스트 NOVA(1) · LUNA(2) · ECHO(3)
+--   기획사 id=2 「글로벌 스타 엔터」→ 아티스트 PRISM(4) — Admin 입점 APPROVED 연동
+--   Admin 입점 신청 QA: BLOOM(PENDING) · PRISM(APPROVED→위 계정) · INDIE_A(REJECTED)
+-- ============================================================
+-- 테스트 계정 (비밀번호 전원 Test1234!)
+--   Admin    : admin@fandrops.com
+--   Agency   : agency@fandrops.test        (테스트 기획사, NOVA/LUNA/ECHO)
+--   Agency2  : globalstar@example.com      (글로벌 스타 엔터, PRISM)
+--   Fan      : fan@fandrops.test           (id=1, NOVA 팔로우)
+--   Fan2     : fan2@fandrops.test           (id=2, 팔로우 0명)
+--   Artist   : NovaHaneul·NovaSera·NovaMina·NovaYujin / LunaEunbyeol·LunaDal·LunaHaneul·LunaSeoyeon / Echo
 -- ============================================================
 
 -- 0. ShedLock 테이블 (JPA 엔티티 아님 — Hibernate ddl-auto 대상 외)
@@ -68,7 +72,8 @@ VALUES
     (1, 1, '오늘 뮤직비디오 촬영 완료! 기대해주세요.',                    27,  8, DATEADD('DAY',  -3, NOW())),
     (1, 1, '새 앨범 타이틀곡 작업 중. 힌트: 여름 느낌 물씬~',              9,  1, DATEADD('DAY',  -1, NOW())),
     (1, 1, '오늘 라이브 방송 22:00 KST 시작합니다! 기다려줘서 고마워요.', 45, 15, DATEADD('HOUR', -12, NOW())),
-    (1, 1, '드롭스 굿즈 최종 디자인 확정됐어요. 곧 공개 예정.',             6,  0, DATEADD('HOUR',  -1, NOW()));
+    (1, 1, '드롭스 굿즈 최종 디자인 확정됐어요. 곧 공개 예정.',             6,  0, DATEADD('HOUR',  -1, NOW())),
+    (1, 2, '세라입니다! 오늘 연습 끝나고 팬분들 생각하며 글 남겨요 💜',    8,  2, DATEADD('HOUR',  -8, NOW()));
 
 -- LUNA 피드 3개 (artist_member_id=5 은별)
 INSERT INTO artist_feed (artist_id, artist_member_id, content, like_count, comment_count, created_at)
@@ -232,6 +237,18 @@ VALUES
      '소규모 인디 아티스트 지원 기획사입니다.',
      'INDIE_A', 'REJECTED', '제출 서류 미비 및 팬덤 규모 기준 미달',
      DATEADD('DAY', -20, NOW()), DATEADD('DAY', -18, NOW()));
+
+-- A3-1. PRISM 입점 승인(F02-02) — Admin APPROVED = agency_account + artist_profile 생성
+--       Fan GET /artists 에 NOVA/LUNA/ECHO 와 함께 PRISM(id=4) 노출
+INSERT INTO agency_account (id, login_id, password_hash, company_name, contact_email, status, role, created_at)
+VALUES (2, 'globalstar@example.com',
+        '$2a$10$IXraSx3hpYkrj8jRqqIsxOkdIfRCZKYxPafAJT7v3ZrlvB43gl7Re',
+        '글로벌 스타 엔터', 'globalstar@example.com', 'ACTIVE', 'AGENCY',
+        DATEADD('DAY', -8, NOW()));
+
+INSERT INTO artist_profile (id, agency_id, name, fan_count, joined_at, bio)
+VALUES (4, 2, 'PRISM', 0, DATEADD('DAY', -8, NOW()),
+        '입점 승인 데모 — Admin 심사 APPROVED 후 생성된 아티스트 그룹');
 
 -- A4. 알림 보강 — fan_id=1 다타입 QA (is_read mix)
 --     기존: NEW_FEED, ARTIST_SCHEDULE
