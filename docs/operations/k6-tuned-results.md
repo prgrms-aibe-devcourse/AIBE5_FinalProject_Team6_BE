@@ -921,7 +921,310 @@ sudo nginx -t && sudo systemctl reload nginx
 |---|---|
 | `/actuator/health` Host 헤더 버그 | ✅ 리포 수정 완료 — `deploy-nginx.yml` 트리거로 영구 반영 |
 | tokens.csv JWT 갱신 절차 | ✅ CD 배포 후 재생성 필수 절차로 확인 |
-| CD OOM (t3.small blue+green 동시 기동) | ⚠️ 미해결 — swap 추가 또는 green Xmx 축소 필요 |
+| CD OOM (t3.small blue+green 동시 기동) | ✅ 해결 — EC2-1 swap 2GB 추가 (2026-06-23), 재부팅 후에도 유지 (`/etc/fstab` 등록) |
+
+---
+
+### 3차 실행 트러블슈팅 (2026-06-23)
+
+**GHA Run**: [#28007076554](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/actions/runs/28007076554/job/82891402127)
+
+#### 증상
+
+| 구간 | 실패 유형 | 건수 |
+|---|---|---|
+| 전 구간 | `unexpected status` (non-200/429) | 537,990건 |
+
+- `checks_succeeded: 0.00%` — 전 요청 체크 실패
+- `http_req_failed: 100%`
+- `sse_connections_rejected: count=0` — 429 한 건도 없음
+- `http_req_duration avg=621ms` — SSE 연결이 65s 유지되지 않고 즉시 종료됨
+
+#### 원인
+
+**tokens.csv S3 업로드 누락 — June 18 생성 토큰 잔존**
+
+1. 2차 실행 트러블슈팅 세션(2026-06-23 이전)에서 `JwtGeneratorTest` 실행으로 tokens.csv를 재생성했으나 S3 업로드 단계가 누락됨
+2. S3에는 June 18 생성 토큰(`iat=1781765603`)이 그대로 남아있었음
+3. 현재 서버 `JWT_SECRET`과 June 18 토큰의 서명 secret이 달라 `JwtProviderImpl.parse()` → `JwtException` → `InvalidTokenException`
+4. `JwtAuthenticationFilter`가 예외를 catch하고 `SecurityContext` 미설정 → Spring Security가 anonymous user 처리
+5. `/api/v1/queue/stream/**` → `authenticated()` 요건 미충족 → `AccessDeniedException` → **HTTP 403**
+
+```
+[흐름]
+tokens.csv(June 18 서명) → k6 Bearer 헤더 → Spring Boot
+                                                 ↓
+                                    JwtFilter: SignatureException → 인증 컨텍스트 미설정
+                                                 ↓
+                                    Security: anonymous → 403
+```
+
+진단 과정:
+- `curl https://api.fandrops.site/api/v1/queue/stream/4` → HTTP 403, `Content-Length: 0` (Spring Security 응답)
+- EC2-1 포트 8081 직접 curl → 동일 403 → nginx가 아닌 앱 레벨 문제 확인
+- S3 tokens.csv 1행 iat 디코딩 → June 18 생성 확인
+- `JwtProviderImpl`: `Keys.hmacShaKeyFor(Decoders.BASE64.decode(secret))` 사용 확인 → secret 불일치 시 서명 검증 실패
+
+#### 조치
+
+1. EC2-1 현재 `JWT_SECRET` 확인 (SSM): `/OOkHMR5OAEzNxPBvRN5c0yGbMfI9f3VJaRXXN9Lboo`
+2. `$env:JWT_SECRET = "..."` 설정 후 `./gradlew :modules:user:user-infrastructure:test --tests "...JwtGeneratorTest" --rerun-tasks` 실행
+3. `aws s3 cp infra/k6/seed/tokens.csv s3://<bucket>/k6/tokens.csv` 업로드
+4. 신규 토큰으로 SSE 엔드포인트 검증: `curl -H "Authorization: Bearer <token>" .../api/v1/queue/stream/4` → **HTTP 200** ✅
+5. 로컬 tokens.csv 삭제
+
+> **재발 방지**: tokens.csv 재생성 후 반드시 S3 업로드까지 완료 확인. 신규 토큰 1건을 curl로 검증한 뒤 k6 실행.
+
+---
+
+### 4차 실행 트러블슈팅 (2026-06-23)
+
+**GHA Run**: [#28008723635](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/actions/runs/28008723635/job/82896594087)
+
+#### 증상
+
+| 지표 | 값 |
+|---|---|
+| checks_succeeded | 0% (6,734건 전부 실패) |
+| http_req_failed | 100% |
+| http_req_duration median | 0s |
+| sse_connections_rejected | 0건 (429 없음) |
+| interrupted iterations | 4,240건 |
+
+실패 유형: `unexpected EOF` + `dial: i/o timeout`. 3차와 달리 HTTP 레벨 응답(403/429)이 아닌 네트워크 레벨 에러.
+
+#### 원인 분석
+
+**GHA 로그 타임라인 (k6 진행 상황)**
+
+| 시점 | 진행 상황 | 판정 |
+|---|---|---|
+| t=0~30s | 1,000 VU 램프업, 완료 0건 | ✅ 연결 수립 정상 |
+| t=30~60s | 1,000 VU 유지, 완료 0건 | ✅ 연결 60초간 유지됨 |
+| t=61s | 첫 29건 완료 + mass `unexpected EOF` 시작 | ⚠️ 60초 타임아웃 발화 |
+
+**핵심 관찰**: t=0~60s 동안 완료 0건 = 연결 자체는 정상 유지됨. `sse_connections_rejected=0` = 429 없음 = 용량 한도 문제 아님. t=61s에 mass EOF 발생은 `SseEmitter` 60초 타임아웃 첫 배치와 정확히 일치.
+
+**근본 원인**: `SseEmitterRegistry.register()` `onTimeout` 콜백이 `emitter.complete()`를 호출하지 않아 Spring이 HTTP 응답을 정상 종료하지 않음.
+
+```java
+// 문제 코드
+emitter.onTimeout(() -> emitters.remove(key, emitter));  // complete() 누락
+```
+
+타임아웃 발화 시 동작 흐름:
+
+```
+60초 타임아웃
+→ Spring: onTimeout 콜백 실행 (registry에서만 제거)
+→ Spring: HTTP 응답 final empty chunk 없이 TCP 연결 닫음
+→ k6: unexpected EOF, res.status=0
+→ k6 check: else { check(res, { 'unexpected status': () => false }) }  ← 항상 false
+→ checks_succeeded: 0%
+```
+
+이전 실패들과의 차이:
+- 1차: `limit_conn 3` → Nginx가 429 반환 (HTTP 레벨)
+- 2·3차: JWT 서명 불일치 → Spring Security가 403 반환 (HTTP 레벨)
+- 4차: `SseEmitter` 타임아웃 → Spring이 TCP 연결 비정상 종료 (네트워크 레벨)
+
+#### 조치
+
+**장성재** — `SseEmitterRegistry.register()` `onTimeout` 수정:
+
+```java
+emitter.onTimeout(() -> {
+    emitters.remove(key, emitter);
+    try {
+        emitter.complete();  // 추가: HTTP 200 정상 종료 보장
+    } catch (IllegalStateException ignored) {
+        // heartbeat가 이미 complete 처리한 경우 무시
+    }
+});
+```
+
+수정 후 기대 흐름:
+- 60초 타임아웃 → Spring이 final empty HTTP chunk 전송 후 정상 종료
+- k6: `res.status=200` → `connectionAccepted.add(1)` → check 통과
+- `http_req_failed=false`, `checks_succeeded` 정상 집계
+
+> **재발 방지**: `onTimeout`/`onError` 콜백에서 `emitter.complete()`를 명시적으로 호출하지 않으면 Spring이 연결을 비정상 종료할 수 있다. 신규 `SseEmitter` 구현 시 반드시 확인.
+
+---
+
+### 5차 실행 트러블슈팅 (2026-06-23)
+
+**GHA Run**: [#28012745830](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/actions/runs/28012745830)
+
+#### 증상
+
+| 지표 | 값 |
+|---|---|
+| `checks_succeeded` | 0.00% (0 / 12,972) |
+| `sse_connections_accepted` | 0 |
+| `sse_connections_rejected` | 0 |
+| `http_req_failed` | 100.00% (12,972 / 12,972) |
+| `http_req_duration` p50 / p90 | 163ms / 60s |
+| GHA 결론 | exit 99 (threshold 미달) |
+
+```
+time="2026-06-23T08:26:05Z" level=warning msg="Request Failed" error="unexpected EOF"
+```
+
+- 테스트 시작(08:25:04)로부터 **정확히 61초** 뒤(08:26:05)에 대량 EOF 발생 → 4차와 동일 패턴
+- **신규 현상**: p50=163ms의 빠른 실패가 다수 섞임 (4차는 전부 60초 대기 후 EOF)
+
+#### 타임라인
+
+| 시각 | 이벤트 |
+|---|---|
+| 08:24 | tokens.csv S3 업로드 시각 확인(16:01), fanId=1 curl 검증 → **HTTP 200** |
+| 08:24 | EC2-1 JWT_SECRET SSM 확인 (`/OOkHMR5...Lboo`) → 변경 없음 |
+| 08:25:04 | k6 시작, normal_load VU 램프업 |
+| 08:26:05 | **60초 SseEmitter 타임아웃** 동시 도달 → 대량 `unexpected EOF` |
+| 08:26~30 | VU 재연결 시도 → 163ms 빠른 실패 반복 |
+| 08:30:59 | k6 종료, exit 99 |
+
+#### 근본 원인 분석
+
+4차 수정 (`emitter.complete()` in `onTimeout()`) 이 **효과 없음** 으로 판명.
+
+```
+[Spring async timeout 발생 시 내부 처리 순서]
+1. Tomcat: async 컨텍스트 timeout 처리 시작 → TCP 연결 abrupt close 준비
+2. Spring: onTimeout 콜백 호출 → emitter.complete() 실행 시도
+3. 하지만 Tomcat이 이미 response를 닫는 중 → IllegalStateException 발생
+4. catch (IllegalStateException ignored) 로 무시
+5. 결과: HTTP 200 아닌 EOF 그대로 발생
+```
+
+`onTimeout()` 콜백 안에서 `complete()`를 호출하면 Spring 내부 async timeout 핸들러가 선점하여 **이미 늦은 상태**다. `complete()`는 정상적인 컨텍스트(스케줄러 스레드 등)에서 호출해야 HTTP 200이 보장된다.
+
+#### 신규 현상: 163ms 빠른 실패 원인
+
+60초 대기 후 대량 EOF → 1,000+ VU 동시 재연결 → 서버 순간 과부하 → 재연결 요청 즉시 실패(status=0, EOF). 4차까지 없던 패턴으로 VU 재연결 스톰(reconnection storm)에 해당한다.
+
+#### 조치 방향 (장성재)
+
+`onTimeout` 의존을 제거하고, 스케줄러(정상 컨텍스트)에서 proactive `complete()`를 호출하는 방식으로 교체.
+
+```java
+// SseEmitterRegistry.java — 수정 방향
+// 1. 등록 시각 추적
+private final ConcurrentHashMap<String, Long> registrationTimes = new ConcurrentHashMap<>();
+
+private SseEmitter register(Long productId, Long fanId) {
+    String key = key(productId, fanId);
+    SseEmitter emitter = new SseEmitter(sseTimeoutMs);
+    registrationTimes.put(key, System.currentTimeMillis());
+    emitters.put(key, emitter);
+    emitter.onCompletion(() -> {
+        emitters.remove(key, emitter);
+        registrationTimes.remove(key);
+    });
+    emitter.onTimeout(() -> emitters.remove(key, emitter)); // complete() 제거
+    emitter.onError(e -> emitters.remove(key, emitter));
+    return emitter;
+}
+
+// 2. sendHeartbeat()에서 55초 초과 emitter proactive close
+public void sendHeartbeat() {
+    long now = System.currentTimeMillis();
+    for (Map.Entry<String, SseEmitter> entry : emitters.entrySet()) {
+        String key = entry.getKey();
+        Long registeredAt = registrationTimes.get(key);
+        if (registeredAt != null && (now - registeredAt) > 55_000) {
+            // Spring timeout(60s) 전에 정상 컨텍스트에서 complete() → HTTP 200 보장
+            try { entry.getValue().complete(); } catch (IllegalStateException ignored) {}
+            continue;
+        }
+        try {
+            entry.getValue().send(SseEmitter.event().comment("heartbeat"));
+        } catch (IOException | IllegalStateException e) {
+            emitters.remove(key);
+        }
+    }
+}
+```
+
+기대 흐름:
+- t=55s: 스케줄러가 `complete()` 호출 (정상 컨텍스트) → HTTP 200 정상 종료
+- k6: `res.status=200` → `connectionAccepted.add(1)` → check 통과
+- t=60s: Spring timeout 도달 전 이미 complete 상태 → `onTimeout`은 no-op
+
+> **교훈**: `SseEmitter.onTimeout()` 콜백은 Spring 내부 타임아웃 핸들러가 response를 먼저 닫을 수 있어 `complete()`가 보장되지 않는다. SSE 연결 수명 관리는 반드시 외부 스케줄러(정상 컨텍스트)에서 proactive하게 처리해야 한다.
+
+---
+
+### 6차 실행 트러블슈팅 (2026-06-23)
+
+**GHA Run**: [#28014460997](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/actions/runs/28014460997)
+
+#### 증상
+
+| 지표 | 5차 | 6차 |
+|---|---|---|
+| `http_reqs` | 12,972 | **264,402** (×20) |
+| `http_req_duration` p50 | 163ms | **0ms** |
+| `iteration_duration` p50 | 163ms | **31ms** |
+| `sse_connections_accepted` | 0 | 0 |
+| `http_req_failed` | 100% | 100% |
+| EOF 발생 시각 | 시작 +61s | 시작 +60s |
+
+```
+time="2026-06-23T08:56:34Z" level=warning msg="Request Failed" error="unexpected EOF"
+time="2026-06-23T09:00:53Z" level=warning msg="Request Failed" error="Get \"***/api/v1/queue/stream/4\": dial: i/o timeout"
+```
+
+- `unexpected EOF` 계속 발생 — 5차와 동일 패턴
+- **신규**: `http_req_duration p50=0ms` → proactive `complete()` 호출 후 k6가 여전히 실패 응답을 받아 VU가 즉시 재연결 폭풍(reconnection storm) 발생
+- **신규**: `dial: i/o timeout` — overflow 구간(2100 VU 동시 재연결) TCP backlog 포화
+
+#### 근본 원인 분석
+
+5차 fix(proactive complete)가 `complete()` 호출 자체는 성공하지만, **k6가 여전히 `unexpected EOF`(status=0)**를 수신하는 이유가 밝혀짐.
+
+```
+[HTTP 프로토콜 버전 불일치]
+
+k6 → Nginx     : HTTP/1.1 (chunked transfer encoding)
+Nginx → Spring : HTTP/1.0 (기본값, chunked 없음)
+
+Spring complete() 호출
+  → HTTP/1.0 TCP close (final 0\r\n\r\n 청크 없음)
+  → Nginx: upstream EOF 수신 → k6에 final chunk 없이 TCP FIN
+  → k6 Go HTTP client: 청크 종료자 미수신 → "unexpected EOF"
+  → res.status = 0 (200 헤더 수신했어도 body 비정상 종료)
+```
+
+Nginx가 upstream(Spring)과 HTTP/1.0으로 통신하면 chunked transfer encoding을 사용하지 않아 `0\r\n\r\n` 종료 청크가 k6에 전달되지 않는다. k6의 Go HTTP client는 이를 비정상 EOF로 처리한다.
+
+#### 두 에러 원인 요약
+
+| 에러 | 원인 |
+|---|---|
+| `unexpected EOF` | Nginx↔Spring HTTP/1.0 — chunked 종료자 미전달 |
+| `dial: i/o timeout` | overflow VU 2100개 동시 재연결 → OS TCP accept backlog 포화 |
+
+#### 조치 (지영재)
+
+`nginx/fandrops-location.conf` SSE 블록에 HTTP/1.1 명시:
+
+```nginx
+location /api/v1/queue/stream {
+    # ... 기존 설정 ...
+    proxy_http_version 1.1;   # Nginx↔Spring HTTP/1.1 → chunked 종료자 정상 전달
+    proxy_set_header Connection "";  # keep-alive 헤더 클리어
+    # ...
+}
+```
+
+기대 흐름:
+- `complete()` 호출 → Spring이 `0\r\n\r\n` 최종 청크 전송
+- Nginx가 HTTP/1.1로 이를 k6에 정상 전달
+- k6: `res.status=200` → `connectionAccepted.add(1)` → check 통과
+
+> **교훈**: SSE를 Nginx로 프록시할 때 `proxy_http_version 1.1`은 필수다. HTTP/1.0 기본값은 chunked transfer encoding을 지원하지 않아 `SseEmitter.complete()`가 정상 동작해도 k6(Go HTTP client)가 EOF로 인식한다.
 
 ---
 
@@ -1214,6 +1517,34 @@ cd /opt/fandrops/k6 && BASE_URL=http://10.0.1.114:8082 K6_PROMETHEUS_RW_SERVER_U
   3. **`findRegularProducts` 인덱스 확인**: 커서 페이지네이션 쿼리(`WHERE status = 'ON_SALE' AND id < cursor ORDER BY id DESC LIMIT size`)에 `(status, id DESC)` 복합 인덱스가 없으면 Full Scan 발생. `EXPLAIN` 실행 계획 확인 필요.
 
   4. **꼬리 레이턴시(max 1.33s) 원인 추적**: 1.33s는 단순 DB 쿼리 범위를 벗어난 수치. 커넥션 풀 대기 또는 GC pause 가능성이 있음. HikariCP `connection-timeout` 로그 및 GC 로그 확인 권장.
+
+**피드백 반영 (형성빈 — 2026-06-23)**
+
+**어떻게 반영했는지**
+
+지영재 관찰·피드백을 토대로 원인을 재확인하고 두 가지 항목을 구현했다.
+
+1. `findRegularProducts` 쿼리의 `WHERE drops_start_at IS NULL AND id < :cursor ORDER BY id DESC`에 적합한 `(drops_start_at, id)` 복합 인덱스가 없어 Full Scan 가능성이 있음을 확인 → V42 Flyway 마이그레이션으로 추가.
+2. `ProductService.getProducts()`의 캐시 레이어 부재가 900 q/s DB 압박의 직접 원인임을 확인 → `ProductCacheAdapter` 구현 및 look-aside 패턴 적용.
+
+**어떤 기술/방법을 적용했는지**
+
+| 항목 | 내용 |
+|---|---|
+| 복합 인덱스 | `ALTER TABLE product ADD INDEX idx_product_regular_cursor (drops_start_at, id)` — V42 Flyway 마이그레이션 |
+| Redis 캐시 | `ProductCachePort / ProductCacheAdapter` — 커뮤니티 모듈 `FeedCacheAdapter`와 동일한 헥사고날 패턴 적용 |
+| TTL jitter | BASE TTL 120s + 최대 30s 랜덤 추가 — Thundering Herd 방지 |
+| evict 시점 | `evictAfterCommit()` — TX 커밋 후 무효화, 커밋 전 evict 시 stale 재적재 방지 |
+| fail-open | Redis 장애 시 `Optional.empty()` 반환 → DB 직접 조회로 자동 fallback |
+| Jackson 역직렬화 | `ProductListResponse` / `ProductListItemResponse`에 `@JsonCreator` + `@JsonProperty` 추가 |
+
+inventory(`getByProductIds`)는 주문 시마다 재고가 변동하므로 이번 캐시 범위에서 제외. 추후 TTL 5~10s 단기 캐시 또는 응답 경량화 방향으로 별도 검토 예정.
+
+**어떻게 해결했는지**
+
+캐시 히트 시 product·image 쿼리(쿼리 1·3)가 생략되어 300 RPS 기준 DB 부하가 900 q/s → 300 q/s로 감소 예상. 중앙값 응답시간(7ms)이 이미 SLO 여유 범위 안에 있으므로, 캐시 히트율이 높아지면 P95가 120ms 이하로 수렴할 것으로 판단.
+
+- **PR**: [#401 perf(order): s07 SLO 달성 — 상품 목록 Redis 캐시 + cursor 인덱스 추가](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/pull/401)
 
 ### 개선 방향
 
