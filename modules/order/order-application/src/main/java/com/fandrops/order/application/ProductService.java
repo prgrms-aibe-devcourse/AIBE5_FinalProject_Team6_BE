@@ -19,6 +19,8 @@ import com.fandrops.order.domain.port.ProductRepository;
 import java.util.List;
 import java.util.Map;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 public class ProductService {
 
@@ -101,7 +103,7 @@ public class ProductService {
         if (!images.isEmpty()) {
             productImageRepository.saveAll(images);
         }
-        productCachePort.evictAll();
+        evictAfterCommit();
         return saved.getId();
     }
 
@@ -125,7 +127,21 @@ public class ProductService {
                 productImageRepository.saveAll(images);
             }
         }
-        productCachePort.evictAll();
+        evictAfterCommit();
         return product.getStatus();
+    }
+
+    /** 트랜잭션 커밋 이후 캐시를 무효화한다. 커밋 전 evict 시 구데이터가 캐시에 재적재되는 문제 방지. */
+    private void evictAfterCommit() {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    productCachePort.evictAll();
+                }
+            });
+        } else {
+            productCachePort.evictAll();
+        }
     }
 }
