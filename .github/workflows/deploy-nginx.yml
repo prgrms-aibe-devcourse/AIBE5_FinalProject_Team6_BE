@@ -26,6 +26,7 @@ jobs:
 
       - name: Nginx 설정 파일 → S3 업로드
         run: |
+          aws s3 cp nginx/nginx.conf             s3://${{ secrets.S3_BUCKET }}/nginx/nginx.conf
           aws s3 cp nginx/fandrops-zones.conf    s3://${{ secrets.S3_BUCKET }}/nginx/fandrops-zones.conf
           aws s3 cp nginx/fandrops-location.conf s3://${{ secrets.S3_BUCKET }}/nginx/fandrops-location.conf
 
@@ -38,8 +39,10 @@ jobs:
             --instance-ids "$INSTANCE" \
             --document-name "AWS-RunShellScript" \
             --parameters commands="[
+              \"aws s3 cp s3://$BUCKET/nginx/nginx.conf             /tmp/nginx.conf\",
               \"aws s3 cp s3://$BUCKET/nginx/fandrops-zones.conf    /tmp/fandrops-zones.conf\",
               \"aws s3 cp s3://$BUCKET/nginx/fandrops-location.conf /tmp/fandrops-location.conf\",
+              \"sudo cp /tmp/nginx.conf             /etc/nginx/nginx.conf\",
               \"sudo cp /tmp/fandrops-zones.conf    /etc/nginx/conf.d/fandrops-zones.conf\",
               \"sudo cp /tmp/fandrops-location.conf /etc/nginx/default.d/fandrops-location.conf\",
               \"sudo nginx -t\",
