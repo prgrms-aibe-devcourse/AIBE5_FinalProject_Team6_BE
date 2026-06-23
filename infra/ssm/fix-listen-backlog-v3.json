@@ -1,0 +1,29 @@
+{
+  "InstanceIds": ["i-07d1c60d175cdb8ca"],
+  "DocumentName": "AWS-RunShellScript",
+  "Parameters": {
+    "commands": [
+      "cp /etc/nginx/nginx.conf /etc/nginx/nginx.conf.bak.v3",
+      "cp /etc/nginx/conf.d/api-ssl.conf /etc/nginx/conf.d/api-ssl.conf.bak.v3",
+      "echo '--- before ---'",
+      "grep 'listen.*443' /etc/nginx/nginx.conf",
+      "grep 'listen.*443' /etc/nginx/conf.d/api-ssl.conf",
+      "sed -i 's/listen \\[::]:443 ssl ipv6only=on backlog=[0-9]*;/listen [::]:443 ssl ipv6only=on;/' /etc/nginx/nginx.conf",
+      "sed -i 's/listen 443 ssl backlog=[0-9]* # managed/listen 443 ssl; # managed/' /etc/nginx/nginx.conf",
+      "sed -i 's/listen 443 ssl backlog=[0-9]*;/listen 443 ssl;/' /etc/nginx/conf.d/api-ssl.conf",
+      "sed -i 's/listen \\[::]:443 ssl backlog=[0-9]*;/listen [::]:443 ssl;/' /etc/nginx/conf.d/api-ssl.conf",
+      "sed -i 's/listen \\[::]:443 ssl ipv6only=on backlog=[0-9]*;/listen [::]:443 ssl ipv6only=on;/' /etc/nginx/conf.d/api-ssl.conf",
+      "echo '--- after normalize ---'",
+      "grep 'listen.*443' /etc/nginx/nginx.conf",
+      "grep 'listen.*443' /etc/nginx/conf.d/api-ssl.conf",
+      "sed -i 's/listen \\[::]:443 ssl ipv6only=on;/listen [::]:443 ssl ipv6only=on backlog=8192;/' /etc/nginx/nginx.conf",
+      "sed -i 's/listen 443 ssl; # managed by Certbot/listen 443 ssl backlog=8192; # managed by Certbot/' /etc/nginx/nginx.conf",
+      "sed -i 's/listen 443 ssl; # managed by Certbot/listen 443 ssl backlog=8192; # managed by Certbot/' /etc/nginx/conf.d/api-ssl.conf",
+      "sed -i 's/listen \\[::]:443 ssl;/listen [::]:443 ssl backlog=8192;/' /etc/nginx/conf.d/api-ssl.conf",
+      "echo '--- after fix ---'",
+      "grep 'listen.*443' /etc/nginx/nginx.conf",
+      "grep 'listen.*443' /etc/nginx/conf.d/api-ssl.conf",
+      "nginx -t 2>&1 && nginx -s reload && echo 'Nginx reloaded OK' || { echo 'FAILED - restoring v3 bak'; cp /etc/nginx/nginx.conf.bak.v3 /etc/nginx/nginx.conf; cp /etc/nginx/conf.d/api-ssl.conf.bak.v3 /etc/nginx/conf.d/api-ssl.conf; nginx -s reload; }"
+    ]
+  }
+}

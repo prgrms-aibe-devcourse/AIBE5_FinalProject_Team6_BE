@@ -902,3 +902,109 @@ SSE는 long-lived connection이므로 ramp-down 후에도 TIME_WAIT 상태의 �
 - 2,100 VU × SSE 1연결 + TIME_WAIT 여유분까지 충분히 커버
 
 > **교훈**: k6를 GHA runner에서 직접 실행할 때 SSE처럼 long-lived connection을 대량으로 열면 runner의 기본 `ulimit -n=1024`가 병목이 된다. EC2/Nginx 쪽 조치가 완료되었는데도 `dial: i/o timeout`이 재현된다면 **클라이언트(runner) 소켓 한도**를 먼저 점검한다.
+
+---
+
+## 13차 — Nginx listen backlog 511 → accept queue 오버플로우 원인 분석 및 조치 (2026-06-23)
+
+### 실행 조건
+
+- EC2-1: `worker_connections=8192`, `somaxconn=8192`, `tcp_max_syn_backlog=8192` 모두 적용
+- GHA runner: `ulimit -Sn 65536` **적용된 상태** (12차 조치 완료 후)
+
+### 증상
+
+```
+time='2026-06-23T17:44:18Z' level=warning msg='Request Failed'
+error='Get "https://api.fandrops.site/api/v1/queue/stream/4": dial: i/o timeout'
+```
+
+- **boundary 구간 100% 실패**: `dial: i/o timeout`
+- 12차 조치 이후 오히려 실패 규모가 커짐
+
+### 관찰
+
+**Nginx access log 분석** (17:39–17:46 구간):
+
+```
+--- access log count by minute ---
+   3357 23/Jun/2026:17:4       ← 전체 17:40~17:46
+
+--- status code distribution ---
+   3339 200
+     18 499
+```
+
+| 시각 | 건수 | 의미 |
+|------|------|------|
+| 17:40:47 | ~3,339 × 200 OK | normal_load 1,000 VU 연결 완료 후 ramp-down 기록 |
+| 17:41~17:44 | **0건** | boundary 1,800 VU — access log 기록 **전혀 없음** |
+| 17:44:56 | ~18 × 200/499 | overflow 일부만 기록 |
+
+access log는 응답 완료 시점에 기록된다. boundary VU들의 요청이 **단 한 건도 기록되지 않았다**는 것은 TCP 3-way handshake 자체가 완료되지 않았음을 의미한다.
+
+**Nginx listen backlog 확인**:
+
+```bash
+ss -tlnp sport = :443
+
+LISTEN 0  511  0.0.0.0:443   ← accept queue 상한 511
+LISTEN 0  511     [::]:443
+```
+
+`Send-Q = 511` = `min(Nginx listen backlog 기본값 511, somaxconn 8192)`.  
+somaxconn을 8192로 올려놨어도 Nginx listen 디렉티브에 `backlog` 파라미터가 없으면 기본 511이 적용된다.
+
+### 원인 분석
+
+12차에서 GHA runner ulimit 제한이 해제되자, boundary 시작 시각(startTime: `2m`)에 1,800 VU가 **거의 동시에** TCP SYN을 전송한다. Nginx accept queue 상한이 511이므로:
+
+```
+동시 SYN 1,800개 → accept queue(511) 즉시 포화
+→ 이후 SYN 커널이 drop
+→ 클라이언트는 SYN 재전송 후 tcp_syn_retries 소진
+→ dial: i/o timeout (~127초)
+```
+
+> **11차·12차에서 이 현상이 나타나지 않은 이유**: runner ulimit=1024 제한 때문에 1,800 VU가 실제로 SYN을 보내지 못해서 accept queue 오버플로우 자체가 발생하지 않았다. ulimit을 고치자 서버 측 병목이 노출됐다.
+
+### 조치 이력 — Nginx listen backlog 증설 시도
+
+Nginx 설정의 특성: **동일한 address:port를 listen하는 여러 server block이 있을 때, socket 수준 옵션(backlog, ipv6only 등)은 첫 번째 server block에서만 지정 가능**. 두 번째 이후 block에서 지정하거나 값이 다르면 `nginx: [emerg] duplicate listen options` 에러 발생.
+
+EC2-1에는 두 server block이 443을 공유한다:
+- `/etc/nginx/nginx.conf` — `fandrops.site` (Certbot 관리, `ipv6only=on` 포함)
+- `/etc/nginx/conf.d/api-ssl.conf` — `api.fandrops.site` (Certbot 관리, 옵션 없음)
+
+| 시도 | 변경 내용 | 에러 |
+|------|----------|------|
+| v1 | 두 파일 모두 `backlog=8192` + `api-ssl.conf`에 `ipv6only=on` 추가 | `[::]:443` duplicate ipv6only |
+| v2 | nginx.conf에만 `backlog=8192` 추가 | `[::]:443` duplicate (nginx.conf `ipv6only+backlog` vs api-ssl.conf `no options`) |
+| v3 | api-ssl.conf에 `backlog=8192`만 추가 (`ipv6only` 제외) — IPv4 sed 패턴 불일치 | `[::]:443` ipv6only 불일치 |
+| v4 | nginx.conf `backlog=8192` + api-ssl.conf IPv6 라인 제거 + api-ssl.conf IPv4에도 `backlog=8192` | `0.0.0.0:443` duplicate (양쪽 모두 backlog 지정) |
+| **v5** | nginx.conf `backlog=8192` + api-ssl.conf `[::]:443` 라인만 제거 + api-ssl.conf IPv4는 backlog 없이 유지 | **nginx -t 통과** |
+
+**v5 적용 결과**:
+
+```nginx
+# /etc/nginx/nginx.conf (fandrops.site)
+listen [::]:443 ssl ipv6only=on backlog=8192; # managed by Certbot
+listen 443 ssl backlog=8192;                  # managed by Certbot
+
+# /etc/nginx/conf.d/api-ssl.conf (api.fandrops.site)
+listen 443 ssl;   ← backlog 없음 (nginx.conf 소켓 재사용)
+                  ← [::]:443 라인 제거 (api.fandrops.site는 IPv4 전용)
+```
+
+`systemctl restart nginx` 후 소켓 재생성으로 backlog 반영:
+
+```bash
+ss -tlnp sport = :443
+
+LISTEN 0  8192  0.0.0.0:443   ← accept queue 8192 확인
+LISTEN 0  8192     [::]:443
+```
+
+> **reload vs restart**: `nginx -s reload`는 설정 파일만 재로드하고 기존 소켓을 유지한다. `listen backlog`는 소켓 생성 시에만 적용되므로 반드시 `systemctl restart nginx`로 소켓을 재생성해야 한다.
+
+> **교훈**: somaxconn을 아무리 높여도 Nginx `listen` 디렉티브에 `backlog` 파라미터를 명시하지 않으면 OS 기본값(511)이 적용된다. 두 파라미터는 독립적이며, 실효 accept queue = `min(listen backlog, somaxconn)`이다. 복수 server block이 포트를 공유하는 Certbot 관리 설정에서는 첫 번째 server block(nginx.conf)에만 `backlog`를 지정하고 나머지(api-ssl.conf)에서는 socket 옵션을 일절 지정하지 않아야 한다.
