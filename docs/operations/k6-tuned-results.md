@@ -1156,6 +1156,78 @@ public void sendHeartbeat() {
 
 ---
 
+### 6차 실행 트러블슈팅 (2026-06-23)
+
+**GHA Run**: [#28014460997](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/actions/runs/28014460997)
+
+#### 증상
+
+| 지표 | 5차 | 6차 |
+|---|---|---|
+| `http_reqs` | 12,972 | **264,402** (×20) |
+| `http_req_duration` p50 | 163ms | **0ms** |
+| `iteration_duration` p50 | 163ms | **31ms** |
+| `sse_connections_accepted` | 0 | 0 |
+| `http_req_failed` | 100% | 100% |
+| EOF 발생 시각 | 시작 +61s | 시작 +60s |
+
+```
+time="2026-06-23T08:56:34Z" level=warning msg="Request Failed" error="unexpected EOF"
+time="2026-06-23T09:00:53Z" level=warning msg="Request Failed" error="Get \"***/api/v1/queue/stream/4\": dial: i/o timeout"
+```
+
+- `unexpected EOF` 계속 발생 — 5차와 동일 패턴
+- **신규**: `http_req_duration p50=0ms` → proactive `complete()` 호출 후 k6가 여전히 실패 응답을 받아 VU가 즉시 재연결 폭풍(reconnection storm) 발생
+- **신규**: `dial: i/o timeout` — overflow 구간(2100 VU 동시 재연결) TCP backlog 포화
+
+#### 근본 원인 분석
+
+5차 fix(proactive complete)가 `complete()` 호출 자체는 성공하지만, **k6가 여전히 `unexpected EOF`(status=0)**를 수신하는 이유가 밝혀짐.
+
+```
+[HTTP 프로토콜 버전 불일치]
+
+k6 → Nginx     : HTTP/1.1 (chunked transfer encoding)
+Nginx → Spring : HTTP/1.0 (기본값, chunked 없음)
+
+Spring complete() 호출
+  → HTTP/1.0 TCP close (final 0\r\n\r\n 청크 없음)
+  → Nginx: upstream EOF 수신 → k6에 final chunk 없이 TCP FIN
+  → k6 Go HTTP client: 청크 종료자 미수신 → "unexpected EOF"
+  → res.status = 0 (200 헤더 수신했어도 body 비정상 종료)
+```
+
+Nginx가 upstream(Spring)과 HTTP/1.0으로 통신하면 chunked transfer encoding을 사용하지 않아 `0\r\n\r\n` 종료 청크가 k6에 전달되지 않는다. k6의 Go HTTP client는 이를 비정상 EOF로 처리한다.
+
+#### 두 에러 원인 요약
+
+| 에러 | 원인 |
+|---|---|
+| `unexpected EOF` | Nginx↔Spring HTTP/1.0 — chunked 종료자 미전달 |
+| `dial: i/o timeout` | overflow VU 2100개 동시 재연결 → OS TCP accept backlog 포화 |
+
+#### 조치 (지영재)
+
+`nginx/fandrops-location.conf` SSE 블록에 HTTP/1.1 명시:
+
+```nginx
+location /api/v1/queue/stream {
+    # ... 기존 설정 ...
+    proxy_http_version 1.1;   # Nginx↔Spring HTTP/1.1 → chunked 종료자 정상 전달
+    proxy_set_header Connection "";  # keep-alive 헤더 클리어
+    # ...
+}
+```
+
+기대 흐름:
+- `complete()` 호출 → Spring이 `0\r\n\r\n` 최종 청크 전송
+- Nginx가 HTTP/1.1로 이를 k6에 정상 전달
+- k6: `res.status=200` → `connectionAccepted.add(1)` → check 통과
+
+> **교훈**: SSE를 Nginx로 프록시할 때 `proxy_http_version 1.1`은 필수다. HTTP/1.0 기본값은 chunked transfer encoding을 지원하지 않아 `SseEmitter.complete()`가 정상 동작해도 k6(Go HTTP client)가 EOF로 인식한다.
+
+---
+
 ### 결과 (튜닝 후)
 
 | 지표 | 베이스라인 | 결과 | 목표 | 상태 |
