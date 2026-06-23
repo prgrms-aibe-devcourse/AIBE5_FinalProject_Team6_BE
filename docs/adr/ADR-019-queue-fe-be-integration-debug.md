@@ -238,7 +238,7 @@ ExecStart=/usr/bin/java -Xms256m -Xmx768m \
 # application-prod.yml — 추가
 fandrops:
   queue:
-    processing-timeout-seconds: 15
+    processing-timeout-seconds: 30
     advance-batch-size: 20
     max-concurrent-processing: 20
     scheduler:
@@ -247,8 +247,13 @@ fandrops:
 
 처리 속도 계산:
 ```
-rate = 20 / 15 = 1.33명/초
-position 100 대기 → 100 × (15/20) = 75초 ≈ 1.25분
+rate = 20 / 30 = 0.67명/초
+position 90 대기 → 90 × (30/20) = 135초 ≈ 2.25분
+큐 전체 소멸(100명) → ceil(100/20) × 30 = 150초 ≈ 2.5분
+
+timeout=15s였을 때 소멸 시간 = 75초로, 시뮬레이터 완료(~23s) 후
+53초 이내에 실제 유저가 join하지 않으면 큐가 비어 position=1 표시됨.
+timeout=30s로 변경 시 소멸 시간 = 150초 → 여유 시간 127초 확보.
 ```
 
 ---
@@ -262,7 +267,7 @@ position 100 대기 → 100 × (15/20) = 75초 ≈ 1.25분
 | 1 | `WaitQueueController` | `join()`·`status()` 응답을 `ApiResponse.ok()`로 래핑 |
 | 2 | `LocalSecurityConfig` | JWT 필터를 Security 체인에 추가, `FilterRegistrationBean`으로 이중 등록 방지 |
 | 3 | `WaitQueueService` · `WaitQueueConfig` | 예상 대기시간을 `position × (timeout / maxConcurrent)` 동적 계산으로 변경 |
-| 4 | `application-prod.yml` | 시연용 큐 설정(`timeout=15s, maxConcurrent=20`) 추가 |
+| 4 | `application-prod.yml` | 시연용 큐 설정(`timeout=30s, maxConcurrent=20`) 추가 (큐 유지시간 150초 확보) |
 
 ---
 
@@ -278,7 +283,7 @@ position 100 대기 → 100 × (15/20) = 75초 ≈ 1.25분
 ### 부정 · 수용
 
 - `LocalSecurityConfig`에 JWT 필터가 추가되어 로컬 환경에서도 유효한 Bearer 토큰이 필요함. `X-Fan-Id` 헤더 방식은 여전히 fallback으로 동작하므로 Swagger·curl 테스트에는 영향 없음
-- `application-prod.yml`의 큐 설정(`timeout=15s`)은 시연 목적으로 조정된 값임. 실서비스 트래픽 규모에 따라 `processing-timeout-seconds`와 `max-concurrent-processing`을 재산정해야 함
+- `application-prod.yml`의 큐 설정(`timeout=30s`)은 시연 목적으로 조정된 값임. 실서비스 트래픽 규모에 따라 `processing-timeout-seconds`와 `max-concurrent-processing`을 재산정해야 함
 
 ### 불변
 
