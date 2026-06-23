@@ -143,7 +143,7 @@ k6 run -e BASE_URL=https://api.fandrops.site \
 
 ### 스크린샷
 
-![s02_feed_read_tuned](screenshots/tuned/s02_feed_read_tuned.png)
+[s02_feed_read_tuned](screenshots/tuned/s02_feed_read_tuned.png)
 
 ### 문제 정의
 
@@ -756,6 +756,174 @@ k6가 SSE 연결을 브라우저처럼 유지하지 않고 첫 청크 수신 후
 ### 실행 방법
 
 GitHub Actions → **Run k6 Load Test** → `scenario: 05` → `confirm: yes`
+
+### 1차 실행 트러블슈팅 (2026-06-23)
+
+**GHA Run**: [#27995728824](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/actions/runs/27995728824)
+
+#### 증상
+
+| 구간 | http_req_failed | threshold |
+|---|---|---|
+| normal_load (1,000 VU) | **100%** | < 0.1% ✗ |
+| boundary (1,800 VU) | **100%** | < 1% ✗ |
+| sse_connections_rejected | 1,809,228건 | count>0 ✓ |
+
+실패 유형: 1,809,228건 HTTP 429 + 425,542건 `dial: i/o timeout`. **Spring Boot 로그는 0줄** — 요청이 앱까지 도달하지 않음.
+
+#### 원인
+
+**Nginx `limit_conn fandrops_sse 3`** (`/etc/nginx/default.d/fandrops-location.conf`)
+
+```nginx
+location /api/v1/queue/stream {
+    limit_conn fandrops_sse 3;   # IP당 SSE 동시 연결 3개 제한
+    limit_conn_status 429;
+    ...
+}
+```
+
+GHA runner는 단일 외부 IP에서 최대 2,100 VU가 요청을 보낸다. 동일 IP 기준으로 3개 초과 즉시 Nginx 레이어에서 429 반환 → Spring Boot 미도달. normal_load(1,000 VU)에서도 100% 실패한 이유와 일치한다.
+
+- `limit_conn_zone $binary_remote_addr zone=fandrops_sse:10m` — IP 단위 카운트
+- 프로덕션 설정으로는 적절하지만 부하 테스트 환경(단일 IP 다중 VU)에 부적합
+
+#### 조치
+
+```bash
+# EC2-1 SSM
+sed -i "s/limit_conn fandrops_sse 3;/limit_conn fandrops_sse 2100;/" \
+  /etc/nginx/default.d/fandrops-location.conf
+nginx -s reload
+```
+
+`3 → 2100`으로 변경 후 nginx reload 완료 (2026-06-23). 전체 k6 테스트 완료 후 원복 필요.
+
+### 2차 실행 트러블슈팅 (2026-06-23)
+
+**GHA Run**: [#27997295862](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/actions/runs/27997295862)
+
+#### 증상
+
+| 구간 | 실패 유형 | 건수 |
+|---|---|---|
+| 전 구간 | HTTP 403 | 568,209건 |
+| 전 구간 | 기타 비정상 | 4건 |
+
+전 구간 에러율 100%. Spring Security 필터에서 요청을 차단하므로 Spring Boot 애플리케이션 로그에는 아무것도 남지 않음("No entries").
+
+#### 원인
+
+**JWT tokens.csv — 이전 `JWT_SECRET`으로 서명된 토큰**
+
+1차 실행 후 `limit_conn 3 → 2100` 수정을 위해 CD 배포 실행 (GHA #27998829461, ~01:20 UTC)
+2. CD 배포로 blue 슬롯이 새 `JWT_SECRET`으로 기동됨
+3. S3에 남아있던 `tokens.csv`는 배포 전 secret으로 서명된 상태
+4. 2차 실행 시 모든 요청이 Spring Security `JwtAuthenticationFilter`에서 `SignatureException` → 403 거부
+
+```
+[흐름]
+tokens.csv(old secret) → k6 Bearer 헤더 → Nginx → Spring Boot
+                                                      ↓
+                                              JwtFilter: 서명 불일치 → 403
+```
+
+#### 조치
+
+1. `JwtGeneratorTest.java` git 이력에서 복원 (commit `369ed0f`)
+2. EC2-1 `/etc/fandrops/fandrops-prod.conf`에서 현재 `JWT_SECRET` 추출 (SSM)
+3. `JWT_SECRET=<secret> ./gradlew :modules:user:user-infrastructure:test --tests "com.fandrops.user.infrastructure.k6.JwtGeneratorTest"` 실행 → `infra/k6/seed/tokens.csv` 생성 (2,100개 토큰, 7일 만료)
+4. `aws s3 cp infra/k6/seed/tokens.csv s3://<bucket>/k6/seed/tokens.csv` 업로드
+5. 로컬 `tokens.csv` 삭제 (보안)
+
+> **재발 방지**: CD 배포 후 tokens.csv는 반드시 재생성·재업로드 필요. `JWT_SECRET` 갱신 주기(7일)에 맞춰 재생성 권장.
+
+---
+
+### 서버 다운 · CD 장애 트러블슈팅 (2026-06-23)
+
+#### 증상
+
+2차 실행 직후 `curl https://api.fandrops.site/actuator/health` → **exit 28 (TCP timeout)**. CD 파이프라인도 동시에 불통 상태.
+
+#### 원인 분석
+
+**1단계 — EC2 인스턴스 상태 확인**
+
+`aws ec2 describe-instance-status` → `InstanceStatus: ok`, `SystemStatus: ok`. 인스턴스 자체는 정상.
+
+**2단계 — 서비스 상태 확인 (SSM)**
+
+```
+nginx:          active ✅
+fandrops-blue:  active ✅
+fandrops-green: active ✅
+```
+
+Spring Boot 직접 curl `http://127.0.0.1:8081/actuator/health` → `{"status":"UP"}` ✅
+
+Nginx 경유 curl `http://127.0.0.1/actuator/health` → `NGINX_FAIL:22` (HTTP 4xx/5xx) ❌
+
+**3단계 — 원인 특정**
+
+`/etc/nginx/default.d/fandrops-location.conf` 확인 결과:
+
+```nginx
+location /actuator/health {
+    proxy_pass http://fandrops_backend/actuator/health;
+    access_log off;
+    # proxy_set_header Host $host; ← 누락!
+}
+```
+
+`proxy_set_header Host` 미선언 → Nginx가 `Host: fandrops_backend`(upstream 이름, 언더스코어 포함)를 Tomcat으로 전달 → Tomcat `IllegalArgumentException: The character [_] is never valid in a domain name` → HTTP 400.
+
+외부에서는 `curl https://api.fandrops.site/actuator/health` → `HTTP 400 Tomcat Bad Request`. 헬스체크 엔드포인트만 이 버그에 영향을 받으며, 다른 location 블록(`/`, `/api/v1/…`)은 모두 `proxy_set_header Host $host;`가 이미 선언되어 있어 정상 동작.
+
+> **근본 원인**: `nginx/fandrops-location.conf`에서 `/actuator/health` location 블록에만 `proxy_set_header Host $host;`가 누락됨. EC2 재부팅 전에는 서버 블록 수준의 헤더 설정이 상속되었을 가능성이 있으나, 재부팅 후 nginx 설정 로딩 순서 변경으로 상속이 끊어진 것으로 추정.
+
+#### CD 장애 원인
+
+**GHA Run**: [#27998829461](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/actions/runs/27998829461)
+
+bluegreen-deploy.sh 헬스체크가 `http://127.0.0.1:$NEW_PORT/actuator/health`(Nginx 우회, Spring Boot 직접)로 수행되므로 `/actuator/health` 버그와는 무관. 실패 원인은 t3.small(2 GB) 메모리 부족 — blue(-Xmx768m) 실행 중 green(-Xmx768m) 기동 시도 → OOM → green 120초 이내 `UP` 미달 → 헬스체크 타임아웃 → 배포 실패.
+
+#### 조치
+
+**서버 복구**
+
+```bash
+# 1. EC2-1 재부팅 (AWS CLI)
+aws ec2 reboot-instances --instance-ids i-07d1c60d175cdb8ca --region ap-northeast-2
+
+# 2. SSM으로 location conf 패치 (재부팅 후 SSM 복구 확인 후 실행)
+sudo python3 -c "
+f='/etc/nginx/default.d/fandrops-location.conf'
+c=open(f).read()
+c=c.replace('location /actuator/health {',
+            'location /actuator/health {\n    proxy_set_header Host \$host;')
+open(f,'w').write(c)
+"
+
+# 3. Nginx 설정 검증 및 reload
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+**리포 영구 반영**
+
+`nginx/fandrops-location.conf` 수정 — `/actuator/health` 블록에 `proxy_set_header Host $host;` 추가. 추가로 `limit_conn fandrops_sse 3 → 2100` 반영 (1차 트러블슈팅 EC2 직접 수정 내용 동기화).
+
+`deploy-nginx.yml` 워크플로우 실행으로 S3 → EC2 영구 배포.
+
+#### 재발 방지
+
+| 항목 | 상태 |
+|---|---|
+| `/actuator/health` Host 헤더 버그 | ✅ 리포 수정 완료 — `deploy-nginx.yml` 트리거로 영구 반영 |
+| tokens.csv JWT 갱신 절차 | ✅ CD 배포 후 재생성 필수 절차로 확인 |
+| CD OOM (t3.small blue+green 동시 기동) | ⚠️ 미해결 — swap 추가 또는 green Xmx 축소 필요 |
+
+---
 
 ### 결과 (튜닝 후)
 

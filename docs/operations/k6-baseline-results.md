@@ -685,7 +685,7 @@ export K6_PROMETHEUS_RW_SERVER_URL=http://10.0.1.114:9090/api/v1/write
 export K6_PROMETHEUS_RW_TREND_STATS="p(95),p(99)"
 
 k6 run -e BASE_URL=https://api.fandrops.site \
-  -e PRODUCT_ID=1 \
+  -e PRODUCT_ID=4 \
   -e ARTIST_ID=1 \
   -e ORDERS_JSON="$(cat seed/orders.json)" \
   --out experimental-prometheus-rw \
