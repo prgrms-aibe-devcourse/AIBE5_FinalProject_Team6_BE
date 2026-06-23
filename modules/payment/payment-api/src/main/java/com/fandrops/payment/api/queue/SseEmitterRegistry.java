@@ -29,7 +29,15 @@ public class SseEmitterRegistry {
         emitters.put(key, emitter);
         // [P1] 재연결 시 이전 Emitter의 콜백이 새 Emitter를 삭제하지 않도록 값 비교 제거
         emitter.onCompletion(() -> emitters.remove(key, emitter));
-        emitter.onTimeout(() -> emitters.remove(key, emitter));
+        emitter.onTimeout(() -> {
+            emitters.remove(key, emitter);
+            try {
+                // onTimeout은 complete()를 자동 호출하지 않음 — 명시 호출로 HTTP 200 정상 종료 보장
+                emitter.complete();
+            } catch (IllegalStateException ignored) {
+                // heartbeat 등이 이미 complete 처리한 경우
+            }
+        });
         emitter.onError(e -> emitters.remove(key, emitter));
         return emitter;
     }
