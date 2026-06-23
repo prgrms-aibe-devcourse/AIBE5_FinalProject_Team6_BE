@@ -925,6 +925,237 @@ sudo nginx -t && sudo systemctl reload nginx
 
 ---
 
+### 3차 실행 트러블슈팅 (2026-06-23)
+
+**GHA Run**: [#28007076554](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/actions/runs/28007076554/job/82891402127)
+
+#### 증상
+
+| 구간 | 실패 유형 | 건수 |
+|---|---|---|
+| 전 구간 | `unexpected status` (non-200/429) | 537,990건 |
+
+- `checks_succeeded: 0.00%` — 전 요청 체크 실패
+- `http_req_failed: 100%`
+- `sse_connections_rejected: count=0` — 429 한 건도 없음
+- `http_req_duration avg=621ms` — SSE 연결이 65s 유지되지 않고 즉시 종료됨
+
+#### 원인
+
+**tokens.csv S3 업로드 누락 — June 18 생성 토큰 잔존**
+
+1. 2차 실행 트러블슈팅 세션(2026-06-23 이전)에서 `JwtGeneratorTest` 실행으로 tokens.csv를 재생성했으나 S3 업로드 단계가 누락됨
+2. S3에는 June 18 생성 토큰(`iat=1781765603`)이 그대로 남아있었음
+3. 현재 서버 `JWT_SECRET`과 June 18 토큰의 서명 secret이 달라 `JwtProviderImpl.parse()` → `JwtException` → `InvalidTokenException`
+4. `JwtAuthenticationFilter`가 예외를 catch하고 `SecurityContext` 미설정 → Spring Security가 anonymous user 처리
+5. `/api/v1/queue/stream/**` → `authenticated()` 요건 미충족 → `AccessDeniedException` → **HTTP 403**
+
+```
+[흐름]
+tokens.csv(June 18 서명) → k6 Bearer 헤더 → Spring Boot
+                                                 ↓
+                                    JwtFilter: SignatureException → 인증 컨텍스트 미설정
+                                                 ↓
+                                    Security: anonymous → 403
+```
+
+진단 과정:
+- `curl https://api.fandrops.site/api/v1/queue/stream/4` → HTTP 403, `Content-Length: 0` (Spring Security 응답)
+- EC2-1 포트 8081 직접 curl → 동일 403 → nginx가 아닌 앱 레벨 문제 확인
+- S3 tokens.csv 1행 iat 디코딩 → June 18 생성 확인
+- `JwtProviderImpl`: `Keys.hmacShaKeyFor(Decoders.BASE64.decode(secret))` 사용 확인 → secret 불일치 시 서명 검증 실패
+
+#### 조치
+
+1. EC2-1 현재 `JWT_SECRET` 확인 (SSM): `/OOkHMR5OAEzNxPBvRN5c0yGbMfI9f3VJaRXXN9Lboo`
+2. `$env:JWT_SECRET = "..."` 설정 후 `./gradlew :modules:user:user-infrastructure:test --tests "...JwtGeneratorTest" --rerun-tasks` 실행
+3. `aws s3 cp infra/k6/seed/tokens.csv s3://<bucket>/k6/tokens.csv` 업로드
+4. 신규 토큰으로 SSE 엔드포인트 검증: `curl -H "Authorization: Bearer <token>" .../api/v1/queue/stream/4` → **HTTP 200** ✅
+5. 로컬 tokens.csv 삭제
+
+> **재발 방지**: tokens.csv 재생성 후 반드시 S3 업로드까지 완료 확인. 신규 토큰 1건을 curl로 검증한 뒤 k6 실행.
+
+---
+
+### 4차 실행 트러블슈팅 (2026-06-23)
+
+**GHA Run**: [#28008723635](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/actions/runs/28008723635/job/82896594087)
+
+#### 증상
+
+| 지표 | 값 |
+|---|---|
+| checks_succeeded | 0% (6,734건 전부 실패) |
+| http_req_failed | 100% |
+| http_req_duration median | 0s |
+| sse_connections_rejected | 0건 (429 없음) |
+| interrupted iterations | 4,240건 |
+
+실패 유형: `unexpected EOF` + `dial: i/o timeout`. 3차와 달리 HTTP 레벨 응답(403/429)이 아닌 네트워크 레벨 에러.
+
+#### 원인 분석
+
+**GHA 로그 타임라인 (k6 진행 상황)**
+
+| 시점 | 진행 상황 | 판정 |
+|---|---|---|
+| t=0~30s | 1,000 VU 램프업, 완료 0건 | ✅ 연결 수립 정상 |
+| t=30~60s | 1,000 VU 유지, 완료 0건 | ✅ 연결 60초간 유지됨 |
+| t=61s | 첫 29건 완료 + mass `unexpected EOF` 시작 | ⚠️ 60초 타임아웃 발화 |
+
+**핵심 관찰**: t=0~60s 동안 완료 0건 = 연결 자체는 정상 유지됨. `sse_connections_rejected=0` = 429 없음 = 용량 한도 문제 아님. t=61s에 mass EOF 발생은 `SseEmitter` 60초 타임아웃 첫 배치와 정확히 일치.
+
+**근본 원인**: `SseEmitterRegistry.register()` `onTimeout` 콜백이 `emitter.complete()`를 호출하지 않아 Spring이 HTTP 응답을 정상 종료하지 않음.
+
+```java
+// 문제 코드
+emitter.onTimeout(() -> emitters.remove(key, emitter));  // complete() 누락
+```
+
+타임아웃 발화 시 동작 흐름:
+
+```
+60초 타임아웃
+→ Spring: onTimeout 콜백 실행 (registry에서만 제거)
+→ Spring: HTTP 응답 final empty chunk 없이 TCP 연결 닫음
+→ k6: unexpected EOF, res.status=0
+→ k6 check: else { check(res, { 'unexpected status': () => false }) }  ← 항상 false
+→ checks_succeeded: 0%
+```
+
+이전 실패들과의 차이:
+- 1차: `limit_conn 3` → Nginx가 429 반환 (HTTP 레벨)
+- 2·3차: JWT 서명 불일치 → Spring Security가 403 반환 (HTTP 레벨)
+- 4차: `SseEmitter` 타임아웃 → Spring이 TCP 연결 비정상 종료 (네트워크 레벨)
+
+#### 조치
+
+**장성재** — `SseEmitterRegistry.register()` `onTimeout` 수정:
+
+```java
+emitter.onTimeout(() -> {
+    emitters.remove(key, emitter);
+    try {
+        emitter.complete();  // 추가: HTTP 200 정상 종료 보장
+    } catch (IllegalStateException ignored) {
+        // heartbeat가 이미 complete 처리한 경우 무시
+    }
+});
+```
+
+수정 후 기대 흐름:
+- 60초 타임아웃 → Spring이 final empty HTTP chunk 전송 후 정상 종료
+- k6: `res.status=200` → `connectionAccepted.add(1)` → check 통과
+- `http_req_failed=false`, `checks_succeeded` 정상 집계
+
+> **재발 방지**: `onTimeout`/`onError` 콜백에서 `emitter.complete()`를 명시적으로 호출하지 않으면 Spring이 연결을 비정상 종료할 수 있다. 신규 `SseEmitter` 구현 시 반드시 확인.
+
+---
+
+### 5차 실행 트러블슈팅 (2026-06-23)
+
+**GHA Run**: [#28012745830](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/actions/runs/28012745830)
+
+#### 증상
+
+| 지표 | 값 |
+|---|---|
+| `checks_succeeded` | 0.00% (0 / 12,972) |
+| `sse_connections_accepted` | 0 |
+| `sse_connections_rejected` | 0 |
+| `http_req_failed` | 100.00% (12,972 / 12,972) |
+| `http_req_duration` p50 / p90 | 163ms / 60s |
+| GHA 결론 | exit 99 (threshold 미달) |
+
+```
+time="2026-06-23T08:26:05Z" level=warning msg="Request Failed" error="unexpected EOF"
+```
+
+- 테스트 시작(08:25:04)로부터 **정확히 61초** 뒤(08:26:05)에 대량 EOF 발생 → 4차와 동일 패턴
+- **신규 현상**: p50=163ms의 빠른 실패가 다수 섞임 (4차는 전부 60초 대기 후 EOF)
+
+#### 타임라인
+
+| 시각 | 이벤트 |
+|---|---|
+| 08:24 | tokens.csv S3 업로드 시각 확인(16:01), fanId=1 curl 검증 → **HTTP 200** |
+| 08:24 | EC2-1 JWT_SECRET SSM 확인 (`/OOkHMR5...Lboo`) → 변경 없음 |
+| 08:25:04 | k6 시작, normal_load VU 램프업 |
+| 08:26:05 | **60초 SseEmitter 타임아웃** 동시 도달 → 대량 `unexpected EOF` |
+| 08:26~30 | VU 재연결 시도 → 163ms 빠른 실패 반복 |
+| 08:30:59 | k6 종료, exit 99 |
+
+#### 근본 원인 분석
+
+4차 수정 (`emitter.complete()` in `onTimeout()`) 이 **효과 없음** 으로 판명.
+
+```
+[Spring async timeout 발생 시 내부 처리 순서]
+1. Tomcat: async 컨텍스트 timeout 처리 시작 → TCP 연결 abrupt close 준비
+2. Spring: onTimeout 콜백 호출 → emitter.complete() 실행 시도
+3. 하지만 Tomcat이 이미 response를 닫는 중 → IllegalStateException 발생
+4. catch (IllegalStateException ignored) 로 무시
+5. 결과: HTTP 200 아닌 EOF 그대로 발생
+```
+
+`onTimeout()` 콜백 안에서 `complete()`를 호출하면 Spring 내부 async timeout 핸들러가 선점하여 **이미 늦은 상태**다. `complete()`는 정상적인 컨텍스트(스케줄러 스레드 등)에서 호출해야 HTTP 200이 보장된다.
+
+#### 신규 현상: 163ms 빠른 실패 원인
+
+60초 대기 후 대량 EOF → 1,000+ VU 동시 재연결 → 서버 순간 과부하 → 재연결 요청 즉시 실패(status=0, EOF). 4차까지 없던 패턴으로 VU 재연결 스톰(reconnection storm)에 해당한다.
+
+#### 조치 방향 (장성재)
+
+`onTimeout` 의존을 제거하고, 스케줄러(정상 컨텍스트)에서 proactive `complete()`를 호출하는 방식으로 교체.
+
+```java
+// SseEmitterRegistry.java — 수정 방향
+// 1. 등록 시각 추적
+private final ConcurrentHashMap<String, Long> registrationTimes = new ConcurrentHashMap<>();
+
+private SseEmitter register(Long productId, Long fanId) {
+    String key = key(productId, fanId);
+    SseEmitter emitter = new SseEmitter(sseTimeoutMs);
+    registrationTimes.put(key, System.currentTimeMillis());
+    emitters.put(key, emitter);
+    emitter.onCompletion(() -> {
+        emitters.remove(key, emitter);
+        registrationTimes.remove(key);
+    });
+    emitter.onTimeout(() -> emitters.remove(key, emitter)); // complete() 제거
+    emitter.onError(e -> emitters.remove(key, emitter));
+    return emitter;
+}
+
+// 2. sendHeartbeat()에서 55초 초과 emitter proactive close
+public void sendHeartbeat() {
+    long now = System.currentTimeMillis();
+    for (Map.Entry<String, SseEmitter> entry : emitters.entrySet()) {
+        String key = entry.getKey();
+        Long registeredAt = registrationTimes.get(key);
+        if (registeredAt != null && (now - registeredAt) > 55_000) {
+            // Spring timeout(60s) 전에 정상 컨텍스트에서 complete() → HTTP 200 보장
+            try { entry.getValue().complete(); } catch (IllegalStateException ignored) {}
+            continue;
+        }
+        try {
+            entry.getValue().send(SseEmitter.event().comment("heartbeat"));
+        } catch (IOException | IllegalStateException e) {
+            emitters.remove(key);
+        }
+    }
+}
+```
+
+기대 흐름:
+- t=55s: 스케줄러가 `complete()` 호출 (정상 컨텍스트) → HTTP 200 정상 종료
+- k6: `res.status=200` → `connectionAccepted.add(1)` → check 통과
+- t=60s: Spring timeout 도달 전 이미 complete 상태 → `onTimeout`은 no-op
+
+> **교훈**: `SseEmitter.onTimeout()` 콜백은 Spring 내부 타임아웃 핸들러가 response를 먼저 닫을 수 있어 `complete()`가 보장되지 않는다. SSE 연결 수명 관리는 반드시 외부 스케줄러(정상 컨텍스트)에서 proactive하게 처리해야 한다.
+
+---
+
 ### 결과 (튜닝 후)
 
 | 지표 | 베이스라인 | 결과 | 목표 | 상태 |
