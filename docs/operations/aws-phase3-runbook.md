@@ -357,10 +357,9 @@ EC2 1대
 | `/etc/fandrops/active-slot` | 현재 active 슬롯 기록 (`blue` 또는 `green`) |
 | `/etc/nginx/fandrops-active.conf` | 현재 upstream 포트 정의, 배포 스크립트가 교체 |
 
-### 8-4. t3.small 메모리 관리
+### 8-4. 메모리 관리
 
-기존 단일 프로세스: `-Xmx1024m`. 두 프로세스 동시 기동 시 heap 2GB → OOM 위험.
-각 슬롯을 `-Xmx768m`으로 설정 → 동시 기동 peak 1.5GB heap + OS 300MB ≈ 1.8GB, t3.small 2GB 내 수용.
+기존 Phase 1 단일 프로세스: `-Xmx1024m`. Blue/Green 동시 기동 구간 메모리 최적화를 위해 각 슬롯을 `-Xmx768m`으로 설정. 동시 기동 peak 1.5GB heap + OS 300MB ≈ 1.8GB. **ec2-1이 t3.medium(4GB)으로 스케일업되어 메모리 여유가 크게 확보됐으나**, Prometheus/Grafana 공존 및 안정적 동시 기동 여유를 위해 현재 `-Xmx768m` 설정을 유지한다.
 
 ### 8-5. EC2 적용 절차
 

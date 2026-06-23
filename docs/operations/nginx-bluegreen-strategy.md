@@ -12,7 +12,7 @@ ALB 없는 예산 제약 환경에서 Nginx를 활용해 무중단 배포와 분
 
 | 항목 | 현재 구성 |
 | --- | --- |
-| EC2 | t3.small (2 vCPU, 2GB RAM), Amazon Linux 2023 |
+| EC2-1 | t3.medium (2 vCPU, 4GB RAM), Amazon Linux 2023 |
 | Nginx | :80 → upstream fandrops_backend (Blue/Green 포트 스위칭, 2026-06-11 적용 완료) |
 | RDS | db.t3.micro MySQL 8.0, Private Subnet |
 | ElastiCache | cache.t3.micro Redis 7.1, Private Subnet |
@@ -102,16 +102,18 @@ EC2 1대
 
 ### 2-4. 선택지 D — EC2 2대 + Nginx 로드밸런싱 (단기 실험) ✅ **Phase 4 한정 채택**
 
+> **⚠️ EC2-2 역할 구분**: 본 절의 "EC2-2"는 Phase 4 D 실험 전용으로 임시 기동했다가 실험 후 terminate한 앱 서버다 (t3.micro). **현재 상시 운영 중인 EC2-2는 k6 부하 생성 전용 서버(t3.small)이며 앱 서버가 아니다.**
+
 ```
 Internet
     ↓
-EC2-1 t3.small (Nginx LB + App1)
+EC2-1 t3.medium (Nginx LB + App1)
     Nginx upstream {
         server 127.0.0.1:8080;      ← App1 (로컬)
         server EC2-2-Private:8080;  ← App2 (원격)
     }
     ↓
-EC2-2 t3.micro (App2)
+EC2-2 t3.micro (App2, D 실험 전용 — 종료 후 terminate)
     ↓
 RDS MySQL / ElastiCache Redis (공유)
 ```
@@ -477,7 +479,7 @@ upstream fandrops_backend {
 
 | 리소스 | 스펙 | 월 비용 |
 | --- | --- | --- |
-| EC2 | t3.small | ~$15.0 (~20,700원) |
+| EC2-1 | t3.medium | 당시 t3.small 기준 ~$15.0 (~20,700원), 현재 t3.medium으로 스케일업됨 |
 | RDS MySQL | db.t3.micro | ~$21.5 (~29,700원) |
 | ElastiCache | cache.t3.micro | ~$13.0 (~17,900원) |
 | CloudWatch + S3 | — | ~$3.0 (~4,100원) |
@@ -517,13 +519,13 @@ RDS MySQL          ElastiCache Redis
 배포: systemctl restart → 30~60초 다운타임 발생
 ```
 
-### Phase 4 목표 (B)
+### Phase 4 목표 (B) — 현재 운영 구조
 
 ```
 Internet
     │
     ▼
-EC2 t3.small
+EC2-1 t3.medium
 ┌──────────────────────────────────────────┐
 │  Nginx :80                               │
 │    └─ upstream fandrops_backend          │
@@ -542,11 +544,13 @@ RDS MySQL          ElastiCache Redis
 
 ### Phase 4 D 실험 (단기)
 
+> **⚠️ EC2-2 역할 구분**: 아래 EC2-2는 D 실험 전용으로 t3.micro를 임시 기동했다가 실험 후 terminate한 앱 서버다. 현재 상시 운영 중인 EC2-2는 k6 부하 생성 전용 서버(t3.small)이며 앱 서버가 아니다.
+
 ```
 Internet
     │
     ▼
-EC2-1 t3.small (Nginx LB + App1)
+EC2-1 t3.medium (Nginx LB + App1)
 ┌──────────────────────────────────────┐
 │  Nginx :80                           │
 │    upstream fandrops_backend {        │
@@ -577,7 +581,7 @@ RDS MySQL (공유)    ElastiCache Redis (공유)
 | EC2-1 SPOF | ALB 없음 | ALB 도입 ($20/월 추가) |
 | Blue/Green 전환 중 2~3초 불안정 | Nginx reload 방식 | ALB Target Group 교체 방식 |
 | EC2-2 없을 때 단일 포인트 | 예산 제약 | 예산 확보 시 상시 2대 + ALB |
-| 배포 중 메모리 압박 | t3.small 2GB | 인스턴스 업그레이드 또는 B-series 사용 |
+| ~~배포 중 메모리 압박~~ | ec2-1 t3.medium으로 스케일업 완료 (기존 t3.small 2GB → 현재 4GB) | ✅ 해소됨 |
 | **SSE 메시지 유실 (분산 환경)** | `SseEmitterRegistry` in-memory | Redis Pub/Sub 브로드캐스트로 해소 가능 |
 
 이 한계들은 발표에서 "현재 구조의 트레이드오프"로 명시하고 개선 방향을 함께 설명한다.
@@ -590,7 +594,7 @@ RDS MySQL (공유)    ElastiCache Redis (공유)
 
 > AWS 예산 90,000원 제약으로 ALB를 사용할 수 없는 환경에서, Nginx upstream과 systemd 이중 슬롯 구조를 직접 구현해 무중단 Blue/Green 배포를 달성했습니다.
 
-> 배포 중 t3.small(2GB) 메모리에서 두 Spring Boot 프로세스가 동시 기동되는 구간의 OOM 위험을 `-Xmx768m` heap 제한과 Graceful Shutdown 30초 유예로 해소했으며, `proxy_next_upstream`으로 Nginx reload 순간 클라이언트 오류를 최소화했습니다.
+> 배포 중 두 Spring Boot 프로세스가 동시 기동되는 구간의 OOM 위험을 `-Xmx768m` heap 제한과 Graceful Shutdown 30초 유예로 해소했으며 (당시 t3.small(2GB) 기준, 현재 ec2-1은 t3.medium으로 스케일업됨), `proxy_next_upstream`으로 Nginx reload 순간 클라이언트 오류를 최소화했습니다.
 
 > Phase 4에서 EC2-2를 단기 기동해 k6 부하 테스트를 분산 환경에서 실행했습니다. 재고는 DB 단일 UPDATE(`WHERE availableQty >= qty`) + 낙관락, 결제는 `PESSIMISTIC_WRITE` + unique index 조합으로 어느 서버에서 요청을 처리해도 오버셀·중복결제가 발생하지 않음을 수치로 검증했습니다.
 

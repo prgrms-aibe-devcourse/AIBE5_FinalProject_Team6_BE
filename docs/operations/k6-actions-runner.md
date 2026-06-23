@@ -36,7 +36,7 @@ EC2 t3.small
 GitHub Actions Runner (ubuntu-latest, 2vCPU/7GB)
 └── k6 (부하 생성) — EC2와 완전 분리
 
-EC2 t3.small
+EC2-1 t3.medium
 ├── Spring Boot (active 슬롯) — 측정 대상만 실행
 ├── Prometheus + Grafana
 └── Wiremock Docker (시나리오 03·06만)
@@ -62,7 +62,7 @@ EC2 t3.small
                        │ HTTPS 부하
                        ▼
 ┌─────────────────────────────────────────────┐
-│         EC2 t3.small (ap-northeast-2)        │
+│       EC2-1 t3.medium (ap-northeast-2)        │
 │                                              │
 │  Nginx (:443) → Spring Boot (:808x)          │
 │  Wiremock Docker (:8090) ← Spring Boot만     │
@@ -291,7 +291,7 @@ SLO 목표(Write P95 < 300ms, Read P95 < 120ms)가 네트워크 오버헤드만�
 | s02 피드 조회 (50VU) | **EC2-2 k6** | Read P95 < 120ms — 150ms 오버헤드로 달성 불가 |
 | s03 결제 확인 (50VU) | **EC2-2 k6** | Write P95 < 300ms — 서울 리전 측정 필요 |
 | s04 드롭스 스파이크 (1000VU) | **EC2-2 k6** | 레이턴시 + 오버셀 동시 검증. 메모리 모니터링 필수 |
-| s05 SSE 대기열 (2100VU) | **Actions runner** | t3.small 2GB 메모리 한계. 에러율·연결 수 기반 SLO라 레이턴시 무관 |
+| s05 SSE 대기열 (2100VU) | **Actions runner** | ec2-2 t3.small(2GB) k6 runner 측 2,100 VU SSE 연결 생성 부담. ec2-1 앱 서버는 t3.medium으로 수용 능력이 개선됐으나, k6 runner 측 한계는 별도 검증 필요. 에러율·연결 수 기반 SLO라 레이턴시 무관 |
 | s06 통합 워크로드 (150VU) | **EC2-2 k6** | 레이턴시 SLO 종합 검증 |
 
 ### Actions runner가 여전히 유효한 용도
