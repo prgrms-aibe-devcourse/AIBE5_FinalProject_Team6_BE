@@ -86,6 +86,18 @@ public class WaitQueueService {
     }
 
     /**
+     * threshold 이전에 WAITING 진입한 entry를 EXPIRED로 전이한다.
+     * 반환값: 만료 처리된 fanId 목록.
+     */
+    public List<Long> expireWaitingTimeouts(Long productId, Instant threshold) {
+        List<Long> expired = waitQueueRepository.findWaitingExpiredFanIds(productId, threshold);
+        for (Long fanId : expired) {
+            waitQueueRepository.transitionWaitingToExpired(fanId, productId);
+        }
+        return expired;
+    }
+
+    /**
      * threshold 이전에 PROCESSING 진입한 entry를 EXPIRED로 전이하고 토큰을 무효화한다.
      * 반환값: 만료 처리된 fanId 목록.
      */

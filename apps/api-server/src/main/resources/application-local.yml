@@ -84,6 +84,7 @@ fandrops:
     payment-timeout: PT15M
   queue:
     processing-timeout-seconds: 10
+    waiting-timeout-seconds: 60
     advance-batch-size: 50
     max-concurrent-processing: 50
     scheduler:
