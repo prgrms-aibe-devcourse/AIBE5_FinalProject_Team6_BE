@@ -97,6 +97,9 @@ jobs:
 
       - name: k6 실행
         run: |
+          ulimit -Sn 65536
+          echo "ulimit -n: $(ulimit -n)"
+
           SCENARIO="${{ github.event.inputs.scenario }}"
           BASE="${{ secrets.APP_BASE_URL }}"
           cd infra/k6
