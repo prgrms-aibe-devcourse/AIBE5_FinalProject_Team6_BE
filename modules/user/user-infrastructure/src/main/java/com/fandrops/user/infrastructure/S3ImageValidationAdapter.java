@@ -10,6 +10,8 @@ import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
 import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 
+import java.util.Optional;
+
 @Component
 public class S3ImageValidationAdapter implements S3ImageValidationPort {
 
@@ -24,15 +26,18 @@ public class S3ImageValidationAdapter implements S3ImageValidationPort {
     @Override
     public boolean isOwnedUrl(String imageUrl) {
         if (imageUrl == null) return false;
-        return imageUrl.startsWith(baseUrl());
+        if (imageUrl.startsWith(s3BaseUrl())) return true;
+        return cdnBaseUrlPrefix()
+                .map(imageUrl::startsWith)
+                .orElse(false);
     }
 
     @Override
     public boolean imageExists(String imageUrl) {
-        if (!imageUrl.startsWith(baseUrl())) {
-            return false; // 우리 버킷 외 URL은 유효하지 않은 배너 이미지 URL로 간주
+        if (!isOwnedUrl(imageUrl)) {
+            return false;
         }
-        String key = imageUrl.substring(baseUrl().length());
+        String key = extractObjectKey(imageUrl);
         try {
             s3Client.headObject(HeadObjectRequest.builder()
                     .bucket(properties.getBucket())
@@ -48,7 +53,28 @@ public class S3ImageValidationAdapter implements S3ImageValidationPort {
         }
     }
 
-    private String baseUrl() {
+    private String extractObjectKey(String imageUrl) {
+        if (imageUrl.startsWith(s3BaseUrl())) {
+            return imageUrl.substring(s3BaseUrl().length());
+        }
+        String cdnPrefix = cdnBaseUrlPrefix().orElseThrow();
+        return imageUrl.substring(cdnPrefix.length());
+    }
+
+    private String s3BaseUrl() {
         return "https://%s.s3.%s.amazonaws.com/".formatted(properties.getBucket(), properties.getRegion());
+    }
+
+    /** S3PresignedUrlAdapter와 동일한 CDN URL prefix (https://host/) */
+    private Optional<String> cdnBaseUrlPrefix() {
+        String cdn = properties.getCdnBaseUrl();
+        if (cdn == null || cdn.isBlank()) {
+            return Optional.empty();
+        }
+        String host = cdn.replaceFirst("^https?://", "").replaceAll("/+$", "");
+        if (host.isBlank()) {
+            return Optional.empty();
+        }
+        return Optional.of("https://" + host + "/");
     }
 }
