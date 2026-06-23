@@ -5,6 +5,7 @@ import com.fandrops.community.application.exception.FeedNotFoundException;
 import com.fandrops.community.application.exception.LikeNotFoundException;
 import com.fandrops.community.application.exception.NotFanMemberException;
 import com.fandrops.community.application.port.FanMembershipPort;
+import com.fandrops.community.application.port.FeedLikeCachePort;
 import com.fandrops.community.domain.feed.ArtistFeed;
 import com.fandrops.community.domain.feed.FeedLike;
 import com.fandrops.community.domain.feed.repository.ArtistFeedRepository;
@@ -34,6 +35,7 @@ class FeedLikeServiceTest {
     @Mock ArtistFeedRepository feedRepository;
     @Mock FeedLikeRepository feedLikeRepository;
     @Mock FanMembershipPort fanMembershipPort;
+    @Mock FeedLikeCachePort feedLikeCachePort;
 
     FeedLikeService feedLikeService;
     Clock clock;
@@ -41,7 +43,7 @@ class FeedLikeServiceTest {
     @BeforeEach
     void setUp() {
         clock = Clock.fixed(Instant.parse("2026-06-01T00:00:00Z"), ZoneOffset.UTC);
-        feedLikeService = new FeedLikeService(feedRepository, feedLikeRepository, fanMembershipPort, clock);
+        feedLikeService = new FeedLikeService(feedRepository, feedLikeRepository, fanMembershipPort, feedLikeCachePort, clock);
     }
 
     @Nested
@@ -49,7 +51,7 @@ class FeedLikeServiceTest {
     class LikeFeedTest {
 
         @Test
-        @DisplayName("팬 피드 좋아요 성공 — likeCount 증가")
+        @DisplayName("팬 피드 좋아요 성공 — likeCount 증가, feedLikeCache evict 호출")
         void fan_success() {
             ArtistFeed feed = ArtistFeed.reconstruct(1L, 10L, 5L, "내용", 0, 0, LocalDateTime.now(clock));
             when(feedRepository.findById(eq(1L))).thenReturn(Optional.of(feed));
@@ -60,10 +62,11 @@ class FeedLikeServiceTest {
 
             verify(feedLikeRepository).save(any(FeedLike.class));
             verify(feedRepository).incrementLikeCount(eq(1L));
+            verify(feedLikeCachePort).evictByFanId(eq(77L));
         }
 
         @Test
-        @DisplayName("아티스트 멤버 피드 좋아요 성공 — likeCount 증가")
+        @DisplayName("아티스트 멤버 피드 좋아요 성공 — likeCount 증가, feedLikeCache evict 미호출")
         void artistMember_success() {
             ArtistFeed feed = ArtistFeed.reconstruct(1L, 10L, 5L, "내용", 0, 0, LocalDateTime.now(clock));
             when(feedRepository.findById(eq(1L))).thenReturn(Optional.of(feed));
@@ -73,7 +76,7 @@ class FeedLikeServiceTest {
 
             verify(feedLikeRepository).save(any(FeedLike.class));
             verify(feedRepository).incrementLikeCount(eq(1L));
-            verifyNoInteractions(fanMembershipPort);
+            verifyNoInteractions(fanMembershipPort, feedLikeCachePort);
         }
 
         @Test
@@ -139,7 +142,7 @@ class FeedLikeServiceTest {
     class UnlikeFeedTest {
 
         @Test
-        @DisplayName("팬 좋아요 취소 성공 — likeCount 감소")
+        @DisplayName("팬 좋아요 취소 성공 — likeCount 감소, feedLikeCache evict 호출")
         void fan_success() {
             FeedLike like = FeedLike.reconstruct(1L, 1L, 77L, null, null, LocalDateTime.now(clock));
             when(feedLikeRepository.findByFeedIdAndFanId(eq(1L), eq(77L))).thenReturn(Optional.of(like));
@@ -148,10 +151,11 @@ class FeedLikeServiceTest {
 
             verify(feedLikeRepository).delete(like);
             verify(feedRepository).decrementLikeCount(eq(1L));
+            verify(feedLikeCachePort).evictByFanId(eq(77L));
         }
 
         @Test
-        @DisplayName("아티스트 멤버 좋아요 취소 성공 — likeCount 감소")
+        @DisplayName("아티스트 멤버 좋아요 취소 성공 — likeCount 감소, feedLikeCache evict 미호출")
         void artistMember_success() {
             FeedLike like = FeedLike.reconstruct(1L, 1L, null, 5L, 10L, LocalDateTime.now(clock));
             when(feedLikeRepository.findByFeedIdAndArtistMemberId(eq(1L), eq(5L))).thenReturn(Optional.of(like));
@@ -160,6 +164,7 @@ class FeedLikeServiceTest {
 
             verify(feedLikeRepository).delete(like);
             verify(feedRepository).decrementLikeCount(eq(1L));
+            verifyNoInteractions(feedLikeCachePort);
         }
 
         @Test

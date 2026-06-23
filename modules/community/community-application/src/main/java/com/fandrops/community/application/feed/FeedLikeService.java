@@ -5,6 +5,7 @@ import com.fandrops.community.application.exception.FeedNotFoundException;
 import com.fandrops.community.application.exception.LikeNotFoundException;
 import com.fandrops.community.application.exception.NotFanMemberException;
 import com.fandrops.community.application.port.FanMembershipPort;
+import com.fandrops.community.application.port.FeedLikeCachePort;
 import com.fandrops.community.domain.feed.FeedLike;
 import com.fandrops.community.domain.feed.repository.ArtistFeedRepository;
 import com.fandrops.community.domain.feed.repository.FeedLikeRepository;
@@ -20,15 +21,18 @@ public class FeedLikeService {
     private final ArtistFeedRepository feedRepository;
     private final FeedLikeRepository feedLikeRepository;
     private final FanMembershipPort fanMembershipPort;
+    private final FeedLikeCachePort feedLikeCachePort;
     private final Clock clock;
 
     public FeedLikeService(ArtistFeedRepository feedRepository,
                            FeedLikeRepository feedLikeRepository,
                            FanMembershipPort fanMembershipPort,
+                           FeedLikeCachePort feedLikeCachePort,
                            Clock clock) {
         this.feedRepository = feedRepository;
         this.feedLikeRepository = feedLikeRepository;
         this.fanMembershipPort = fanMembershipPort;
+        this.feedLikeCachePort = feedLikeCachePort;
         this.clock = clock;
     }
 
@@ -45,6 +49,9 @@ public class FeedLikeService {
                 throw new AlreadyLikedException("이미 좋아요를 눌렀습니다.");
             }
             feedLikeRepository.save(FeedLike.byFan(feedId, fanId, artistId, clock));
+            // evict 실패 시 최대 30s(TTL) 동안 이전 좋아요 목록 반환 허용
+            // like/unlike는 DB 커밋 완료 후이므로 정합성에 영향 없음
+            feedLikeCachePort.evictByFanId(fanId);
         } else {
             if (artistMemberId == null) {
                 throw new IllegalArgumentException("인증 정보가 없습니다. Bearer 토큰을 제공하세요.");
@@ -68,5 +75,10 @@ public class FeedLikeService {
                         .orElseThrow(() -> new LikeNotFoundException("좋아요 기록을 찾을 수 없습니다."));
         feedLikeRepository.delete(like);
         feedRepository.decrementLikeCount(feedId);
+        if (fanId != null) {
+            // evict 실패 시 최대 30s(TTL) 동안 이전 좋아요 목록 반환 허용
+            // like/unlike는 DB 커밋 완료 후이므로 정합성에 영향 없음
+            feedLikeCachePort.evictByFanId(fanId);
+        }
     }
 }

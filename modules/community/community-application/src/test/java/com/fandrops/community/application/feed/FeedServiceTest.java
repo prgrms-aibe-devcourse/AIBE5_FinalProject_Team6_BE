@@ -4,6 +4,7 @@ import com.fandrops.community.application.exception.FeedNotFoundException;
 import com.fandrops.community.application.exception.FeedOwnershipException;
 import com.fandrops.community.application.feed.FeedCacheEvictEvent;
 import com.fandrops.community.application.port.FeedCachePort;
+import com.fandrops.community.application.port.FeedLikeCachePort;
 import com.fandrops.community.application.port.OutboxEventPort;
 import com.fandrops.community.application.port.OutboxEventType;
 import org.springframework.context.ApplicationEventPublisher;
@@ -47,6 +48,7 @@ class FeedServiceTest {
     @Mock OutboxEventPort outboxEventPort;
     @Mock ApplicationEventPublisher applicationEventPublisher;
     @Mock FeedCachePort feedCachePort;
+    @Mock FeedLikeCachePort feedLikeCachePort;
 
     FeedService feedService;
     Clock clock;
@@ -57,11 +59,13 @@ class FeedServiceTest {
         feedService = new FeedService(
                 feedRepository, imageRepository, feedLikeRepository,
                 commentRepository, commentLikeRepository, outboxEventPort,
-                applicationEventPublisher, clock, feedCachePort);
+                applicationEventPublisher, clock, feedCachePort, feedLikeCachePort);
         // 기본값: getOrLoad는 loader를 직접 실행 (캐시 miss 시뮬레이션)
-        // doAnswer 방식: stub 등록 시 mock 메서드가 호출되지 않아 NPE 방지
         lenient().doAnswer(inv -> inv.<Supplier<FeedListResult>>getArgument(3).get())
                 .when(feedCachePort).getOrLoad(anyLong(), any(), anyInt(), any());
+        // FeedLikeCache 기본값: loader 직접 실행 (cache miss 시뮬레이션 → feedLikeRepository 호출)
+        lenient().doAnswer(inv -> inv.<Supplier<Set<Long>>>getArgument(2).get())
+                .when(feedLikeCachePort).getOrLoad(anyLong(), anyList(), any());
     }
 
     @Nested
@@ -344,17 +348,18 @@ class FeedServiceTest {
     class GetFeedsCacheTest {
 
         @Test
-        @DisplayName("캐시 hit → getOrLoad가 loader 미실행, feedRepository·imageRepository 미호출, isLiked 적용")
+        @DisplayName("feedCache hit + feedLikeCache hit → feedRepository·imageRepository·feedLikeRepository 미호출, isLiked 적용")
         void cacheHit_doesNotCallRepositoryAndAppliesIsLiked() {
             FeedResult cachedItem = new FeedResult(1L, 10L, 5L, "캐시 피드", 0, 0,
                     List.of(), OffsetDateTime.parse("2026-06-01T00:00:00Z"), false);
             FeedListResult cachedResult = new FeedListResult(List.of(cachedItem), null, false);
             doReturn(cachedResult).when(feedCachePort).getOrLoad(eq(10L), isNull(), eq(20), any());
-            when(feedLikeRepository.findLikedFeedIdsByFanId(eq(99L), anyList())).thenReturn(Set.of(1L));
+            // FeedLike 캐시 hit 시뮬레이션: loader 미실행, Set.of(1L) 직접 반환
+            doReturn(Set.of(1L)).when(feedLikeCachePort).getOrLoad(eq(99L), anyList(), any());
 
             FeedListResult result = feedService.getFeeds(10L, null, 20, 99L, null);
 
-            verifyNoInteractions(feedRepository, imageRepository);
+            verifyNoInteractions(feedRepository, imageRepository, feedLikeRepository);
             assertTrue(result.items().get(0).isLiked());
         }
 
