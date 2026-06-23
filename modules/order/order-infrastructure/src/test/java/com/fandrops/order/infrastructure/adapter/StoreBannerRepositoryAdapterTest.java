@@ -118,4 +118,29 @@ class StoreBannerRepositoryAdapterTest {
             assertTrue(sut.findActiveStoreBanners().isEmpty());
         }
     }
+
+    @Nested
+    @DisplayName("findAllStoreBanners()")
+    class FindAllStoreBanners {
+
+        @Test
+        @DisplayName("비활성·기간 밖 포함 전체 STORE 배너 목록 반환")
+        void findAllStoreBanners_returnsList() {
+            given(jpaRepository.findAllStoreBanners())
+                    .willReturn(List.of(StoreBannerJpaEntity.fromWithId(savedBanner())));
+
+            List<StoreBanner> result = sut.findAllStoreBanners();
+
+            assertEquals(1, result.size());
+            assertEquals(BANNER_ID, result.get(0).getId());
+        }
+
+        @Test
+        @DisplayName("배너 없으면 빈 목록 반환")
+        void findAllStoreBanners_empty() {
+            given(jpaRepository.findAllStoreBanners()).willReturn(List.of());
+
+            assertTrue(sut.findAllStoreBanners().isEmpty());
+        }
+    }
 }

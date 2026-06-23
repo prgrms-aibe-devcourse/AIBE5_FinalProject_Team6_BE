@@ -60,6 +60,22 @@ class StoreBannerControllerTest {
     }
 
     @Nested
+    @DisplayName("GET /api/v1/admin/store-banners")
+    class GetAllStoreBanners {
+
+        @Test
+        @DisplayName("전체 배너 목록 → 200 반환")
+        void returns200WithList() {
+            given(storeBannerService.getAllStoreBanners()).willReturn(List.of());
+
+            ResponseEntity<?> response = sut.getAllStoreBanners();
+
+            assertEquals(200, response.getStatusCode().value());
+            verify(storeBannerService).getAllStoreBanners();
+        }
+    }
+
+    @Nested
     @DisplayName("POST /api/v1/admin/store-banners")
     class CreateStoreBanner {
 

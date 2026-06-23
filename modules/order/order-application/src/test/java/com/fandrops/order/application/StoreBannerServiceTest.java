@@ -78,6 +78,33 @@ class StoreBannerServiceTest {
     }
 
     @Nested
+    @DisplayName("getAllStoreBanners()")
+    class GetAllStoreBanners {
+
+        @Test
+        @DisplayName("비활성·대기 포함 전체 배너 목록 반환")
+        void getAllStoreBanners_returnsList() {
+            given(storeBannerRepository.findAllStoreBanners())
+                    .willReturn(List.of(activeBanner(), waitingBanner()));
+
+            List<StoreBannerResponse> result = sut.getAllStoreBanners();
+
+            assertEquals(2, result.size());
+            assertEquals(BANNER_ID, result.get(0).getId());
+            assertEquals(BannerStatus.ACTIVE.name(), result.get(0).getStatus());
+            assertEquals(BannerStatus.WAITING.name(), result.get(1).getStatus());
+        }
+
+        @Test
+        @DisplayName("배너 없으면 빈 리스트 반환")
+        void getAllStoreBanners_empty() {
+            given(storeBannerRepository.findAllStoreBanners()).willReturn(List.of());
+
+            assertTrue(sut.getAllStoreBanners().isEmpty());
+        }
+    }
+
+    @Nested
     @DisplayName("createStoreBanner()")
     class CreateStoreBanner {
 

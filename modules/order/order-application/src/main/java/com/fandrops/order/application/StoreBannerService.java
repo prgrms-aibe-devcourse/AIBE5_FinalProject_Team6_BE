@@ -24,6 +24,13 @@ public class StoreBannerService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<StoreBannerResponse> getAllStoreBanners() {
+        return storeBannerRepository.findAllStoreBanners().stream()
+                .map(StoreBannerResponse::from)
+                .toList();
+    }
+
     @Transactional
     public Long createStoreBanner(CreateStoreBannerCommand command) {
         StoreBanner banner = StoreBanner.create(

@@ -17,4 +17,11 @@ public interface StoreBannerJpaRepository extends JpaRepository<StoreBannerJpaEn
             ORDER BY b.exposureOrder ASC
             """)
     List<StoreBannerJpaEntity> findActiveStoreBanners(@Param("now") LocalDateTime now);
+
+    @Query("""
+            SELECT b FROM StoreBannerEntity b
+            WHERE b.bannerType = 'STORE'
+            ORDER BY b.exposureOrder ASC
+            """)
+    List<StoreBannerJpaEntity> findAllStoreBanners();
 }

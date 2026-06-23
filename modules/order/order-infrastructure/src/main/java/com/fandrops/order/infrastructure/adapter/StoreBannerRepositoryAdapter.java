@@ -36,6 +36,13 @@ public class StoreBannerRepositoryAdapter implements StoreBannerRepository {
     }
 
     @Override
+    public List<StoreBanner> findAllStoreBanners() {
+        return jpaRepository.findAllStoreBanners().stream()
+                .map(StoreBannerJpaEntity::toDomain)
+                .toList();
+    }
+
+    @Override
     public void deleteById(Long id) {
         jpaRepository.deleteById(id);
     }
