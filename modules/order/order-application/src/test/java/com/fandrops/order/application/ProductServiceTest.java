@@ -137,6 +137,19 @@ class ProductServiceTest {
             verify(productRepository).findRegularProducts(ARTIST_ID, null, 20);
             assertEquals(1, result.getItems().size());
         }
+
+        @Test
+        @DisplayName("캐시 히트 시 DB 쿼리 생략")
+        void getProducts_cacheHit_skipsDb() {
+            ProductListResponse cached = new ProductListResponse(List.of(), null);
+            given(productCachePort.get(any(), any(), any(), anyInt()))
+                    .willReturn(Optional.of(cached));
+
+            sut.getProducts("regular", null, null, 20);
+
+            verify(productRepository, never()).findRegularProducts(any(), any(), anyInt());
+            verify(inventoryReadPort, never()).getByProductIds(anyList());
+        }
     }
 
     @Nested
