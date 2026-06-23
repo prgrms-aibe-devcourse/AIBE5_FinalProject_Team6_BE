@@ -8,5 +8,6 @@ public interface StoreBannerRepository {
     StoreBanner save(StoreBanner banner);
     Optional<StoreBanner> findById(Long id);
     List<StoreBanner> findActiveStoreBanners();
+    List<StoreBanner> findAllStoreBanners();
     void deleteById(Long id);
 }

@@ -37,6 +37,12 @@ public class StoreBannerController {
                 storeBannerService.getActiveStoreBanners(), traceId()));
     }
 
+    @GetMapping("/api/v1/admin/store-banners")
+    public ResponseEntity<ApiResponse<List<StoreBannerResponse>>> getAllStoreBanners() {
+        return ResponseEntity.ok(ApiResponse.ok(
+                storeBannerService.getAllStoreBanners(), traceId()));
+    }
+
     @PostMapping("/api/v1/admin/store-banners")
     public ResponseEntity<ApiResponse<Map<String, Long>>> createStoreBanner(
             @Valid @RequestBody CreateStoreBannerRequest request) {

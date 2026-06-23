@@ -78,6 +78,50 @@ class StoreBannerServiceTest {
     }
 
     @Nested
+    @DisplayName("getAllStoreBanners()")
+    class GetAllStoreBanners {
+
+        private StoreBanner inactiveBanner() {
+            return StoreBanner.of(3L, "비활성 배너", "https://img.example.com/banner3.jpg",
+                    "https://fandrops.com/store/3", 3, false, null, null, null);
+        }
+
+        @Test
+        @DisplayName("비활성·대기·활성 포함 전체 배너 목록 반환")
+        void getAllStoreBanners_returnsList() {
+            given(storeBannerRepository.findAllStoreBanners())
+                    .willReturn(List.of(activeBanner(), waitingBanner(), inactiveBanner()));
+
+            List<StoreBannerResponse> result = sut.getAllStoreBanners();
+
+            assertEquals(3, result.size());
+            assertEquals(BannerStatus.ACTIVE.name(), result.get(0).getStatus());
+            assertEquals(BannerStatus.WAITING.name(), result.get(1).getStatus());
+            assertEquals(BannerStatus.INACTIVE.name(), result.get(2).getStatus());
+        }
+
+        @Test
+        @DisplayName("isActive=false 배너가 INACTIVE 상태로 포함됨")
+        void getAllStoreBanners_includesInactiveBanner() {
+            given(storeBannerRepository.findAllStoreBanners())
+                    .willReturn(List.of(inactiveBanner()));
+
+            List<StoreBannerResponse> result = sut.getAllStoreBanners();
+
+            assertEquals(1, result.size());
+            assertEquals(BannerStatus.INACTIVE.name(), result.get(0).getStatus());
+        }
+
+        @Test
+        @DisplayName("배너 없으면 빈 리스트 반환")
+        void getAllStoreBanners_empty() {
+            given(storeBannerRepository.findAllStoreBanners()).willReturn(List.of());
+
+            assertTrue(sut.getAllStoreBanners().isEmpty());
+        }
+    }
+
+    @Nested
     @DisplayName("createStoreBanner()")
     class CreateStoreBanner {
 
