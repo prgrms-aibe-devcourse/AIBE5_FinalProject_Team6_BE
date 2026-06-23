@@ -268,6 +268,7 @@ AgencyApp Order Management / Inventory History 화면용. Agency JWT(`sub` = age
 | Method | Endpoint | Auth | 설명 | Request Body / Param | Response |
 | --- | --- | --- | --- | --- | --- |
 | GET | `/store-banners` | 없음 | 활성 스토어 배너 목록 (노출 시간 범위 내) | — | `{ data: [StoreBannerResponse], traceId }` |
+| GET | `/admin/store-banners` | Admin | 전체 스토어 배너 목록 (비활성·기간 밖 포함) | — | `{ data: [StoreBannerResponse], traceId }` |
 | POST | `/admin/store-banners` | Admin | 스토어 배너 등록 | `title`, `imageUrl`, `landingUrl`, `exposureOrder`, `startAt`?, `endAt`?, `productId`? | `201` `{ bannerId }` |
 | PATCH | `/admin/store-banners/{id}` | Admin | 스토어 배너 수정 (부분) | 위 필드 모두 선택 | `{ bannerId }` |
 | DELETE | `/admin/store-banners/{id}` | Admin | 스토어 배너 비활성화 (soft delete) | — | `204` |
