@@ -79,7 +79,7 @@ export default function () {
     `${BASE_URL}/api/v1/queue/stream/${PRODUCT_ID}`,
     {
       headers: { Accept: 'text/event-stream', Authorization: `Bearer ${token}` },
-      timeout: '65s',
+      timeout: '310s',
     },
   );
 
