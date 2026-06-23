@@ -27,6 +27,13 @@ VALUES (1, 'agency@fandrops.test',
         '$2a$10$IXraSx3hpYkrj8jRqqIsxOkdIfRCZKYxPafAJT7v3ZrlvB43gl7Re',
         '테스트 기획사', 'agency@fandrops.test', 'ACTIVE', 'AGENCY', NOW());
 
+-- 입점 승인 에이전시 (id=2 — A3 agency_application APPROVED 건과 쌍)
+INSERT INTO agency_account (id, login_id, password_hash, company_name, contact_email, status, role, created_at)
+VALUES (2, 'globalstar@example.com',
+        '$2a$10$IXraSx3hpYkrj8jRqqIsxOkdIfRCZKYxPafAJT7v3ZrlvB43gl7Re',
+        '글로벌 스타 엔터', 'globalstar@example.com', 'ACTIVE', 'AGENCY',
+        DATEADD('DAY', -8, NOW()));
+
 -- 2. 팬 계정 (id=1 고정 -> JWT sub=1 -> X-Fan-Id: 1)
 --    비밀번호: Test1234!  (BCrypt strength=10)
 INSERT INTO fan (id, email, nickname, auth_provider, provider_id, password_hash, is_allow_notification, created_at)
@@ -38,9 +45,10 @@ VALUES (1, 'fan@fandrops.test', '테스트팬', 'LOCAL', 'local-fe-1',
 --    agency_id=1 -- 위에서 생성한 테스트 기획사 계정과 연결
 INSERT INTO artist_profile (id, agency_id, name, fan_count, joined_at, bio)
 VALUES
-    (1, 1, 'NOVA', 0, '2024-01-01 00:00:00', 'FE 검증용 테스트 아티스트 NOVA'),
-    (2, 1, 'LUNA', 0, '2024-01-01 00:00:00', 'FE 검증용 테스트 아티스트 LUNA'),
-    (3, 1, 'ECHO', 0, '2024-01-01 00:00:00', 'FE 검증용 테스트 아티스트 ECHO');
+    (1, 1, 'NOVA',  0, '2024-01-01 00:00:00',  'FE 검증용 테스트 아티스트 NOVA'),
+    (2, 1, 'LUNA',  0, '2024-01-01 00:00:00',  'FE 검증용 테스트 아티스트 LUNA'),
+    (3, 1, 'ECHO',  0, '2024-01-01 00:00:00',  'FE 검증용 테스트 아티스트 ECHO'),
+    (4, 2, 'PRISM', 0, DATEADD('DAY', -8, NOW()), '입점 승인 데모 — Admin 심사 APPROVED 후 생성된 아티스트 그룹');
 
 -- 3-1. 아티스트 멤버 (id=1 고정 -> JWT sub=1 role=ARTIST, NOVA artist_id=1)
 --    login_id: artist / Test1234!  (BCrypt strength=10, fan·agency와 동일 해시)

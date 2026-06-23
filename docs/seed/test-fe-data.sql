@@ -40,6 +40,21 @@ ON DUPLICATE KEY UPDATE
     bio    = VALUES(bio);
 
 -- ============================================================
+-- 2-1. 입점 승인 에이전시 + 아티스트 프로필 (Admin 심사 APPROVED 데모)
+-- ============================================================
+INSERT INTO agency_account (id, login_id, password_hash, company_name, contact_email, status, role, created_at)
+VALUES (2, 'globalstar@example.com',
+        '$2a$10$IXraSx3hpYkrj8jRqqIsxOkdIfRCZKYxPafAJT7v3ZrlvB43gl7Re',
+        '글로벌 스타 엔터', 'globalstar@example.com', 'ACTIVE', 'AGENCY',
+        DATE_SUB(NOW(), INTERVAL 8 DAY))
+ON DUPLICATE KEY UPDATE company_name=VALUES(company_name);
+
+INSERT INTO artist_profile (id, agency_id, name, fan_count, joined_at, bio)
+VALUES (4, 2, 'PRISM', 0, DATE_SUB(NOW(), INTERVAL 8 DAY),
+        '입점 승인 데모 — Admin 심사 APPROVED 후 생성된 아티스트 그룹')
+ON DUPLICATE KEY UPDATE name=VALUES(name), agency_id=VALUES(agency_id);
+
+-- ============================================================
 -- 3. 아티스트 피드
 --    artist_member_id=1 = 팬(id=1)이 아티스트 멤버 역할로 작성
 --    (로컬 프로파일: anyRequest().permitAll() — 권한 검증 없음)
