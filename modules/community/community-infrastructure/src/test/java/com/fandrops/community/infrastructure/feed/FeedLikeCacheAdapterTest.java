@@ -51,6 +51,19 @@ class FeedLikeCacheAdapterTest {
         }
 
         @Test
+        @DisplayName("local hot cache hit — Redis 재조회 없이 캐시된 Set 반환")
+        void localHotCacheHit_skipsRedis() throws Exception {
+            when(valueOps.get(anyString())).thenReturn("[1,3]");
+
+            Set<Long> first = adapter.getOrLoad(42L, List.of(1L, 2L, 3L), Set::of);
+            Set<Long> second = adapter.getOrLoad(42L, List.of(1L, 2L, 3L), Set::of);
+
+            assertEquals(Set.of(1L, 3L), first);
+            assertEquals(Set.of(1L, 3L), second);
+            verify(valueOps, times(1)).get(anyString());
+        }
+
+        @Test
         @DisplayName("캐시 miss — loader 실행 후 Redis에 저장")
         void cacheMiss_invokesLoaderAndStoresResult() {
             when(valueOps.get(anyString())).thenReturn(null);
@@ -59,6 +72,22 @@ class FeedLikeCacheAdapterTest {
 
             assertEquals(Set.of(1L), result);
             verify(valueOps).set(anyString(), anyString(), eq(Duration.ofSeconds(30)));
+        }
+
+        @Test
+        @DisplayName("loader 결과 저장 후 local hot cache hit — loader/Redis get 미호출")
+        void loadedResultStoredInLocalHotCache() {
+            when(valueOps.get(anyString())).thenReturn(null);
+
+            Set<Long> first = adapter.getOrLoad(42L, List.of(1L, 2L), () -> Set.of(1L));
+            @SuppressWarnings("unchecked")
+            java.util.function.Supplier<Set<Long>> loader = mock(java.util.function.Supplier.class);
+            Set<Long> second = adapter.getOrLoad(42L, List.of(1L, 2L), loader);
+
+            assertEquals(Set.of(1L), first);
+            assertEquals(Set.of(1L), second);
+            verifyNoInteractions(loader);
+            verify(valueOps, times(1)).get(anyString());
         }
 
         @Test

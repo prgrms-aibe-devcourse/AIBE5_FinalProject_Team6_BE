@@ -3,6 +3,9 @@
  * 목표: 단일 스크립트로 실제 서비스 트래픽 패턴 재현 및 혼합 부하 하 SLO 측정
  *   - Feed/Payment latency는 threshold로 판정
  *   - Order는 s01 합의안에 따라 P95를 참고 지표로 기록하고 정합성/계약 응답으로 판정
+ *   - Order accessTicket은 null로 전송해 상시 판매 경로를 사용한다.
+ *     queue join은 같은 product ticket key를 새 UUID로 갱신하므로, 고정 ticket과 섞으면
+ *     테스트 자체가 INVALID_QUEUE_TICKET(403)을 만든다. Ticket 계약은 s01/s05에서 분리 검증한다.
  *
  * 사전 준비:
  *   - DB seed: fans.csv, orders.json (infra/k6/seed/ 참고)
@@ -51,8 +54,20 @@ const wlPayment5xx = new Rate('wl_payment_5xx');
 const wlOrderReserved = new Counter('wl_order_reserved');
 const wlOrderConflict409 = new Counter('wl_order_conflict_409');
 const wlOrderRateLimited429 = new Counter('wl_order_rate_limited_429');
+const wlOrder400 = new Counter('wl_order_400');
+const wlOrder401 = new Counter('wl_order_401');
+const wlOrder403 = new Counter('wl_order_403');
+const wlOrder404 = new Counter('wl_order_404');
 const wlOrder5xx = new Counter('wl_order_5xx');
 const wlOrderUnexpected = new Counter('wl_order_unexpected');
+
+const wlPayment400 = new Counter('wl_payment_400');
+const wlPayment402 = new Counter('wl_payment_402');
+const wlPayment404 = new Counter('wl_payment_404');
+const wlPayment408 = new Counter('wl_payment_408');
+const wlPayment409 = new Counter('wl_payment_409');
+const wlPayment429 = new Counter('wl_payment_429');
+const wlPaymentUnexpected = new Counter('wl_payment_unexpected');
 
 export const options = {
   scenarios: {
@@ -73,6 +88,7 @@ export const options = {
     wl_feed_failed: ['rate<0.001'],
     wl_payment_duration: ['p(95)<2000'],
     wl_payment_5xx: ['rate<0.001'],
+    wl_payment_unexpected: ['count==0'],
     wl_order_reserved: [`count==${ORDER_TARGET_RESERVED}`],
     wl_order_5xx: ['count==0'],
     wl_order_unexpected: ['count==0'],
@@ -115,7 +131,7 @@ export default function () {
     wlOrder.add(1);
     const res = http.post(
       `${BASE_URL}/api/v1/orders`,
-      JSON.stringify({ accessTicket: 'test-ticket-token', items: [{ productId: PRODUCT_ID, quantity: 1 }] }),
+      JSON.stringify({ accessTicket: null, items: [{ productId: PRODUCT_ID, quantity: 1 }] }),
       { headers: authHeaders(token), tags: { workload: 'order' } },
     );
     if (res.status === 201) {
@@ -124,6 +140,18 @@ export default function () {
       wlOrderConflict409.add(1);
     } else if (res.status === 429) {
       wlOrderRateLimited429.add(1);
+    } else if (res.status === 400) {
+      wlOrder400.add(1);
+      wlOrderUnexpected.add(1);
+    } else if (res.status === 401) {
+      wlOrder401.add(1);
+      wlOrderUnexpected.add(1);
+    } else if (res.status === 403) {
+      wlOrder403.add(1);
+      wlOrderUnexpected.add(1);
+    } else if (res.status === 404) {
+      wlOrder404.add(1);
+      wlOrderUnexpected.add(1);
     } else if (res.status >= 500) {
       wlOrder5xx.add(1);
     } else {
@@ -146,8 +174,25 @@ export default function () {
     );
     wlPaymentDuration.add(res.timings.duration);
     wlPayment5xx.add(res.status >= 500);
+    if (res.status === 400) {
+      wlPayment400.add(1);
+    } else if (res.status === 402) {
+      wlPayment402.add(1);
+    } else if (res.status === 404) {
+      wlPayment404.add(1);
+    } else if (res.status === 408) {
+      wlPayment408.add(1);
+    } else if (res.status === 409) {
+      wlPayment409.add(1);
+    } else if (res.status === 429) {
+      wlPayment429.add(1);
+    } else if (res.status !== 200 && res.status !== 201 && res.status < 500) {
+      wlPaymentUnexpected.add(1);
+    }
     check(res, {
-      '[payment] confirm accepted': (r) => r.status === 200 || r.status === 201 || r.status === 429,
+      '[payment] confirm accepted': (r) =>
+        r.status === 200 || r.status === 201 || r.status === 400 ||
+        r.status === 408 || r.status === 409 || r.status === 429,
     });
   }
 }
