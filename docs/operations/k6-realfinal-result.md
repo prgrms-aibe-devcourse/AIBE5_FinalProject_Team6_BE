@@ -847,6 +847,20 @@ s01 팀장 합의에 따라 주문 구간은 `P95 < 300ms`를 Pass/Fail 기준�
 
 #### s06 검증 범위 분리 및 잔여 리스크
 
+**Feed local hot cache 최적화**
+
+s06 초기 재측정에서 feed P95가 187.66ms까지 상승했다. s02 단독 측정에서는 Read SLO를 만족했지만, s06처럼 feed/queue/order/payment가 동시에 실행되면 Redis 조회와 JSON 역직렬화 비용이 꼬리 지연으로 확대됐다.
+
+이를 완화하기 위해 feed 캐시 경로에 짧은 JVM local hot cache를 추가했다.
+
+- `FeedCacheAdapter`: Redis hit 결과를 2초 동안 JVM 메모리에 보관해 반복 feed list 조회 시 Redis GET과 JSON 역직렬화를 줄임
+- `FeedLikeCacheAdapter`: fan/feedIds 좋아요 결과도 2초 동안 JVM 메모리에 보관해 viewer-specific 후처리 비용을 줄임
+- feed 생성/수정/삭제 및 좋아요/취소 이벤트에서는 기존 evict 흐름과 함께 local cache도 제거해 짧은 TTL 내 stale risk를 제한
+
+이 변경은 s06의 목적과 충돌하지 않는다. s06은 cold cache miss 비용이 아니라 정상 운영 중 캐시가 형성된 상태에서 혼합 부하가 Read latency를 깨는지 보는 시나리오다. 따라서 Redis 앞단에 짧은 local hot cache를 두는 것은 캐시 기반 Read 경로의 steady-state 성능을 개선하는 작업이며, 비즈니스 계약을 우회하는 변경이 아니다.
+
+최종 측정 결과 feed P95는 `187.66ms`에서 `58.84ms`로 개선됐다. 개선 폭은 약 68.6%이며, Read SLO `< 120ms`를 충분한 여유폭으로 만족했다.
+
 **Order accessTicket 분리**
 
 s06 재측정 중 `wl_order_403`이 발생했다. 원인은 queue join 20%와 order 15%가 같은 `product_id=4`를 사용하면서 Redis key `access:ticket:4:{fanId}`를 공유한 것이다. queue join은 해당 fan/product 조합의 access ticket을 새 UUID로 갱신하지만, order 구간은 고정값 `test-ticket-token`을 사용하고 있어 테스트 스크립트 자체가 `INVALID_QUEUE_TICKET(403)`을 만들었다.
@@ -889,7 +903,7 @@ A. 현재 가장 가능성이 높은 원인은 seed order 반복 사용이다. s
 
 **현재 s06 해석**
 
-현재 s06에서 order/payment 쪽은 장애성 실패가 아니다. order는 `reserved=200`, 오버셀 0건, 5xx 0건, unexpected 0건으로 수렴했고, payment는 P95/5xx/unexpected 기준을 만족했다. 최종 판정은 warm cache 기준으로 진행했다. 실행 전 FAN 토큰 150개로 feed endpoint를 2회씩 총 300회 호출해 정상 운영 중 캐시가 형성된 상태를 재현했고, warm-up 요청은 모두 200 응답이었다.
+현재 s06에서 order/payment 쪽은 장애성 실패가 아니다. order는 `reserved=200`, 오버셀 0건, 5xx 0건, unexpected 0건으로 수렴했고, payment는 P95/5xx/unexpected 기준을 만족했다. feed 쪽은 local hot cache 최적화로 반복 조회의 Redis/JSON 역직렬화 꼬리 지연을 줄였고, 최종 판정은 warm cache 기준으로 진행했다. 실행 전 FAN 토큰 150개로 feed endpoint를 2회씩 총 300회 호출해 정상 운영 중 캐시가 형성된 상태를 재현했으며, warm-up 요청은 모두 200 응답이었다.
 
 warm cache 기준 최종 측정에서는 feed P95가 58.84ms로 Read SLO를 만족했다. 따라서 s06의 핵심 결론은 “steady-state 통합 부하에서 feed/order/payment/queue를 동시에 실행해도 Read/Payment latency와 주문 정합성 기준을 만족했다. 다만 CPU 사용률이 약 99%까지 상승해 현재 인스턴스의 여유 용량은 낮다”로 정리한다.
 
@@ -919,11 +933,12 @@ warm cache 기준 최종 측정에서는 feed P95가 58.84ms로 Read SLO를 만�
 
 초기 s06 재측정에서는 feed P95가 187.66ms로 Read SLO를 초과했고, order 403과 payment 400 check 실패가 함께 관찰됐다. order 403은 queue join과 order가 같은 Redis ticket key를 공유하면서 테스트 스크립트의 고정 accessTicket이 오염된 것이 원인이었다. payment 400은 seed order 500개를 5분 30초 동안 반복 confirm하면서 일부 요청이 결제 가능 상태 또는 요청 계약과 맞지 않게 된 테스트 데이터 모델 이슈로 분리했다.
 
-최종 측정은 s06의 목적을 steady-state 통합 부하 간섭 검증으로 명확히 하고, feed warm-up 후 수행했다. 이 조건에서는 모든 k6 threshold가 통과했다. 다만 Grafana CPU 패널에서 Process/System CPU가 측정 구간 대부분 95~99% 수준까지 상승했다. 즉 기능적 SLO는 달성했지만, 현재 인스턴스는 s06 수준의 통합 부하에서 CPU headroom이 거의 없다.
+최종 측정은 s06의 목적을 steady-state 통합 부하 간섭 검증으로 명확히 하고, feed local hot cache 최적화 반영 및 feed warm-up 후 수행했다. 이 조건에서는 모든 k6 threshold가 통과했다. 다만 Grafana CPU 패널에서 Process/System CPU가 측정 구간 대부분 95~99% 수준까지 상승했다. 즉 기능적 SLO는 달성했지만, 현재 인스턴스는 s06 수준의 통합 부하에서 CPU headroom이 거의 없다.
 
 ### 관찰 및 오너 피드백
 
 - k6 로그 기준 `wl_feed_duration p(95)=58.84ms`, `wl_feed_failed=0.00%`로 Read SLO를 만족했다.
+- feed P95는 s06 초기 재측정 187.66ms에서 최종 58.84ms로 낮아졌다. local hot cache와 warm cache steady-state 조건을 함께 적용한 결과이며, 개선 폭은 약 68.6%다.
 - `wl_order_reserved=200`, `wl_order_5xx=0`, `wl_order_unexpected=0`으로 주문 정합성과 계약 응답이 수렴했다.
 - `wl_payment_duration p(95)=148.88ms`, `wl_payment_5xx=0.00%`, `wl_payment_unexpected=0`으로 결제 SLO를 만족했다.
 - `wl_payment_400=4,587`은 check 실패 0.72%의 원인이지만, 5xx/latency/unexpected 실패가 아니므로 SLO 실패로 보지 않고 seed 반복 confirm 모델 개선 과제로 분리한다.
@@ -967,7 +982,9 @@ warm cache 기준 최종 측정에서는 feed P95가 58.84ms로 Read SLO를 만�
 
 ---
 
-## 전체 시나리오 SLO 측정 결과
+## SLO 달성 현황 요약
+
+### 전체 시나리오 SLO 측정 결과
 
 | 시나리오 | 최종 핵심 지표 | 에러/계약 지표 | 오버셀/정합성 | 최종 판정 | 비고 |
 |---|---|---|---|---|---|
