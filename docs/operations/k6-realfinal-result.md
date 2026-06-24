@@ -332,6 +332,8 @@ real-final 재측정 후 s01의 Pass/Fail 기준을 재정의했다. `P95 < 300m
 - 참고 지표: 주문 P95, 평균 응답시간, HikariCP active/waiting, retry/409/5xx 비율
 - s06 적용: 통합 워크로드에서도 주문 구간은 P95로 판정하지 않고 정합성/계약 응답 기준으로 판정한다.
 
+SLO를 변경한 이유는 s01의 본질이 "빠른 주문 응답"보다 "동시 주문 정합성 보장"에 있기 때문이다. 재고 100개를 초과 예약하지 않고, 정확히 100건만 RESERVED 처리하며, 초과 요청을 5xx가 아닌 409 계약 응답으로 수렴시키는 것이 이 시나리오의 핵심 검증 대상이다. `P95 < 300ms`를 유지하려면 단일 row 경합을 줄이는 별도 구조 개선이 필요하며, 이번 final 범위에서는 정합성 SLO와 분리해 추후 성능 개선 과제로 이관한다.
+
 ### 측정 흐름 요약
 
 | 구분 | 적용 상태 | P95 | orders_reserved | 5xx/계약 응답 | 오버셀 | 판정 |
@@ -339,6 +341,7 @@ real-final 재측정 후 s01의 Pass/Fail 기준을 재정의했다. `P95 < 300m
 | tuned | atomic update / row lock 경합 | 1,770ms | 100건 | 409 정상 응답 | 0건 | 정합성 OK, P95 참고 |
 | final | 낙관적 락 전환 후 retry 없음 | 4.97s | 16건 | `UnexpectedRollbackException` 다수 | 0건 | 실패 |
 | real-final | PR #450 bounded retry 5회 | 25.74s | 14건 | 5xx 약 80% | 0건 | 실패 |
+| real-final 2 | PR #459 atomic update 복귀 | 2.99s(참고) | 100건 | 300건 409 정상 응답, 5xx 없음 | 0건 | 성공 |
 
 > s01 팀장 합의에 따라 P95는 Pass/Fail 기준에서 제외하고 참고 지표로 기록한다. 다만 `orders_reserved=100`, 5xx 없음, 정상 409 계약 응답은 반드시 만족해야 한다.
 
@@ -385,19 +388,45 @@ PR #450에서 `InventoryReserveTxHelper.reserveOnce()`를 별도 Bean으로 분�
 
 400건 주문 요청 중 14건만 RESERVED 처리됐고, P95는 4.97s → 25.74s로 5배 이상 상승했다. 오버셀은 발생하지 않았지만, 합의된 s01 통과 기준인 `orders_reserved=100`, 5xx 없음, 정상 409 계약 응답을 만족하지 못했다.
 
+### real-final 2 재측정 — PR #459 적용 후
+
+| 지표 | PR #450 real-final | PR #459 real-final 2 | 목표 | 상태 |
+|---|---:|---:|---:|---|
+| P95 응답시간 (전체) | 25.74s | 2.99s | 참고 지표 | 개선 |
+| P95 응답시간 (expected response) | 25.66s | 2.67s | 참고 지표 | 개선 |
+| 평균 응답시간 | 19.07s | 1.67s | — | 참고 |
+| k6 http_req_failed | 96.50% | 75.00%\* | 참고 지표 | — |
+| checks_succeeded | — | 400/400 | 400/400 | 달성 |
+| orders_reserved | 14건 | 100건 | 100건 | 달성 |
+| orders_cancelled | 386건 | 300건 | 300건 | 달성 |
+| DB reserved_qty | 14건 | 100건 | 100건 | 달성 |
+| DB available_qty | 86건 | 0건 | 0건 | 달성 |
+| 5xx / rollback 예외 | 5xx 약 80% | 0건 | 0건 | 달성 |
+| 오버셀 | 0건 | 0건 | 0건 | 달성 |
+
+> \* real-final 2의 `http_req_failed=75%`는 재고 100개 소진 후 초과 요청 300건이 HTTP 409로 반환되었기 때문이다. k6는 4xx를 failed로 집계하지만, s01 합의 기준에서는 `checks_succeeded=400/400`, `orders_reserved=100`, 5xx 0건, 오버셀 0건으로 판정한다.
+
+![s01_order_concurrency_realfinal2](screenshots/realfinal/s01_order_concurrency_realfinal2.png)
+
+PR #459에서는 낙관적 락 + retry 방향을 중단하고, tuned 단계에서 정합성이 확인됐던 atomic update 방식으로 복귀했다. `application-prod.yml`의 `fandrops.inventory.lock-strategy: optimistic` 설정을 제거해 운영 환경이 더 이상 낙관적 락 경로를 타지 않도록 했고, `InventoryCommandService.reserve()`의 retry 루프도 제거했다. 최종 예약은 `InventoryReserveTxHelper.reserveOnce()`의 단일 트랜잭션에서 조건부 atomic update로 처리한다.
+
+이 방향으로 성공한 이유는 s01의 병목이 "재고를 여러 번 재시도하면 성공률이 올라가는 문제"가 아니라, 200 VU가 동일 `product_id=4` 단일 재고 row를 동시에 쟁탈하는 문제였기 때문이다. bounded retry는 충돌을 흡수하기보다 요청 수와 트랜잭션 대기를 증폭시켜 retry storm, rollback-only 전파, HikariCP 고갈을 만들었다. 반대로 atomic update는 DB의 단일 UPDATE 결과로 성공/실패를 즉시 분기하므로, 재고 100건은 RESERVED로 수렴하고 초과 300건은 409 계약 응답으로 빠르게 정리된다.
+
+재측정 전에는 active slot이 blue(8081)인지 확인했고, `product_id=4` 재고를 `total_qty=100`, `reserved_qty=0`, `available_qty=100`으로 초기화했다. Redis access ticket도 `access:ticket:4:{1..2100}` 형태로 재적재했다. 실행 후 DB 검증 결과 inventory는 `reserved_qty=100`, `available_qty=0`이었고, 주문 상태는 `RESERVED=100`, `CANCELLED=300`으로 수렴했다. 서버 로그에서도 `UnexpectedRollbackException`, HikariCP timeout, `CannotCreateTransactionException`, 5xx 계열 오류가 관측되지 않았다.
+
+따라서 s01은 팀장 합의 기준인 `orders_reserved=100`, DB 정합성 유지, 오버셀 0건, 5xx 없음, 초과 요청 정상 409 수렴을 모두 만족했다. P95 2.99s는 단일 row 경합 구조의 참고 지표로 기록하고, Pass/Fail 판정에는 사용하지 않는다. 기존 `P95 < 300ms` 목표는 폐기한 것이 아니라, 재고 차감 구조 또는 주문 유량 제어를 개선한 뒤 다시 검증할 추후 개선사항으로 정리한다.
+
 ### 관찰 및 오너 피드백
 
-- PR #450 bounded retry 적용 후 오히려 P95가 4.97s → 25.74s로 악화됐다. 200 VU 동시 발화 환경에서 최대 5회 retry는 retry storm을 만드는 구조적 문제가 있다.
-- orders_reserved가 14건으로 감소했으므로 retry가 선점 성공률을 높이지 못했다.
-- 5xx 에러율 ~80%는 여전히 rollback-only / UnexpectedRollbackException 계열 예외가 상위로 노출되고 있음을 시사한다. 트랜잭션 경계 분리가 의도대로 동작하는지 로그 재확인 필요.
-- 근본 원인은 200 VU가 단일 row(product_id=4)를 동시에 쟁탈하는 구조다. retry 횟수 축소(1~2회) + 충돌 즉시 409 계약 응답 반환 방식으로 전환하거나, Redis 분산 락(Redisson)으로 선점 순서를 보장하는 방안을 검토해야 한다.
-- 재측정 시 5xx 응답과 409 응답을 Grafana 패널에서 구분해 retry 효과와 계약 응답 비율을 별도로 측정한다.
+- PR #450 bounded retry 적용 후 P95가 4.97s → 25.74s로 악화됐고, 이후 retry/트랜잭션 경계 조정 과정에서도 HikariCP 고갈과 rollback-only 전파가 반복됐다. 단일 row 경합 상황에서 retry는 성공률을 높이기보다 부하를 증폭했다.
+- PR #459에서 atomic update로 복귀한 뒤 `orders_reserved=100`, `orders_cancelled=300`, 5xx 0건, 오버셀 0건으로 수렴했다. s01의 최종 해결 방향은 낙관적 락 재시도가 아니라 조건부 atomic update + 초과 요청 409 계약 응답이다.
+- Grafana 기록 시 `http_req_failed` 단독 수치는 409 정상 계약 응답을 포함하므로 오해 소지가 있다. s01은 `[k6] orders_reserved`, 5xx 에러율, HikariCP active/waiting, DB `reserved_qty/available_qty`, k6 checks 성공률을 함께 확인해야 한다.
 
 ### 개선 방향
 
-- retry 횟수를 1~2회로 축소하거나 충돌 즉시 409 계약 응답으로 전환해 retry storm을 차단한다.
-- 또는 Redisson 분산 락으로 선점 순서를 보장해 낙관적 락 충돌 자체를 제거한다.
-- 5xx 응답 경로(rollback-only → UnexpectedRollbackException)가 여전히 살아있으면 트랜잭션 경계 분리가 적용되지 않은 코드 경로가 있는 것이므로 로그 기반 재확인이 필요하다.
+- s01 기준에서는 PR #459 atomic update 방식을 최종 채택한다.
+- 향후 주문 P95 자체를 더 줄여야 한다면, 단일 row 재고 차감 구조를 유지한 채 retry를 늘리는 방식은 피한다. 대기열에서 주문 동시 유입량을 더 제한하거나, 재고 선점 큐/Redis 선차감/비동기 확정 같은 별도 설계가 필요하다.
+- 운영 대시보드에는 409 계약 응답과 5xx를 분리해서 보여줘야 한다. 현재 k6 `http_req_failed`는 409를 실패로 합산하므로 s01 판정 지표로 단독 사용하지 않는다.
 
 ---
 
@@ -816,12 +845,12 @@ s01 팀장 합의에 따라 주문 구간은 `P95 < 300ms`를 Pass/Fail 기준�
 
 | 시나리오 | 튜닝 후 P95 | 최종 측정 P95 | 튜닝 후 에러율 | 최종 에러율 | 오버셀 | SLO |
 |---|---|---|---|---|---|---|
-| 01 주문 동시성 | 872ms(성공) ❌ | 25.74s ❌ | 75%\* | 5xx ~80% ❌ | 0건 ✅ | 미달성 |
+| 01 주문 동시성 | 872ms(성공) ❌ | 2.99s(참고) | 75%\* | 75%\* ✅ | 0건 ✅ | 달성 |
 | 02 피드 Read | 168~172ms ❌ | 114.4ms ✅ | 0.00% ✅ | 0.00% ✅ | — | 달성 |
 | 03 결제 확인 | 1,940ms ✅ | 1.59s ✅ | 0.00% ✅ | 0.00% ✅ | — | 달성 |
 | 04 드롭스 스파이크 | 287.31ms ✅ | 278.33ms ✅ | 99.98%\* | 99.97%\* ✅ | 0건 ✅ | 성공(이월) |
 | 05 SSE 대기열 | checks 99.33% ✅ | checks 99.33% ✅ | 0% ✅ | 0건 ✅ | — | 성공(이월) |
-| 06 통합 워크로드 | 미측정 | 보류 | — | 보류 | — | s01 이후 |
+| 06 통합 워크로드 | 미측정 | 보류 | — | 보류 | — | 측정 가능 |
 | 07 상품 조회 처리량 | 133.45ms ❌ | 16.35ms ✅ | 0.00% ✅ | 0.00% ✅ | — | 성공(이월) |
 
-> \*\* s01 오버셀은 없었지만 `orders_reserved=16`으로 재고 100개를 모두 선점하지 못해 실패.
+> \* s01/s04의 k6 `http_req_failed`는 정상 계약 응답(409/429)을 포함한다. s01은 팀장 합의에 따라 `orders_reserved=100`, 5xx 0건, 오버셀 0건, 초과 요청 409 수렴으로 Pass/Fail을 판정한다. 기존 `P95 < 300ms`는 이번 final 판정 기준에서 제외하고 추후 성능 개선 과제로 이관한다.
