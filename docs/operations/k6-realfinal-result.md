@@ -295,6 +295,22 @@ s07은 신규 시나리오로 기존 피드백 반영 항목이 없습니다. �
 | HikariCP 풀 크기 | 기본값 10 (yml 미설정) | `maximumPoolSize: 30` | HikariCP |
 | 락 전략 | 단일 행 row lock 직렬화 | `@Version` 낙관적 락 전환 | JPA Optimistic Lock |
 
+#### Inventory bounded retry 적용 (PR #450)
+
+**문제 원인**
+최종 s01 측정에서 `InventoryLockConflictException`이 retry 없이 `ReserveConflictException`으로 전파된 뒤, 상위 트랜잭션이 rollback-only 상태가 되면서 `UnexpectedRollbackException`으로 번졌다. 그 결과 재고 100개 중 16건만 RESERVED 처리되고, 나머지 384건은 정상 409 계약 응답이 아니라 실패 응답으로 집계됐다.
+
+**반영 내용**
+`InventoryCommandService.reserve()`에서 트랜잭션 경계를 제거하고, 단일 예약 시도를 담당하는 `InventoryReserveTxHelper.reserveOnce()`를 별도 Bean으로 분리했다. `reserveOnce()`는 독립 `@Transactional` 경계에서 실행되므로 낙관적 락 충돌로 rollback-only가 표시되어도 다음 retry 시도에 영향을 주지 않는다.
+
+- 최대 5회 bounded retry 적용
+- retry 간 10~50ms jitter backoff 적용
+- `InventoryLockConflictException`만 retry 대상으로 제한
+- 재시도 소진 후 기존 경로로 `InventoryLockConflictException` → `ReserveConflictException` → HTTP 409 `RESERVE_FAILED`, `retryable=true` 매핑
+
+**재측정 기대 효과**
+동일 조건(200 VU, 400 주문 요청, 재고 100개)에서 낙관적 락 충돌이 일시적 경합으로 흡수되어 `orders_reserved=100`까지 수렴하고, 초과 요청은 5xx/rollback 예외가 아니라 정상 409 계약 응답으로 처리될 것을 기대한다. 단, retry backoff가 요청 스레드에서 수행되므로 real final 재측정에서 P95 300ms 이하 유지 여부를 함께 확인한다.
+
 ### 결과 (최종)
 
 | 지표 | 튜닝 후 | 결과 (최종) | 목표 | 상태 |
