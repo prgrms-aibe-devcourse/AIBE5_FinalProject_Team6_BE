@@ -6,15 +6,17 @@ import com.fandrops.inventory.domain.port.InventoryHistoryRepository;
 import com.fandrops.inventory.domain.port.InventoryReadRepository;
 import com.fandrops.inventory.domain.port.InventoryRepository;
 import com.fandrops.inventory.infrastructure.adapter.InventoryHistoryRepositoryAdapter;
+import com.fandrops.inventory.infrastructure.adapter.InventoryOptimisticLockAdapter;
 import com.fandrops.inventory.infrastructure.adapter.InventoryRedissonLockAdapter;
 import com.fandrops.inventory.infrastructure.adapter.InventoryRepositoryAdapter;
 import com.fandrops.inventory.infrastructure.persistence.InventoryHistoryJpaRepository;
 import com.fandrops.inventory.infrastructure.persistence.InventoryJpaRepository;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
 import org.redisson.config.Config;
 import org.redisson.config.SingleServerConfig;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -22,6 +24,9 @@ import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class InventoryConfig {
+
+    @PersistenceContext
+    private EntityManager entityManager;
 
     /** 재고 읽기 포트 — 전략과 무관하게 항상 JPA 어댑터 사용. */
     @Bean
@@ -41,6 +46,16 @@ public class InventoryConfig {
     )
     public InventoryRepository inventoryAtomicRepository(InventoryJpaRepository jpaRepository) {
         return new InventoryRepositoryAdapter(jpaRepository);
+    }
+
+    /**
+     * 재고 쓰기 포트 — 대안 전략: JPA @Version 낙관적 락 + Read-Check-Write.
+     * fandrops.inventory.lock-strategy=optimistic 설정 시 활성화.
+     */
+    @Bean
+    @ConditionalOnProperty(name = "fandrops.inventory.lock-strategy", havingValue = "optimistic")
+    public InventoryRepository inventoryOptimisticRepository(InventoryJpaRepository jpaRepository) {
+        return new InventoryOptimisticLockAdapter(jpaRepository, entityManager);
     }
 
     /**
@@ -89,7 +104,7 @@ public class InventoryConfig {
     @Bean
     public InventoryCommandService inventoryCommandService(
             InventoryReadRepository inventoryReadRepository,
-            @Qualifier("inventoryAtomicRepository") InventoryRepository inventoryRepository,
+            InventoryRepository inventoryRepository,
             InventoryHistoryRepository inventoryHistoryRepository) {
         return new InventoryCommandService(inventoryReadRepository, inventoryRepository, inventoryHistoryRepository);
     }

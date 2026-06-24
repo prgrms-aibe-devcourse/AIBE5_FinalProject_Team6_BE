@@ -34,7 +34,7 @@ public class InventoryRepositoryAdapter implements InventoryReadRepository, Inve
     }
 
     @Override
-    public int reserveAtomic(Long productId, int qty) {
+    public int reserveAtomic(Long productId, int qty, Long orderId) {
         return jpaRepository.reserveAtomic(productId, qty);
     }
 

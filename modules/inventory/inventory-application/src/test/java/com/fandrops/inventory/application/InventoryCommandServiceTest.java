@@ -25,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -58,7 +59,7 @@ class InventoryCommandServiceTest {
         void reserve_savesHistoryWithoutDirectSave() {
             // post-update 상태: availableQty=90 (100에서 10 차감됨)
             Inventory postUpdate = Inventory.reconstitute(1L, PRODUCT_ID, 100, 10, 90, 0);
-            given(inventoryRepository.reserveAtomic(PRODUCT_ID, 10)).willReturn(1);
+            given(inventoryRepository.reserveAtomic(eq(PRODUCT_ID), eq(10), eq(ORDER_ID))).willReturn(1);
             given(inventoryReadRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(postUpdate));
 
             sut.reserve(ORDER_ID, PRODUCT_ID, 10);
@@ -78,7 +79,7 @@ class InventoryCommandServiceTest {
         @DisplayName("Atomic Update 0 rows(재고 부족) 시 OutOfStockException, 이력 미저장")
         void reserve_atomicUpdateZeroRows_throwsOutOfStock() {
             Inventory inventory = Inventory.create(PRODUCT_ID, 5);
-            given(inventoryRepository.reserveAtomic(PRODUCT_ID, 10)).willReturn(0);
+            given(inventoryRepository.reserveAtomic(eq(PRODUCT_ID), eq(10), eq(ORDER_ID))).willReturn(0);
             given(inventoryReadRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(inventory));
 
             assertThrows(OutOfStockException.class,
@@ -91,7 +92,7 @@ class InventoryCommandServiceTest {
         @Test
         @DisplayName("재고 없는 상품이면 InventoryNotFoundException")
         void reserve_inventoryNotFound() {
-            given(inventoryRepository.reserveAtomic(PRODUCT_ID, 10)).willReturn(0);
+            given(inventoryRepository.reserveAtomic(eq(PRODUCT_ID), eq(10), eq(ORDER_ID))).willReturn(0);
             given(inventoryReadRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.empty());
 
             assertThrows(InventoryNotFoundException.class,
