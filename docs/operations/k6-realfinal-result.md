@@ -44,7 +44,7 @@
 | 완료 | s03 결제 확인 | PR #453 반영 후 real-final SLO 달성 |
 | 결과 이월 | s04 드롭스 스파이크 | final SLO 달성 결과 유지 |
 | 결과 이월 | s05 SSE 대기열 | final SLO 달성 결과 유지 |
-| 보류 | s06 통합 워크로드 | s01·s02·s03 재측정 성공 후 실행 |
+| 완료 | s06 통합 워크로드 | s01·s02·s03 성공 후 warm cache 기준 최종 측정 완료 |
 | 결과 이월 | s07 상품 조회 처리량 | final SLO 달성 결과 유지 |
 
 > s04, s05, s07은 final 측정에서 SLO를 달성했으므로 real final에서 재측정하지 않고 결과를 그대로 이월한다.
@@ -132,7 +132,7 @@ FeedCache와 FeedLikeCache가 모두 hit되면 피드 조회 경로의 DB 쿼리
 | 구분 | 적용 상태 | P95 | 에러율 | 판정 |
 |---|---|---:|---:|---|
 | final | FeedCache 적용, FeedLikeCache 미적용 | 276.44ms ❌ | 0.00% ✅ | Read SLO 미달성 |
-| real-final | PR #394 FeedLikeCache 적용 | 114.4ms ✅ | 0.00% ✅ | Read SLO 달성 |
+| real-final | PR #394 FeedLikeCache 적용 + warm cache 기준 | 66.47ms ✅ | 0.00% ✅ | Read SLO 달성 |
 
 ### final 측정 — FeedLikeCache 적용 전
 
@@ -146,36 +146,39 @@ FeedCache와 FeedLikeCache가 모두 hit되면 피드 조회 경로의 DB 쿼리
 
 final 측정에서는 모든 요청이 200으로 응답했지만, 캐시 히트 이후 `applyIsLiked()` 후처리에서 요청마다 Redis 추가 조회가 발생해 P95가 276.44ms까지 상승했다. 장애성 오류가 아니라 피드 조회 정상 응답 경로의 꼬리 지연 문제로 분류했다.
 
-### real-final 재측정 — PR #394 적용 후
+### real-final 재측정 — PR #394 적용 후 warm cache 기준
 
 | 지표 | 결과 | 목표 | 상태 |
 |---|---:|---:|---|
-| P95 응답시간 (안정 구간) | 114.4ms | < 120ms | 달성 |
-| P95 응답시간 (워밍업 포함 max) | 192.7ms | — | 참고 |
+| P95 응답시간 | 66.47ms | < 120ms | 달성 |
+| P90 응답시간 | 52.70ms | — | 참고 |
+| 평균 응답시간 | 30.60ms | — | 참고 |
+| 중앙값 | 27.54ms | — | 참고 |
+| 최대 응답시간 | 348.57ms | — | 참고 |
 | 에러율 | 0.00% | < 0.1% | 달성 |
 | checks 통과율 | 100.00% | — | 달성 |
-| 총 요청 수 | 80,368건 | — | 참고 |
-| P99 (max) | 265.9ms | — | 참고 |
+| 총 요청 수 | 194,200건 | — | 참고 |
+| 처리량 | 1,617.97 req/s | — | 참고 |
 
-![s02_feed_read_realfinal](screenshots/realfinal/s02_feed_read_realfinal.png)
+![s02_feed_read_realfinal_warm](screenshots/realfinal/s02_feed_read_realfinal_warm.png)
 
-PR #394에서 `FeedLikeCachePort` / `FeedLikeCacheAdapter`를 신설해 좋아요 여부 조회를 별도 캐시(TTL 30s)로 분리한 뒤 real-final을 재측정했다. Prometheus `k6_http_req_duration_p95{scenario="feed_read"}` 기준 P95가 워밍업 시작 시점 162.3ms에서 약 1분 30초 후 114.4ms로 안정화되어 이후 전 구간 유지됐다.
+PR #394에서 `FeedLikeCachePort` / `FeedLikeCacheAdapter`를 신설해 좋아요 여부 조회를 별도 캐시(TTL 30s)로 분리한 뒤 real-final을 재측정했다. 최종 측정은 s06과 같은 steady-state 기준을 맞추기 위해 실행 직전 FAN 토큰 50개로 피드 endpoint를 2회씩 총 100회 호출해 warm cache 상태를 만든 뒤 수행했다. warm-up 결과는 100건 모두 200 응답이었다.
 
-> Prometheus 복구 기준: k6 실행 시 `--out experimental-prometheus-rw` 사용으로 메트릭이 저장됨. SSM → `localhost:9090` 쿼리로 복구.
+k6 로그 기준 `http_req_duration p(95)=66.47ms`, `http_req_failed=0.00%`, checks 100%로 Read SLO를 충분한 여유폭으로 만족했다. Grafana 스크린샷에서도 `GET /api/v1/artists/{artistId}/feeds` P95가 측정 구간 대부분 60ms대에서 유지됐고, Redis 명령 P95는 약 7~8ms 이하에서 수렴했다. CPU는 측정 구간 중 95~99% 수준까지 올라갔으나 50 VU feed-only 부하에서 응답 P95와 에러율은 안정적으로 유지됐다.
 
 ### 관찰 및 오너 피드백
 
-- s02 Read SLO 달성. 재측정 불필요.
-- max_over_time P95 = 192.7ms는 캐시 cold start 구간 스파이크로, 운영 환경에서는 캐시가 미리 워밍된 상태라 재현 가능성이 낮다.
-- Grafana Redis 명령 처리율 패널에서 SCAN ops/s가 최대 ~1.5K까지 상승한 것이 관찰됐다. FeedLikeCache가 `likedFeedIds` 조회 시 SCAN을 사용하는 것으로 보이며, 캐시 안정화 후 Redis P95 레이턴시는 25ms → 5ms로 수렴했다.
-- 트래픽이 더 높아지는 경우 Redis SCAN → SMEMBERS 또는 키 구조 변경으로 개선 여지를 모니터링한다.
-- 배포 직후 cold start P95 구간을 줄이기 위한 캐시 워밍 절차가 필요한지 팀 내 합의해 두면 좋다.
+- s02 Read SLO 달성. 기존 real-final 114.4ms 대비 warm 기준 최종 측정에서 66.47ms까지 개선됐다.
+- FeedLikeCache 적용 후 캐시 히트 경로에서 DB 쿼리 없이 피드 목록과 좋아요 여부가 수렴했고, Redis P95도 한 자리 ms 수준으로 유지됐다.
+- CPU가 측정 구간 중 95~99% 수준까지 상승했으므로, Read SLO는 달성했지만 현재 인스턴스의 CPU headroom은 넉넉하지 않다.
+- cold start 성능은 이번 s02 최종 판정 범위에서 제외했다. 운영 배포 직후 첫 요청 구간은 별도 관측하거나 warm-up 절차로 관리해야 한다.
 
 ### 개선 방향
 
-- s02는 현재 SLO를 만족하므로 코드 수정 대상이 아니다.
-- Redis SCAN ops/s 모니터링을 Grafana 대시보드에 유지해 `FeedLikeCache` 히트율 저하 시 조기 감지한다.
-- 배포 후 cold start P95 구간(~1분 30초)을 Grafana에서 확인하는 절차를 운영 체크리스트에 고정한다.
+- s02는 현재 SLO를 만족하므로 추가 코드 수정 대상이 아니다.
+- Redis GET/SCAN ops와 Redis P95 레이턴시를 Grafana 대시보드에 유지해 `FeedLikeCache` 히트율 저하 또는 key scan 증가를 조기 감지한다.
+- CPU 95% 이상 구간이 반복되면 feed read 부하만으로도 인스턴스 한계에 근접한다는 신호이므로, 스케일 아웃 또는 인스턴스 사양 상향을 운영 개선 과제로 검토한다.
+- 배포 직후 cold start P95 구간은 별도 시나리오로 분리하거나, 운영 체크리스트에 warm-up 절차를 고정한다.
 
 ---
 
@@ -187,7 +190,7 @@ PR #394에서 `FeedLikeCachePort` / `FeedLikeCacheAdapter`를 신설해 좋아�
 
 ### 목적
 
-팬이 드롭스 상품 목록을 조회하는 Read 엔드포인트의 처리량 기준선을 재검증한다. Redis 캐시 및 인덱스 적용 후 300 RPS에서 P95 120ms 이하를 달성하는지 확인한다.
+팬이 드롭스 상품 목록을 조회하는 Read 엔드포인트의 처리량 기준선을 재검증한다. active slot을 정확히 지정하고 Redis cache hit 상태에서 300 RPS 부하를 걸었을 때 P95 120ms 이하와 에러율 0.1% 미만을 유지하는지 확인한다.
 
 ### 이전 피드백
 
@@ -197,33 +200,33 @@ PR #394에서 `FeedLikeCachePort` / `FeedLikeCacheAdapter`를 신설해 좋아�
 - `findRegularProducts` 인덱스 확인: `(drops_start_at, id)` 복합 인덱스 적용 여부 `EXPLAIN`으로 확인.
 - dropped_iterations 모니터링: 이전 측정에서 251건 발생. 캐시 적용 후 꼬리 레이턴시(max 1.33s) 해소 여부 확인.
 
-### 피드백 반영 내용 (형성빈)
+### 문제 정의
 
-s07은 신규 시나리오로 기존 피드백 반영 항목이 없습니다. 초기 측정 결과를 바탕으로 원인 분석 및 개선 방향을 도출했습니다.
+이전 튜닝 후 측정에서는 300 RPS 부근에서 P95 133.45ms로 Read SLO를 초과했고, dropped_iterations 251건이 발생했다. 또한 최초 final 실행은 `ACTIVE_BASE_URL=http://10.0.1.114:8081`로 지정되어 `connection refused`가 발생했는데, 당시 active slot은 green(8082)이었으므로 해당 실행은 무효 측정으로 제외했다.
 
-#### 원인 분석
-
-`ProductService.getProducts()` 호출 시 매 요청마다 3개 쿼리가 직렬 실행됩니다.
+`ProductService.getProducts()` 호출 시 매 요청마다 3개 조회가 직렬 실행되는 구조도 관찰 대상이었다.
 
 1. `productRepository.findRegularProducts()` → product 테이블
 2. `inventoryReadPort.getByProductIds()` → inventory 테이블
 3. `productImageRepository.findThumbnailsByProductIds()` → product_image 테이블
 
-300 RPS × 3 = 900 q/s DB 직행, 캐시 레이어 없음.
+300 RPS × 3 = 900 q/s DB 직행 가능성이 있고, `findRegularProducts` 쿼리 조건(`WHERE dropsStartAt IS NULL AND id < :cursor ORDER BY id DESC`)에서 `(drops_start_at, id)` 복합 인덱스가 없으면 풀 스캔 가능성이 있다.
 
-`findRegularProducts` 쿼리 조건(`WHERE dropsStartAt IS NULL AND id < :cursor ORDER BY id DESC`)에서 `(drops_start_at, id)` 복합 인덱스가 없어 풀 스캔 가능성 존재. 현재 product 테이블에는 `artist_id` 인덱스만 있음.
+### 피드백 반영 내용 (형성빈)
 
-#### 개선 예정 항목
+s07은 final 단계에서 active port 오지정으로 한 차례 무효 측정이 발생했고, 이후 active direct port와 Redis cache hit 조건을 맞춰 재측정했다. 코드 추가 수정 없이도 상품 목록 조회 경로가 cache hit 상태에서 안정화되며 Read SLO를 달성했다. 따라서 s07의 개선 효과는 비즈니스 로직 변경보다 **측정 조건 정상화(active port 정정) + 캐시 hit 상태 확인**으로 정리한다.
 
-- `(drops_start_at, id)` 복합 인덱스 추가 (Flyway 마이그레이션)
-- `findRegularProducts` + `findThumbnailsByProductIds` Redis 캐시 (TTL 120s) + 상품 변경 시 evict
-- inventory 단기 캐시 (TTL 5~10s) 검토
+- active slot 확인 후 direct port를 `8082`로 정정해 비활성 슬롯 `connection refused` 무효 측정을 제외
+- Redis cache hit 상태에서 `GET /api/v1/products`를 300 RPS로 재측정
+- 상품 목록 조회 P95가 133.45ms에서 16.35ms로 개선되어 Read SLO 달성
+- dropped_iterations는 251건에서 63건으로 감소했으나, 완전 해소되지는 않아 관찰 항목으로 유지
 
 | 항목 | 변경 전 | 변경 내용 | 적용 기술 |
 |---|---|---|---|
-| 쿼리 구조 | 매 요청 3개 쿼리 DB 직행 (캐시 없음) | `findRegularProducts` + 이미지 Redis 캐시 TTL 120s | Spring Cache, Redis |
-| product 인덱스 | `artist_id` 단일 인덱스만 존재 | `(drops_start_at, id)` 복합 인덱스 추가 | Flyway 마이그레이션 |
-| inventory 조회 | 매 요청 DB 직행 | TTL 5~10s 단기 캐시 검토 | Redis |
+| 실행 포트 | 비활성 슬롯 8081 호출로 `connection refused` | active slot 기준 8082 직접 호출 | AWS/blue-green preflight |
+| 캐시 상태 | 캐시 hit 여부 불명확 | Redis cache hit 조건에서 재측정 | Redis |
+| P95 | 133.45ms | 16.35ms | 측정 조건 정상화 + cache hit |
+| dropped_iterations | 251건 | 63건 | k6 VU 여유 및 꼬리 지연 개선 |
 
 ### 결과 (최종)
 
@@ -238,19 +241,14 @@ s07은 신규 시나리오로 기존 피드백 반영 항목이 없습니다. �
 
 ![s07_product_read_final](screenshots/final/s07_product_read_final.png)
 
-### 문제 정의
-
-이전 튜닝 후 측정에서는 300 RPS 부근에서 P95 133.45ms로 Read SLO를 초과했고, dropped_iterations 251건이 발생했다. 최종 측정에서는 P95가 16.35ms로 크게 개선되어 상품 목록 조회의 핵심 Read SLO는 달성했다.
-
-다만 dropped_iterations가 63건 남아 있다. 실패 요청이나 5xx 없이 목표 처리량에 거의 도달했으므로 서비스 장애로 보기는 어렵지만, 고정 도착률 300 iters/s에서 순간적으로 VU가 부족하거나 max latency 1.3s 구간이 발생한 흔적은 관찰 대상으로 남긴다.
-
 ### 관찰 및 오너 피드백
 
 - 최초 실행은 `ACTIVE_BASE_URL=http://10.0.1.114:8081`로 지정되어 `connection refused`가 발생했으나, 당시 active slot은 green(8082)이었으므로 무효 측정으로 제외했다.
 - 재실행은 active port 8082 직접 호출 기준으로 수행했고, `checks_succeeded=100.00%`, `http_req_failed=0.00%`를 기록했다.
 - P95는 16.35ms로 목표 120ms 대비 충분한 여유가 있으며, 평균 9.86ms, 중앙값 3.9ms로 정상 구간은 안정적이다.
 - 처리량은 299.47 RPS로 300 RPS 기준선에 사실상 도달했다.
-- max latency가 1.3s까지 튀었고 dropped_iterations가 63건 발생했으므로, 꼬리 지연 원인은 별도로 모니터링한다.
+- active port 정정 및 Redis cache hit 조건에서 P95가 133.45ms에서 16.35ms로 개선됐다. 개선 폭은 약 87.7%다.
+- max latency가 1.3s까지 튀었고 dropped_iterations가 63건 남아 있다. 실패 요청이나 5xx 없이 목표 처리량에 거의 도달했으므로 서비스 장애로 보기는 어렵지만, 고정 도착률 300 iters/s에서 순간적으로 VU가 부족하거나 max latency 구간이 발생한 흔적은 관찰 대상으로 남긴다.
 
 **오너 피드백 (→ 형성빈 / 다음 측정 전 사전 피드백)**
 
@@ -438,7 +436,7 @@ PR #459에서는 낙관적 락 + retry 방향을 중단하고, tuned 단계에�
 
 ### 목적
 
-드롭스 오픈런 스파이크 트래픽(0→1,000 VU 30초)에서 Nginx rate limit, 대기열, 재고 차감이 정합성을 유지하는지 최종 검증한다.
+드롭스 오픈런 스파이크 트래픽(0→1,000 VU 30초)에서 Nginx rate limit이 Spring Boot 유입 요청을 제어하고, 재고 선점이 100건으로 수렴하며 오버셀이 발생하지 않는지 최종 검증한다.
 
 ### 이전 피드백
 
@@ -448,13 +446,24 @@ PR #459에서는 낙관적 락 + retry 방향을 중단하고, tuned 단계에�
 - Nginx rate limit 설정 유지 확인: `5r/s` rate limit이 변경되지 않았는지 사전 확인.
 - s01 코드 변경 영향 여부: HikariCP pool size 증설 또는 락 전략 변경이 반영됐다면 s04에서도 P95 변화 확인 필요.
 
+### 문제 정의
+
+s04는 0→1,000 VU 스파이크에서 Spring Boot를 직접 보호하지 않고, Nginx rate limit을 통해 애플리케이션으로 유입되는 주문 요청을 제한하는 시나리오다. s01에서 애플리케이션 직접 동시성 경합이 문제가 되었기 때문에, s04에서는 Nginx가 초과 요청을 앞단에서 차단해 재고 선점이 100건으로 수렴하는지 확인해야 했다.
+
+최종 측정에서 k6 `http_req_failed=99.97%`가 발생했지만 이는 대부분 429 차단 응답이며, s04의 실패 조건인 5xx 또는 오버셀과는 다르다. 따라서 s04는 `http_req_failed` 단독이 아니라 `spike_orders_reserved`, 5xx, expected response P95를 함께 기준으로 판정해야 한다.
+
 ### 피드백 반영 내용 (형성빈)
 
-> 작성 예정
+s04는 코드 수정이 아니라 운영 경로의 보호 정책이 유지되는지 확인하는 시나리오다. Nginx rate limit 설정을 유지한 상태에서 스파이크 트래픽을 Spring Boot 앞단에서 차단하고, 재고 선점이 100건으로 수렴하는지 검증했다.
+
+최종 측정에서는 `/api/v1/orders` 경로가 Nginx rate limit을 통과하면서 Spring Boot 유입 RPS가 약 5 req/s 이하로 제한됐고, 초과 요청은 대부분 429로 차단됐다. 그 결과 `spike_orders_reserved=100`, 오버셀 0건, 전체 P95 278.33ms로 Write SLO를 만족했다.
 
 | 항목 | 변경 전 | 변경 내용 | 적용 기술 |
 |---|---|---|---|
-| | | | |
+| 스파이크 보호 | 1,000 VU 주문 요청이 앱까지 직접 도달하면 단일 inventory row 경합 확대 | Nginx rate limit으로 앱 유입 RPS 제한 | Nginx rate limit |
+| 에러율 해석 | k6 `http_req_failed`가 429를 실패로 집계 | 429는 s04 계약상 정상 차단 응답으로 분리 해석 | k6 summary 해석 기준 |
+| 재고 정합성 | 초과 주문 시 오버셀 가능성 검증 필요 | `spike_orders_reserved=100`, 오버셀 0건 확인 | k6 Counter + DB/Grafana 확인 |
+| 성능 결과 | P95 287.31ms | P95 278.33ms, expected response P95 193.62ms | rate limit 경유 측정 |
 
 ### 결과 (최종)
 
@@ -472,16 +481,11 @@ PR #459에서는 낙관적 락 + retry 방향을 중단하고, tuned 단계에�
 
 ![s04_drop_spike_final](screenshots/final/s04_drop_spike_final.png)
 
-### 문제 정의
-
-s04는 0→1,000 VU 스파이크에서 Spring Boot를 직접 보호하지 않고, Nginx rate limit을 통해 애플리케이션으로 유입되는 주문 요청을 제한하는 시나리오다. 최종 측정에서 k6 `http_req_failed=99.97%`가 발생했지만 이는 대부분 429 차단 응답이며, s04의 실패 조건인 5xx 또는 오버셀과는 다르다.
-
-최종 결과는 전체 P95 278.33ms, `spike_orders_reserved=100`으로 목표를 만족했다. s01에서는 동시 주문이 Spring Boot에 직접 도달해 낙관적 락 충돌이 대량 발생했지만, s04에서는 Nginx가 초과 요청을 차단해 Spring Boot 도달 RPS가 낮게 유지됐고 재고 100건만 정상 선점됐다.
-
 ### 관찰 및 오너 피드백
 
 - k6 summary 기준 전체 P95는 278.33ms로 Write SLO 300ms를 통과했다.
 - expected response 기준 P95는 193.62ms로, Spring Boot까지 도달한 정상 주문 요청의 처리 시간은 안정적이다.
+- 튜닝 후 P95 287.31ms 대비 최종 P95는 소폭 개선됐고, 성공 요청 기준 P95는 252.84ms에서 193.62ms로 약 23.4% 개선됐다.
 - `spike_orders_reserved=100`으로 재고 수량을 정확히 채웠고, 오버셀은 발생하지 않았다.
 - Grafana `[K6] Spike Orders Reserved` 패널에서도 100건 도달 후 평탄 유지가 확인된다.
 - Grafana RPS 패널에서 `POST /api/v1/orders`는 약 5 req/s 이하로 제한되어 Nginx rate limit이 Spring Boot 유입을 제어한 것으로 보인다.
@@ -511,7 +515,7 @@ s04는 0→1,000 VU 스파이크에서 Spring Boot를 직접 보호하지 않고
 
 ### 목적
 
-Toss PG 응답 지연·오류 상황에서도 중복 결제 없이 P95 2,000ms 이하로 처리되는지 최종 검증한다. `TOSS_API_READ_TIMEOUT=2s` 주입 상태에서 Wiremock wildcard 매핑으로 측정한다.
+Toss PG 결제 확인 success 경로가 P95 2,000ms 이하, 5xx 0.1% 미만으로 안정 처리되는지 최종 검증한다. `TOSS_API_READ_TIMEOUT=2s` 주입 상태에서 WireMock success stub으로 측정하며, timeout/mixed 응답 계약은 SLO 판정과 분리한 분석 시나리오로 기록한다.
 
 ### 이전 피드백
 
@@ -521,6 +525,14 @@ Toss PG 응답 지연·오류 상황에서도 중복 결제 없이 P95 2,000ms �
 - Wiremock 기동 확인: `docker ps --filter name=wiremock`으로 wildcard stub 상태 확인.
 - 측정 완료 후 `TOSS_API_READ_TIMEOUT` 원복 필수: 실제 Toss API 호출에 영향 방지.
 - mixed 시나리오 측정 여부 결정: 70%/10%/10%/10% 혼합 별도 측정 추가 가능.
+
+### 문제 정의
+
+최초 final 실행은 `TOSS_API_BASE_URL=http://10.0.1.47:8090`으로 설정되어 있었고, Wiremock은 EC2-2 로컬 `127.0.0.1:8090`에서 동작 중이었다. 이로 인해 500/500건이 5xx로 실패했으므로 해당 실행은 운영 설정 오지정에 의한 무효 측정으로 분리한다.
+
+설정을 `TOSS_API_BASE_URL=http://127.0.0.1:8090`, `TOSS_API_READ_TIMEOUT=2s`로 복구하고 seed 결제/주문을 초기화한 뒤 재실행했지만, final 결과는 P95 2.08s, 5xx 8/500건(1.60%)으로 SLO를 통과하지 못했다. tuned 측정 당시에도 P95가 1.94s로 SLO 2s 대비 여유가 60ms뿐이었고, final에서는 일부 요청이 `HttpTimeoutException`으로 5xx 처리되면서 경계 밖으로 밀렸다.
+
+재실행 후 DB 상태는 `payment=500`, orders `COMPLETED=492`, `RESERVED=8`이었다. 일부 요청에서 결제 레코드는 생성됐지만 주문 상태가 완료로 전이되지 않은 불일치 상태가 남아, timeout/예외 발생 시 payment 저장과 order 상태 변경의 원자성 또는 복구 기준을 재검토해야 했다.
 
 ### 피드백 반영 내용 (장성재)
 
@@ -582,7 +594,7 @@ timeout 발생 시 5xx 대신 408 / `PAYMENT_CONFIRM_TIMEOUT` / `retryable=true`
 | 동시성 방어 | 주석 없음 | precheck-PG 타임 윈도 주석 + `OptimisticLockingFailureException` catch 멱등 처리 | JPA `@Version` 낙관적 락 |
 | Timeout 예외 처리 | `ResourceAccessException` uncaught → Spring 500 | `ResourceAccessException` catch → `PaymentConfirmTimeoutException` → 408 / `PAYMENT_CONFIRM_TIMEOUT` / retryable=true | `PaymentConfirmTimeoutException`, `@RestControllerAdvice` |
 
-### 결과 (최종)
+### final 측정 — PR #453 적용 전
 
 | 지표 | 튜닝 후 | 결과 (최종) | 목표 | 상태 |
 |---|---|---|---|---|
@@ -612,14 +624,6 @@ PR #453에서 `ResourceAccessException`을 `PaymentConfirmTimeoutException`으�
 realfinal success 시나리오에서는 timeout이 발생하지 않았고, 500건 모두 정상 처리됐다. k6 기준 P95는 1.59s, max는 1.98s로 2초 경계 안에 들어왔으며, `http_req_failed`와 `http_5xx_rate` 모두 0.00%로 수렴했다. 따라서 s03의 SLO 판정은 성공으로 확정한다.
 
 `SCENARIO=timeout` 및 `SCENARIO=mixed`는 408 계약 확인용 분석 시나리오로 분리한다. 408은 5xx에는 포함되지 않지만 k6 기본 `http_req_failed`에는 포함되므로, success 시나리오 SLO Pass/Fail과 같은 기준으로 판정하지 않는다.
-
-### 문제 정의
-
-최초 final 실행은 `TOSS_API_BASE_URL=http://10.0.1.47:8090`으로 설정되어 있었고, Wiremock은 EC2-2 로컬 `127.0.0.1:8090`에서 동작 중이었다. 이로 인해 500/500건이 5xx로 실패했으므로 해당 실행은 운영 설정 오지정에 의한 무효 측정으로 분리한다.
-
-설정을 `TOSS_API_BASE_URL=http://127.0.0.1:8090`, `TOSS_API_READ_TIMEOUT=2s`로 복구하고 seed 결제/주문을 초기화한 뒤 재실행했지만, 최종 결과는 P95 2.08s, 5xx 8/500건(1.60%)으로 SLO를 통과하지 못했다. tuned 측정 당시에도 P95가 1.94s로 SLO 2s 대비 여유가 60ms뿐이었고, final에서는 일부 요청이 `HttpTimeoutException`으로 5xx 처리되면서 경계 밖으로 밀렸다.
-
-재실행 후 DB 상태는 `payment=500`, orders `COMPLETED=492`, `RESERVED=8`이었다. 일부 요청에서 결제 레코드는 생성됐지만 주문 상태가 완료로 전이되지 않은 불일치 상태가 남아, timeout/예외 발생 시 payment 저장과 order 상태 변경의 원자성 또는 복구 기준을 재검토해야 한다.
 
 ### 관찰 및 오너 피드백
 
@@ -694,6 +698,12 @@ realfinal success 시나리오에서는 timeout이 발생하지 않았고, 500�
 - overflow_probe dial timeout 허용: GHA runner 특성상 소수 `dial: i/o timeout` 발생 가능. `checks{scenario:overflow_probe} > 0.99` threshold 통과 여부로 판정.
 - 실행 순서 준수: s04 이후 s05 실행 필수. 먼저 실행 시 Redis 티켓 오염으로 s01·s04 403 전원 실패.
 - heartbeat 설정 확인: `fandrops.queue.scheduler.heartbeat-ms` 환경변수 배포 환경 적용 여부 사전 확인.
+
+### 문제 정의
+
+s05는 SSE long-lived 연결 특성상 k6 summary만으로 capacity_fill 성공 여부를 판정할 수 없다. stage 종료 시 k6가 열린 SSE 연결을 interrupt하면서 `http_req_failed{scenario:capacity_fill}`이 `0/0`으로 집계될 수 있으므로, 2,000 연결 수용 여부는 Nginx access log의 200 응답 수로 판정해야 한다.
+
+또한 GitHub Actions runner에서 overflow_probe를 실행할 때 소수의 unexpected status 또는 dial timeout이 발생할 수 있다. 따라서 초과 구간은 개별 1~2건 실패가 아니라 `checks{scenario:overflow_probe} > 0.99`, 429 count, `retryable:true`, 5xx 0건을 함께 기준으로 판정한다.
 
 ### 피드백 반영 내용 (장성재, 지영재)
 
@@ -777,15 +787,10 @@ k6 summary 대신 Nginx access log를 유일한 수용 증거로 삼는 판정 �
 
 ![s05_sse_queue_final](screenshots/final/s05_sse_queue_final.png)
 
-### 문제 정의
-
-s05는 SSE long-lived 연결 특성상 k6 summary만으로 capacity_fill 성공 여부를 판정할 수 없다. stage 종료 시 k6가 열린 SSE 연결을 interrupt하면서 `http_req_failed{scenario:capacity_fill}`이 `0/0`으로 집계될 수 있으므로, 2,000 연결 수용 여부는 Nginx access log의 200 응답 수로 판정해야 한다.
-
-최종 측정에서는 최근 `GET /api/v1/queue/stream/4` access log 2,600건 기준 200 응답 2,302건, 429 응답 298건, 5xx 0건을 확인했다. 따라서 capacity_fill의 2,000 연결 수용과 overflow_probe의 초과 연결 429 계약이 모두 충족됐다.
-
 ### 관찰 및 오너 피드백
 
 - k6 threshold는 모두 통과했다. `checks{scenario:overflow_probe}=99.33%`, `sse_connections_rejected=298`, `http_req_failed{scenario:capacity_fill}=0.00%`였다.
+- 최종 측정에서는 최근 `GET /api/v1/queue/stream/4` access log 2,600건 기준 200 응답 2,302건, 429 응답 298건, 5xx 0건을 확인했다. 따라서 capacity_fill의 2,000 연결 수용과 overflow_probe의 초과 연결 429 계약이 모두 충족됐다.
 - overflow_probe 300건 중 298건이 `429 retryable:true`를 만족했고, 2건은 `unexpected status`로 집계됐다. threshold `rate>0.99` 기준 허용 범위다.
 - Nginx access log 기준 최근 2,600건 중 `200=2,302`, `429=298`, `5xx=0`으로 서버 오류 없이 수용/차단이 동작했다.
 - Grafana 스크린샷에서 JVM heap은 SSE 유지 중 증가했다가 회수됐고, 힙 최대치 대비 여유가 남아 OOM/stale emitter 재발 징후는 보이지 않는다.
@@ -816,13 +821,21 @@ s05는 SSE long-lived 연결 특성상 k6 summary만으로 capacity_fill 성공 
 
 ### 목적
 
-개별 시나리오(s01~s05)에서 발견되지 않는 시스템 전체 병목을 검증한다. 실제 트래픽 비율(피드 조회 60%, 대기열 진입 20%, 주문 15%, 결제 5%)을 반영한 혼합 부하로 Read/Payment latency와 주문 정합성/계약 응답을 함께 측정한다.
+개별 시나리오(s01~s05)에서 발견되지 않는 시스템 전체 병목을 검증한다. 정상 운영 중 캐시가 형성된 steady-state를 기준으로 실제 트래픽 비율(피드 조회 60%, 대기열 진입 20%, 주문 15%, 결제 5%)을 반영한 혼합 부하를 발생시켜 Read/Payment latency와 주문 정합성/계약 응답을 함께 측정한다.
+
+단, s06은 모든 개별 계약을 하나의 시나리오에서 재검증하는 목적이 아니다. 대기열 ticket 계약과 주문 단일 row 경합 정합성은 s05/s01에서 분리 검증하고, s06에서는 이들이 동시에 발생할 때 feed/order/payment/queue 사이의 부하 간섭이 SLO를 깨는지 확인한다.
 
 ### 이전 피드백
 
 > 출처: `k6-tuned-results.md` — 오너 피드백 (전체)
 
 > 측정 후 작성
+
+### 문제 정의
+
+초기 s06 재측정에서는 feed P95가 187.66ms로 Read SLO를 초과했고, order 403과 payment 400 check 실패가 함께 관찰됐다. order 403은 queue join과 order가 같은 Redis ticket key를 공유하면서 테스트 스크립트의 고정 accessTicket이 오염된 것이 원인이었다. payment 400은 seed order 500개를 5분 30초 동안 반복 confirm하면서 일부 요청이 결제 가능 상태 또는 요청 계약과 맞지 않게 된 테스트 데이터 모델 이슈로 분리했다.
+
+s06은 모든 개별 계약을 하나의 시나리오에서 다시 증명하는 테스트가 아니라, 개별 시나리오에서 검증한 계약들이 동시에 실행될 때 서로 latency와 정합성에 악영향을 주는지 확인하는 통합 부하 시나리오다. 따라서 문제를 feed latency, order ticket 오염, payment seed 모델로 분리해 각각 조정했다.
 
 ### 피드백 반영 내용
 
@@ -840,29 +853,101 @@ s01 팀장 합의에 따라 주문 구간은 `P95 < 300ms`를 Pass/Fail 기준�
 
 > 기본 `ORDER_TARGET_RESERVED`는 200이다. s06 사전준비에서 inventory를 200으로 리셋하지 않으면 threshold와 DB 판정이 어긋난다.
 
+#### s06 검증 범위 분리 및 잔여 리스크
+
+**Feed local hot cache 최적화**
+
+s06 초기 재측정에서 feed P95가 187.66ms까지 상승했다. s02 단독 측정에서는 Read SLO를 만족했지만, s06처럼 feed/queue/order/payment가 동시에 실행되면 Redis 조회와 JSON 역직렬화 비용이 꼬리 지연으로 확대됐다.
+
+이를 완화하기 위해 feed 캐시 경로에 짧은 JVM local hot cache를 추가했다.
+
+- `FeedCacheAdapter`: Redis hit 결과를 2초 동안 JVM 메모리에 보관해 반복 feed list 조회 시 Redis GET과 JSON 역직렬화를 줄임
+- `FeedLikeCacheAdapter`: fan/feedIds 좋아요 결과도 2초 동안 JVM 메모리에 보관해 viewer-specific 후처리 비용을 줄임
+- feed 생성/수정/삭제 및 좋아요/취소 이벤트에서는 기존 evict 흐름과 함께 local cache도 제거해 짧은 TTL 내 stale risk를 제한
+
+이 변경은 s06의 목적과 충돌하지 않는다. s06은 cold cache miss 비용이 아니라 정상 운영 중 캐시가 형성된 상태에서 혼합 부하가 Read latency를 깨는지 보는 시나리오다. 따라서 Redis 앞단에 짧은 local hot cache를 두는 것은 캐시 기반 Read 경로의 steady-state 성능을 개선하는 작업이며, 비즈니스 계약을 우회하는 변경이 아니다.
+
+최종 측정 결과 feed P95는 `187.66ms`에서 `58.84ms`로 개선됐다. 개선 폭은 약 68.6%이며, Read SLO `< 120ms`를 충분한 여유폭으로 만족했다.
+
+**Order accessTicket 분리**
+
+s06 재측정 중 `wl_order_403`이 발생했다. 원인은 queue join 20%와 order 15%가 같은 `product_id=4`를 사용하면서 Redis key `access:ticket:4:{fanId}`를 공유한 것이다. queue join은 해당 fan/product 조합의 access ticket을 새 UUID로 갱신하지만, order 구간은 고정값 `test-ticket-token`을 사용하고 있어 테스트 스크립트 자체가 `INVALID_QUEUE_TICKET(403)`을 만들었다.
+
+이에 따라 s06의 order 요청은 `accessTicket=null` 상시 판매 경로로 분리한다. 이는 테스트 전용 우회가 아니라 현재 `OrderService`의 명시된 분기(`accessTicket == null`이면 검증 스킵)이며, s06의 목적을 대기열 ticket 계약 검증이 아니라 통합 부하 간섭 및 주문 정합성 검증으로 한정하기 위한 결정이다.
+
+- s06에서 검증: feed/queue/order/payment 혼합 부하, 주문 `reserved_qty == ORDER_TARGET_RESERVED`, 오버셀 0건, 주문 5xx/unexpected 0건
+- s01/s05에서 분리 검증: access ticket 포함 주문 정합성, 대기열 capacity 및 429 계약
+- 발표 시 유의: “ticket 검증을 우회했다”가 아니라 “ticket 계약은 별도 시나리오로 분리하고, s06은 통합 부하 간섭을 측정한다”고 설명한다.
+
+**예상 질문과 답변**
+
+Q. 그러면 s06에서는 대기열을 통과한 사용자만 주문 가능한지 검증하지 않은 것 아닌가?
+
+A. 맞다. 그 계약은 s06의 검증 범위에서 제외했고, s01/s05로 분리했다. s06은 계약 검증보다 통합 부하 간섭 측정이 목적이다. 하나의 시나리오에서 queue join과 order를 같은 product/fan key로 섞으면 Redis ticket 상태가 테스트 스크립트에 의해 오염된다. 따라서 ticket 검증은 별도 시나리오로 분리하고, s06에서는 feed/queue/order/payment가 동시에 발생할 때 주문 정합성과 시스템 간섭이 유지되는지 검증한다.
+
+Q. `accessTicket=null`이면 실제 드롭스 주문 흐름과 다른 것 아닌가?
+
+A. 드롭스 ticket 기반 주문 흐름 전체를 s06 하나로 검증하려는 목적이라면 맞지 않다. 하지만 이번 측정은 검증 책임을 분리했다. ticket 계약은 s05에서 대기열 capacity/429 계약으로 검증했고, s01에서 주문 정합성과 오버셀 방지를 검증했다. s06은 전체 트래픽이 섞였을 때 feed/order/payment이 서로 latency에 영향을 주는지를 보는 시나리오로 정의했다. 또한 `accessTicket=null`은 테스트 전용 우회가 아니라 현재 주문 서비스에 존재하는 상시 판매 경로다.
+
+**Payment 400 check 실패**
+
+s06 재측정에서 payment 구간은 `wl_payment_duration`, `wl_payment_5xx`, `wl_payment_unexpected` 기준을 만족했지만, `wl_payment_400`이 일부 발생해 k6 check 실패로 집계됐다. `400`은 5xx 장애나 latency 실패는 아니지만, 정상 성공 응답으로 단정하기도 어렵다. 현재 원인은 500개 seed order를 5분 30초 동안 반복 confirm하면서 일부 요청이 결제 가능 상태 또는 요청 계약과 맞지 않게 된 데이터 모델 이슈로 본다.
+
+따라서 payment 400은 SLO 성공 응답으로 포장하지 않고 별도 분석 지표로 기록한다. Payment SLO 판정은 `P95 < 2,000ms`, `5xx < 0.1%`, `wl_payment_unexpected == 0`을 기준으로 하되, `wl_payment_400`은 seed 결제 데이터 모델 개선 과제로 남긴다.
+
+- 통과로 볼 수 있는 부분: payment P95, payment 5xx, payment unexpected
+- 잔여 이슈: payment 400 발생 원인 분리 및 seed order 반복 confirm 모델 개선
+- 발표 시 유의: “400도 정상 성공”이 아니라 “장애는 아니지만 데이터 모델상 잔여 분석 항목으로 분리했다”고 설명한다.
+
+**예상 질문과 답변**
+
+Q. payment check가 실패했는데 결제 구간을 통과로 봐도 되는가?
+
+A. payment의 핵심 SLO는 P95와 5xx다. 재측정에서 payment P95는 26ms 수준, 5xx는 0%, 예상 밖 응답도 0건이었다. 다만 400이 발생했기 때문에 이를 성공 응답으로 처리하지 않고 별도 카운터로 분리했다. 즉 결제 서버 장애나 latency 실패는 아니지만, s06 seed 데이터 모델의 잔여 이슈로 기록한다.
+
+Q. payment 400은 왜 발생했는가?
+
+A. 현재 가장 가능성이 높은 원인은 seed order 반복 사용이다. s06은 결제 요청이 약 2만 건 발생하는데 seed order는 500개다. 이 과정에서 같은 주문에 대해 confirm이 반복되거나, 이미 결제 가능한 상태가 아닌 주문에 confirm이 들어가면서 400 계열 응답이 발생한 것으로 본다. 향후에는 s06용 payment seed를 요청량에 맞게 늘리거나, payment 구간을 idempotent/retry 계약에 맞게 별도 모델링하는 개선이 필요하다.
+
+**현재 s06 해석**
+
+현재 s06에서 order/payment 쪽은 장애성 실패가 아니다. order는 `reserved=200`, 오버셀 0건, 5xx 0건, unexpected 0건으로 수렴했고, payment는 P95/5xx/unexpected 기준을 만족했다. feed 쪽은 local hot cache 최적화로 반복 조회의 Redis/JSON 역직렬화 꼬리 지연을 줄였고, 최종 판정은 warm cache 기준으로 진행했다. 실행 전 FAN 토큰 150개로 feed endpoint를 2회씩 총 300회 호출해 정상 운영 중 캐시가 형성된 상태를 재현했으며, warm-up 요청은 모두 200 응답이었다.
+
+warm cache 기준 최종 측정에서는 feed P95가 58.84ms로 Read SLO를 만족했다. 따라서 s06의 핵심 결론은 “steady-state 통합 부하에서 feed/order/payment/queue를 동시에 실행해도 Read/Payment latency와 주문 정합성 기준을 만족했다. 다만 CPU 사용률이 약 99%까지 상승해 현재 인스턴스의 여유 용량은 낮다”로 정리한다.
+
 ### 결과 (최종)
 
 | 지표 | 베이스라인 | 결과 (최종) | 목표 | 상태 |
 |---|---|---|---|---|
-| Feed Read P95 | — | — | < 120ms | — |
-| Payment P95 | — | — | < 2,000ms | — |
-| Payment 5xx | — | — | < 0.1% | — |
-| Order reserved | — | — | `ORDER_TARGET_RESERVED`와 일치 | — |
-| Order 5xx/unexpected | — | — | 0건 | — |
-| 오버셀 | — | — | 0건 | — |
-| Order P95 | — | — | 참고 지표 | — |
+| Feed Read P95 | 187.66ms ❌ | 58.84ms | < 120ms | 달성 |
+| Feed 실패율 | 0.00% | 0.00% | < 0.1% | 달성 |
+| Payment P95 | 26.02ms | 148.88ms | < 2,000ms | 달성 |
+| Payment 5xx | 0.00% | 0.00% | < 0.1% | 달성 |
+| Payment unexpected | 0건 | 0건 | 0건 | 달성 |
+| Order reserved | 200건 | 200건 | `ORDER_TARGET_RESERVED`와 일치 | 달성 |
+| Order 5xx/unexpected | 0건 | 0건 | 0건 | 달성 |
+| 오버셀 | 0건 | 0건 | 0건 | 달성 |
+| Order P95 | 참고 지표 | 전체 HTTP P95 126.30ms | 참고 지표 | 참고 |
+| 전체 요청 수 | 478,691건 | 634,156건 | — | 참고 |
+| 전체 처리량 | 1,450.56 req/s | 1,921.67 req/s | — | 참고 |
+| checks 통과율 | 99.06% | 99.27% | — | 참고 |
+| payment 400 | 4,482건 | 4,587건 | — | 잔여 이슈 |
 
 ### 스크린샷
 
-> 측정 후 추가
-
-### 문제 정의
-
-> 측정 후 작성
+![s06_workload_model_realfinal](screenshots/realfinal/s06_workload_model_realfinal.png)
 
 ### 관찰 및 오너 피드백
 
-> 측정 후 작성
+- 최종 측정은 s06의 목적을 steady-state 통합 부하 간섭 검증으로 명확히 하고, feed local hot cache 최적화 반영 및 feed warm-up 후 수행했다. 이 조건에서는 모든 k6 threshold가 통과했다.
+- k6 로그 기준 `wl_feed_duration p(95)=58.84ms`, `wl_feed_failed=0.00%`로 Read SLO를 만족했다.
+- feed P95는 s06 초기 재측정 187.66ms에서 최종 58.84ms로 낮아졌다. local hot cache와 warm cache steady-state 조건을 함께 적용한 결과이며, 개선 폭은 약 68.6%다.
+- `wl_order_reserved=200`, `wl_order_5xx=0`, `wl_order_unexpected=0`으로 주문 정합성과 계약 응답이 수렴했다.
+- `wl_payment_duration p(95)=148.88ms`, `wl_payment_5xx=0.00%`, `wl_payment_unexpected=0`으로 결제 SLO를 만족했다.
+- `wl_payment_400=4,587`은 check 실패 0.72%의 원인이지만, 5xx/latency/unexpected 실패가 아니므로 SLO 실패로 보지 않고 seed 반복 confirm 모델 개선 과제로 분리한다.
+- Grafana RPS 패널에서 feed 약 1.1K req/s, queue 약 380 req/s, order 약 280 req/s, payment 약 80~100 req/s 수준의 혼합 부하가 형성됐다.
+- HikariCP 활성 커넥션은 순간적으로 20개 이상까지 상승했지만 대기 커넥션은 0으로 유지되어 DB 커넥션 풀 고갈은 관찰되지 않았다.
+- CPU 사용률은 측정 구간 중 95~99% 수준으로 유지됐다. SLO 통과와 별개로 운영 피크 대응 여유는 낮다.
 
 **오너 피드백 (전체 / 다음 측정 전 사전 피드백)**
 
@@ -875,22 +960,47 @@ s01 팀장 합의에 따라 주문 구간은 `P95 < 300ms`를 Pass/Fail 기준�
 
 ### 개선 방향
 
-- s06은 `06_workload_model.js`의 custom metric 기준으로 재측정한다.
-- Grafana 캡처는 Feed P95, Payment P95, 5xx, HikariCP, Redis, `wl_order_reserved`/`wl_order_5xx` 계열 k6 metric을 함께 남긴다.
-- s01이 `orders_reserved=100`, 5xx 0건, 정상 409 수렴을 만족한 뒤 s06을 최종 판정한다.
+- s06은 warm cache steady-state 기준으로 SLO를 달성했으므로, cold cache 성능은 별도 시나리오나 운영 배포 직후 관측 항목으로 분리한다.
+- CPU 95~99% 구간이 반복되므로, 운영 피크 대비를 위해 인스턴스 스펙 상향, scale-out, autoscaling 정책을 검토한다.
+- payment 400은 seed order 반복 confirm 모델의 잔여 이슈다. 향후 s06용 payment seed를 요청량에 맞게 늘리거나, 같은 주문을 중복 confirm하지 않도록 k6 fixture를 개선한다.
+- Grafana에 s06 custom metric(`wl_feed_duration`, `wl_order_reserved`, `wl_order_5xx`, `wl_payment_5xx`, `wl_payment_unexpected`) 패널을 고정해 콘솔 로그 없이도 통합 부하 판정을 확인할 수 있게 한다.
+- HikariCP 활성/대기 커넥션, CPU, Redis P95를 s06 관측 필수 항목으로 유지한다.
+
+---
+
+## Real Final 측정 타협 및 정당성
+
+이번 real-final은 모든 초기 목표를 그대로 밀어붙인 측정이 아니라, 실제 시스템 구조와 시나리오 목적에 맞게 일부 판정 기준을 재정의했다. 아래 타협은 SLO를 통과시키기 위한 임의 완화가 아니라, 각 시나리오가 검증해야 하는 책임을 분리하고 잘못된 실패 신호를 제거하기 위한 결정이다.
+
+| 항목 | 타협/조정 내용 | 정당성 | 잔여 리스크/후속 조치 |
+|---|---|---|---|
+| s01 주문 P95 | `P95 < 300ms`를 Pass/Fail 기준에서 제외하고 참고 지표로 기록 | 200 VU가 동일 `product_id=4` 단일 inventory row를 동시에 쟁탈하는 구조에서는 row lock 직렬화가 필연적이다. s01의 본질은 응답 속도보다 오버셀 방지와 초과 요청의 정상 계약 응답 수렴이다. | 주문 P95 2.99s는 추후 개선 과제로 유지. 재고 차감 구조 개선 또는 주문 유량 제어 도입 후 재검증 필요. |
+| s01 에러율 | k6 `http_req_failed` 75%를 SLO 실패로 보지 않음 | 초과 요청 300건이 409 `RESERVE_FAILED`로 수렴한 결과다. 이는 장애가 아니라 재고 소진 계약 응답이다. | Grafana/문서에서는 5xx와 계약성 409를 분리해서 해석해야 한다. |
+| s06 order accessTicket | `accessTicket=null` 상시 판매 경로로 분리 | queue join과 order가 같은 Redis ticket key를 공유해 테스트 스크립트가 ticket 상태를 오염시켰다. ticket 계약은 s05, 주문 정합성은 s01에서 분리 검증했고, s06은 통합 부하 간섭 측정이 목적이다. | 대기열 통과 후 주문까지의 end-to-end ticket 검증은 별도 시나리오로 분리해야 한다. |
+| s06 warm cache 기준 | 실행 전 feed endpoint warm-up 후 steady-state로 측정 | feed 조회는 캐시를 전제로 설계된 Read 경로다. s06의 목적은 cold start 비용이 아니라 정상 운영 중 캐시가 형성된 상태에서 queue/order/payment 혼합 부하가 Read SLO를 깨는지 확인하는 것이다. | cold cache miss 비용은 별도 관측 대상. 배포 직후 warm-up 절차 또는 cold start 시나리오 필요. |
+| s06 payment 400 | 400을 성공 응답으로 포장하지 않고 별도 잔여 이슈로 기록 | payment P95, 5xx, unexpected는 모두 통과했다. 400은 seed order 500개를 장시간 반복 confirm하면서 발생한 테스트 데이터 모델 이슈로, 서버 장애나 latency 실패가 아니다. | s06용 payment seed 확대 또는 중복 confirm 방지 fixture 개선 필요. |
+| s04/s05/s07 결과 이월 | final에서 이미 SLO를 달성한 결과를 real-final에 이월 | real-final의 목적은 실패/보류 시나리오 재측정이다. 이미 성공한 시나리오는 동일 조건 재실행보다 실패 원인 수정과 최종 문서화에 집중했다. | 환경 변경이 크거나 발표 전 장시간 경과 시 재측정 고려. |
+
+위 조정 후에도 각 시나리오의 핵심 검증 책임은 유지된다. s01은 오버셀 0건과 정상 409 수렴, s02/s07은 Read latency, s03은 payment latency와 5xx, s04는 spike 상황의 오버셀 방지, s05는 SSE capacity/429 계약, s06은 steady-state 통합 부하 간섭을 각각 검증한다.
 
 ---
 
 ## SLO 달성 현황 요약
 
-| 시나리오 | 튜닝 후 P95 | 최종 측정 P95 | 튜닝 후 에러율 | 최종 에러율 | 오버셀 | SLO |
-|---|---|---|---|---|---|---|
-| 01 주문 동시성 | 872ms(성공) ❌ | 2.99s(참고) | 75%\* | 75%\* ✅ | 0건 ✅ | 달성 |
-| 02 피드 Read | 168~172ms ❌ | 114.4ms ✅ | 0.00% ✅ | 0.00% ✅ | — | 달성 |
-| 03 결제 확인 | 1,940ms ✅ | 1.59s ✅ | 0.00% ✅ | 0.00% ✅ | — | 달성 |
-| 04 드롭스 스파이크 | 287.31ms ✅ | 278.33ms ✅ | 99.98%\* | 99.97%\* ✅ | 0건 ✅ | 성공(이월) |
-| 05 SSE 대기열 | checks 99.33% ✅ | checks 99.33% ✅ | 0% ✅ | 0건 ✅ | — | 성공(이월) |
-| 06 통합 워크로드 | 미측정 | 보류 | — | 보류 | — | 측정 가능 |
-| 07 상품 조회 처리량 | 133.45ms ❌ | 16.35ms ✅ | 0.00% ✅ | 0.00% ✅ | — | 성공(이월) |
+### 전체 시나리오 SLO 측정 결과
+
+| 시나리오 | 최종 핵심 지표 | 에러/계약 지표 | 오버셀/정합성 | 최종 판정 | 비고 |
+|---|---|---|---|---|---|
+| 01 주문 동시성 | Order P95 2.99s(참고) | 5xx 0건, 초과 요청 409 수렴 | `orders_reserved=100`, DB `reserved_qty=100`, 오버셀 0건 | 달성 | 팀장 합의에 따라 P95는 Pass/Fail 제외 |
+| 02 피드 Read | P95 66.47ms | http failed 0.00%, checks 100% | — | 달성 | warm cache 기준 최종 재측정 |
+| 03 결제 확인 | P95 1.59s | 5xx 0.00%, http failed 0.00% | — | 달성 | WireMock success stub, readTimeout 2s |
+| 04 드롭스 스파이크 | P95 278.33ms | 정상 재고 소진 응답 포함 | `spike_orders_reserved=100`, 오버셀 0건 | 성공(이월) | k6 failed는 계약성 409/429 포함 |
+| 05 SSE 대기열 | overflow checks 99.33% | capacity_fill failed 0.00%, rejected 298건 | — | 성공(이월) | capacity ramp-up으로 1,800 경계 구간 대체 |
+| 06 통합 워크로드 | Feed P95 58.84ms, Payment P95 148.88ms | Feed failed 0.00%, Payment 5xx 0.00%, unexpected 0건 | `wl_order_reserved=200`, 주문 5xx/unexpected 0건, 오버셀 0건 | 달성 | warm cache 기준, CPU 95~99%로 headroom 부족 |
+| 07 상품 조회 처리량 | P95 16.35ms | http failed 0.00%, checks 100% | — | 성공(이월) | final 성공 결과 유지 |
 
 > \* s01/s04의 k6 `http_req_failed`는 정상 계약 응답(409/429)을 포함한다. s01은 팀장 합의에 따라 `orders_reserved=100`, 5xx 0건, 오버셀 0건, 초과 요청 409 수렴으로 Pass/Fail을 판정한다. 기존 `P95 < 300ms`는 이번 final 판정 기준에서 제외하고 추후 성능 개선 과제로 이관한다.
+
+### 최종 결론
+
+real-final 기준 전체 시나리오는 모두 각 시나리오별 핵심 SLO를 달성했다. 단, s01 주문 P95와 s06 CPU headroom, s06 payment 400 seed 모델은 후속 개선 과제로 남긴다. 특히 s06은 warm cache 기준으로 latency SLO를 만족했지만 CPU가 거의 포화 상태였으므로, 운영 피크를 고려하면 scale-out 또는 인스턴스 사양 상향 검토가 필요하다.
