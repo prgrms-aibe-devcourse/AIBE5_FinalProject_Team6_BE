@@ -852,6 +852,16 @@ s06 재측정 중 `wl_order_403`이 발생했다. 원인은 queue join 20%와 or
 - s01/s05에서 분리 검증: access ticket 포함 주문 정합성, 대기열 capacity 및 429 계약
 - 발표 시 유의: “ticket 검증을 우회했다”가 아니라 “ticket 계약은 별도 시나리오로 분리하고, s06은 통합 부하 간섭을 측정한다”고 설명한다.
 
+**예상 질문과 답변**
+
+Q. 그러면 s06에서는 대기열을 통과한 사용자만 주문 가능한지 검증하지 않은 것 아닌가?
+
+A. 맞다. 그 계약은 s06의 검증 범위에서 제외했고, s01/s05로 분리했다. s06은 계약 검증보다 통합 부하 간섭 측정이 목적이다. 하나의 시나리오에서 queue join과 order를 같은 product/fan key로 섞으면 Redis ticket 상태가 테스트 스크립트에 의해 오염된다. 따라서 ticket 검증은 별도 시나리오로 분리하고, s06에서는 feed/queue/order/payment가 동시에 발생할 때 주문 정합성과 시스템 간섭이 유지되는지 검증한다.
+
+Q. `accessTicket=null`이면 실제 드롭스 주문 흐름과 다른 것 아닌가?
+
+A. 드롭스 ticket 기반 주문 흐름 전체를 s06 하나로 검증하려는 목적이라면 맞지 않다. 하지만 이번 측정은 검증 책임을 분리했다. ticket 계약은 s05에서 대기열 capacity/429 계약으로 검증했고, s01에서 주문 정합성과 오버셀 방지를 검증했다. s06은 전체 트래픽이 섞였을 때 feed/order/payment이 서로 latency에 영향을 주는지를 보는 시나리오로 정의했다. 또한 `accessTicket=null`은 테스트 전용 우회가 아니라 현재 주문 서비스에 존재하는 상시 판매 경로다.
+
 **Payment 400 check 실패**
 
 s06 재측정에서 payment 구간은 `wl_payment_duration`, `wl_payment_5xx`, `wl_payment_unexpected` 기준을 만족했지만, `wl_payment_400`이 일부 발생해 k6 check 실패로 집계됐다. `400`은 5xx 장애나 latency 실패는 아니지만, 정상 성공 응답으로 단정하기도 어렵다. 현재 원인은 500개 seed order를 5분 30초 동안 반복 confirm하면서 일부 요청이 결제 가능 상태 또는 요청 계약과 맞지 않게 된 데이터 모델 이슈로 본다.
@@ -861,6 +871,20 @@ s06 재측정에서 payment 구간은 `wl_payment_duration`, `wl_payment_5xx`, `
 - 통과로 볼 수 있는 부분: payment P95, payment 5xx, payment unexpected
 - 잔여 이슈: payment 400 발생 원인 분리 및 seed order 반복 confirm 모델 개선
 - 발표 시 유의: “400도 정상 성공”이 아니라 “장애는 아니지만 데이터 모델상 잔여 분석 항목으로 분리했다”고 설명한다.
+
+**예상 질문과 답변**
+
+Q. payment check가 실패했는데 결제 구간을 통과로 봐도 되는가?
+
+A. payment의 핵심 SLO는 P95와 5xx다. 재측정에서 payment P95는 26ms 수준, 5xx는 0%, 예상 밖 응답도 0건이었다. 다만 400이 발생했기 때문에 이를 성공 응답으로 처리하지 않고 별도 카운터로 분리했다. 즉 결제 서버 장애나 latency 실패는 아니지만, s06 seed 데이터 모델의 잔여 이슈로 기록한다.
+
+Q. payment 400은 왜 발생했는가?
+
+A. 현재 가장 가능성이 높은 원인은 seed order 반복 사용이다. s06은 결제 요청이 약 2만 건 발생하는데 seed order는 500개다. 이 과정에서 같은 주문에 대해 confirm이 반복되거나, 이미 결제 가능한 상태가 아닌 주문에 confirm이 들어가면서 400 계열 응답이 발생한 것으로 본다. 향후에는 s06용 payment seed를 요청량에 맞게 늘리거나, payment 구간을 idempotent/retry 계약에 맞게 별도 모델링하는 개선이 필요하다.
+
+**현재 s06 해석**
+
+현재 s06에서 order/payment 쪽은 장애성 실패가 아니다. order는 `reserved=200`, 오버셀 0건, 5xx 0건, unexpected 0건으로 수렴했고, payment는 P95/5xx/unexpected 기준을 만족했다. 최종으로 남은 핵심 미달은 feed P95다. s02 단독 측정에서는 120ms 이하였지만, s06 통합 부하에서는 feed P95가 187ms 수준으로 상승했다. 따라서 s06의 핵심 결론은 “주문/결제 정합성과 5xx 기준은 수렴했지만, 통합 부하에서 feed read P95가 단독 s02 대비 상승해 Read SLO를 미달했다”로 정리한다.
 
 ### 결과 (최종)
 
