@@ -202,7 +202,7 @@ k6 로그 기준 `http_req_duration p(95)=66.47ms`, `http_req_failed=0.00%`, che
 
 ### 피드백 반영 내용 (형성빈)
 
-s07은 신규 시나리오로 기존 피드백 반영 항목이 없습니다. 초기 측정 결과를 바탕으로 원인 분석 및 개선 방향을 도출했습니다.
+s07은 final 단계에서 active port 오지정으로 한 차례 무효 측정이 발생했고, 이후 active direct port와 Redis cache hit 조건을 맞춰 재측정했다. 코드 추가 수정 없이도 상품 목록 조회 경로가 cache hit 상태에서 안정화되며 Read SLO를 달성했다. 따라서 s07의 개선 효과는 비즈니스 로직 변경보다 **측정 조건 정상화(active port 정정) + 캐시 hit 상태 확인**으로 정리한다.
 
 #### 원인 분석
 
@@ -216,17 +216,19 @@ s07은 신규 시나리오로 기존 피드백 반영 항목이 없습니다. �
 
 `findRegularProducts` 쿼리 조건(`WHERE dropsStartAt IS NULL AND id < :cursor ORDER BY id DESC`)에서 `(drops_start_at, id)` 복합 인덱스가 없어 풀 스캔 가능성 존재. 현재 product 테이블에는 `artist_id` 인덱스만 있음.
 
-#### 개선 예정 항목
+#### 반영 및 확인 내용
 
-- `(drops_start_at, id)` 복합 인덱스 추가 (Flyway 마이그레이션)
-- `findRegularProducts` + `findThumbnailsByProductIds` Redis 캐시 (TTL 120s) + 상품 변경 시 evict
-- inventory 단기 캐시 (TTL 5~10s) 검토
+- active slot 확인 후 direct port를 `8082`로 정정해 비활성 슬롯 `connection refused` 무효 측정을 제외
+- Redis cache hit 상태에서 `GET /api/v1/products`를 300 RPS로 재측정
+- 상품 목록 조회 P95가 133.45ms에서 16.35ms로 개선되어 Read SLO 달성
+- dropped_iterations는 251건에서 63건으로 감소했으나, 완전 해소되지는 않아 관찰 항목으로 유지
 
 | 항목 | 변경 전 | 변경 내용 | 적용 기술 |
 |---|---|---|---|
-| 쿼리 구조 | 매 요청 3개 쿼리 DB 직행 (캐시 없음) | `findRegularProducts` + 이미지 Redis 캐시 TTL 120s | Spring Cache, Redis |
-| product 인덱스 | `artist_id` 단일 인덱스만 존재 | `(drops_start_at, id)` 복합 인덱스 추가 | Flyway 마이그레이션 |
-| inventory 조회 | 매 요청 DB 직행 | TTL 5~10s 단기 캐시 검토 | Redis |
+| 실행 포트 | 비활성 슬롯 8081 호출로 `connection refused` | active slot 기준 8082 직접 호출 | AWS/blue-green preflight |
+| 캐시 상태 | 캐시 hit 여부 불명확 | Redis cache hit 조건에서 재측정 | Redis |
+| P95 | 133.45ms | 16.35ms | 측정 조건 정상화 + cache hit |
+| dropped_iterations | 251건 | 63건 | k6 VU 여유 및 꼬리 지연 개선 |
 
 ### 결과 (최종)
 
@@ -243,7 +245,7 @@ s07은 신규 시나리오로 기존 피드백 반영 항목이 없습니다. �
 
 ### 문제 정의
 
-이전 튜닝 후 측정에서는 300 RPS 부근에서 P95 133.45ms로 Read SLO를 초과했고, dropped_iterations 251건이 발생했다. 최종 측정에서는 P95가 16.35ms로 크게 개선되어 상품 목록 조회의 핵심 Read SLO는 달성했다.
+이전 튜닝 후 측정에서는 300 RPS 부근에서 P95 133.45ms로 Read SLO를 초과했고, dropped_iterations 251건이 발생했다. 최종 측정에서는 active port를 8082로 정정하고 Redis cache hit 상태에서 재측정해 P95가 16.35ms로 크게 개선됐다. 개선 폭은 약 87.7%이며, 상품 목록 조회의 핵심 Read SLO는 달성했다.
 
 다만 dropped_iterations가 63건 남아 있다. 실패 요청이나 5xx 없이 목표 처리량에 거의 도달했으므로 서비스 장애로 보기는 어렵지만, 고정 도착률 300 iters/s에서 순간적으로 VU가 부족하거나 max latency 1.3s 구간이 발생한 흔적은 관찰 대상으로 남긴다.
 
@@ -453,11 +455,16 @@ PR #459에서는 낙관적 락 + retry 방향을 중단하고, tuned 단계에�
 
 ### 피드백 반영 내용 (형성빈)
 
-> 작성 예정
+s04는 코드 수정이 아니라 운영 경로의 보호 정책이 유지되는지 확인하는 시나리오다. s01에서 애플리케이션 직접 동시성 경합이 문제가 되었기 때문에, s04에서는 Nginx rate limit이 스파이크 트래픽을 Spring Boot 앞단에서 차단하고 재고 선점이 100건으로 수렴하는지 검증했다.
+
+최종 측정에서는 `/api/v1/orders` 경로가 Nginx rate limit을 통과하면서 Spring Boot 유입 RPS가 약 5 req/s 이하로 제한됐고, 초과 요청은 대부분 429로 차단됐다. 그 결과 `spike_orders_reserved=100`, 오버셀 0건, 전체 P95 278.33ms로 Write SLO를 만족했다.
 
 | 항목 | 변경 전 | 변경 내용 | 적용 기술 |
 |---|---|---|---|
-| | | | |
+| 스파이크 보호 | 1,000 VU 주문 요청이 앱까지 직접 도달하면 단일 inventory row 경합 확대 | Nginx rate limit으로 앱 유입 RPS 제한 | Nginx rate limit |
+| 에러율 해석 | k6 `http_req_failed`가 429를 실패로 집계 | 429는 s04 계약상 정상 차단 응답으로 분리 해석 | k6 summary 해석 기준 |
+| 재고 정합성 | 초과 주문 시 오버셀 가능성 검증 필요 | `spike_orders_reserved=100`, 오버셀 0건 확인 | k6 Counter + DB/Grafana 확인 |
+| 성능 결과 | P95 287.31ms | P95 278.33ms, expected response P95 193.62ms | rate limit 경유 측정 |
 
 ### 결과 (최종)
 
@@ -479,7 +486,7 @@ PR #459에서는 낙관적 락 + retry 방향을 중단하고, tuned 단계에�
 
 s04는 0→1,000 VU 스파이크에서 Spring Boot를 직접 보호하지 않고, Nginx rate limit을 통해 애플리케이션으로 유입되는 주문 요청을 제한하는 시나리오다. 최종 측정에서 k6 `http_req_failed=99.97%`가 발생했지만 이는 대부분 429 차단 응답이며, s04의 실패 조건인 5xx 또는 오버셀과는 다르다.
 
-최종 결과는 전체 P95 278.33ms, `spike_orders_reserved=100`으로 목표를 만족했다. s01에서는 동시 주문이 Spring Boot에 직접 도달해 낙관적 락 충돌이 대량 발생했지만, s04에서는 Nginx가 초과 요청을 차단해 Spring Boot 도달 RPS가 낮게 유지됐고 재고 100건만 정상 선점됐다.
+최종 결과는 전체 P95 278.33ms, expected response P95 193.62ms, `spike_orders_reserved=100`으로 목표를 만족했다. 튜닝 후 P95 287.31ms 대비 최종 P95는 소폭 개선됐고, 성공 요청 기준 P95는 252.84ms에서 193.62ms로 약 23.4% 개선됐다. s01에서는 동시 주문이 Spring Boot에 직접 도달해 낙관적 락 충돌이 대량 발생했지만, s04에서는 Nginx가 초과 요청을 차단해 Spring Boot 도달 RPS가 낮게 유지됐고 재고 100건만 정상 선점됐다.
 
 ### 관찰 및 오너 피드백
 
