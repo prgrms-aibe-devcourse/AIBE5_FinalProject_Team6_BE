@@ -39,6 +39,10 @@ public class ApiSecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)  // REST API는 쿠키 대신 Bearer 토큰 사용하기 떄문에 CSRF 공격 불가능 따라서 비활성화
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))   // 토큰 자체에 정보가 있어서 서버가 기억할 필요가 없음. -> 세션 안 만듦
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)   // 필터 순서에 맞게 끼워넣기
+                .exceptionHandling(ex -> ex
+                        // 토큰 없음·만료 시 403 대신 401 반환 — FE가 401을 받아 자동 로그아웃 처리 가능
+                        .authenticationEntryPoint((req, res, e) -> res.sendError(401))
+                )
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/error").permitAll()
                         .requestMatchers("/api/v1/auth/**").permitAll()
@@ -48,6 +52,9 @@ public class ApiSecurityConfig {
                         .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/artists/*/members").permitAll()
                         .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/artists/*").permitAll()
                         .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/artists").permitAll()
+                        // 상품 목록·상세 — 비로그인 브라우징 허용
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/products").permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/products/**").permitAll()
                         .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/banners/main").permitAll()
                         .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/v1/store-banners").permitAll()
                         .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/v1/b2b/apply").permitAll()
