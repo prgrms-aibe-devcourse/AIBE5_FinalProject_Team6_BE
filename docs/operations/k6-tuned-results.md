@@ -730,6 +730,20 @@ public void heartbeat() {
 }
 ```
 
+**지영재 — Nginx 설정 변경 및 시나리오 재설계 (2026-06-20 ~ 2026-06-24)**
+
+원인 조사 이후 트러블슈팅 과정에서 Nginx 설정 문제가 추가로 발견되어 직접 수정했다.
+
+| 항목 | 변경 전 | 변경 내용 | 이유 |
+|---|---|---|---|
+| SSE 엔드포인트 `limit_conn` | `limit_conn addr 5` (IP당 5개) | 제거 (`/api/v1/queue/stream` 경로 limit_conn 미적용) | 단일 IP k6 부하 테스트에서 boundary 구간 TCP 차단 원인 (9차 트러블슈팅) |
+| Nginx `worker_connections` | `4096` | `8192` 증설 | FD 고갈로 overflow 구간 TCP 차단 발생 (10차 트러블슈팅) |
+| k6 시나리오 구조 | 단일 `ramping-vus` 3단계 | `capacity_fill` (ramping-vus 2,000 VU 유지) + `overflow_probe` (constant-arrival-rate 10req/s × 30s) 2단계 분리 | stage 종료 시 k6가 SSE 연결을 interrupt하여 200 응답이 metric에 미집계되는 구조적 문제 해결 |
+
+- `limit_conn` 제거 PR: `fix(nginx): SSE 엔드포인트 limit_conn 제거`
+- `worker_connections` 증설 PR: `fix(nginx): worker_connections 4096→8192`
+- 시나리오 재설계: `infra/k6/scenarios/05_sse_queue.js` v2 구조 (2026-06-24)
+
 **장성재 — 피드백 반영 내용**
 
 **어떻게 반영했는지**
@@ -825,6 +839,15 @@ GitHub Actions → **Run k6 Load Test** → `scenario: 05` → `confirm: yes`
 - **overflow_probe dial timeout 허용**: GHA runner 특성상 `dial: i/o timeout` 소수 발생 가능. `checks{scenario:overflow_probe} > 0.99` threshold 통과 여부로 판정. 2건 이내는 노이즈로 허용.
 - **실행 순서 준수**: s04 이후 s05 실행 필수. s05 먼저 실행 시 Redis 티켓이 UUID로 오염되어 s01·s04 403 전원 실패.
 - **heartbeat 설정 확인**: `fandrops.queue.scheduler.heartbeat-ms` 환경변수가 배포 환경에 적용되어 있는지 사전 확인. 미적용 시 stale emitter 누적으로 2,000 상한 조기 초과 재발 가능.
+
+**오너 피드백 (→ 지영재 / 다음 측정 전 사전 피드백)**
+
+- **Nginx access log로 200 건수 직접 판정**: `capacity_fill` SLO 판정은 k6 metric 대신 아래 명령으로 Nginx log를 직접 확인. 2,000건 이상이 통과 기준.
+  ```bash
+  sudo grep "GET /api/v1/queue/stream" /var/log/nginx/access.log | awk '{print $9}' | sort | uniq -c
+  ```
+- **Nginx 설정값 배포 후 재확인**: 재배포 시 `worker_connections 8192`와 `limit_conn` 미적용 상태가 유지되는지 확인. `nginx -T | grep worker_connections`로 확인.
+- **시나리오 v2 구조 그대로 실행**: `05_sse_queue.js`는 `capacity_fill` + `overflow_probe` 2단계 구조. `startTime: '2m'` offset 유지 필수 — `capacity_fill`이 2,000 VU에 도달하기 전에 `overflow_probe`가 시작되면 429 발생 조건이 성립하지 않아 `sse_connections_rejected count>0` threshold 실패.
 
 ### 개선 방향
 
