@@ -180,36 +180,24 @@ WHERE product_id = (SELECT id FROM product WHERE name = 'ECHO Limited Vinyl');
 -- ============================================================
 
 -- A1. 배너 (MAIN) — FanApp HOME / GET /banners/main
---   B1-1: Admin MAIN 활성 (exposure_order=1) → 노출
---   B1-2: Admin MAIN 활성 (exposure_order=2) → 노출
 --   B2:   Agency MAIN 활성 (agency_id=1)     → 노출
 --   B3:   비활성 (is_active=false)           → API 미노출
 --   B4:   기간 만료 (end_at < NOW())         → API 미노출
 INSERT INTO banner (banner_type, agency_id, title, image_url, landing_url, exposure_order, is_active, start_at, end_at)
 VALUES
-    ('MAIN', NULL, '[Admin] NOVA 컴백 D-7 특별 프로모션',
-     'https://placehold.co/1200x400/FF5C8D/FFFFFF?text=NOVA+Comeback',
-     'https://fandrops.test/drops/nova', 1, true,
-     DATE_ADD(NOW(), INTERVAL -1 DAY), DATE_ADD(NOW(), INTERVAL 30 DAY)),
-
-    ('MAIN', NULL, '[Admin] ECHO 한정판 Vinyl 오픈런 안내',
-     'https://placehold.co/1200x400/5C8DFF/FFFFFF?text=ECHO+Limited+Vinyl',
-     'https://fandrops.test/store/echo', 2, true,
-     DATE_ADD(NOW(), INTERVAL -3 DAY), DATE_ADD(NOW(), INTERVAL 14 DAY)),
-
     ('MAIN', 1, '[Agency] 테스트 기획사 여름 팝업 스토어',
      'https://placehold.co/1200x400/8DFF5C/333333?text=Agency+Popup',
-     'https://fandrops.test/agency/1', 3, true,
+     'https://fandrops.test/agency/1', 1, true,
      NOW(), DATE_ADD(NOW(), INTERVAL 7 DAY)),
 
     ('MAIN', NULL, '[비활성] 종료된 이벤트 배너',
      'https://placehold.co/1200x400/CCCCCC/FFFFFF?text=Inactive+Banner',
-     'https://fandrops.test/events', 4, false,
+     'https://fandrops.test/events', 2, false,
      DATE_ADD(NOW(), INTERVAL -10 DAY), DATE_ADD(NOW(), INTERVAL 20 DAY)),
 
     ('MAIN', NULL, '[기간만료] 봄 시즌 특별전',
      'https://placehold.co/1200x400/FFD700/333333?text=Expired+Banner',
-     'https://fandrops.test/spring', 5, true,
+     'https://fandrops.test/spring', 3, true,
      DATE_ADD(NOW(), INTERVAL -30 DAY), DATE_ADD(NOW(), INTERVAL -1 DAY));
 
 -- A2. Admin 계정 (로컬 H2: Flyway 미실행 → INSERT 필요)
@@ -477,7 +465,7 @@ FROM product WHERE name = '소영 × Drops: [GLOW UP] 뷰티 한정 컬렉션';
 -- E2: 리아 × Drops [FAIRY SIGNAL] (버튜버, artist_id=12, agency_id=5)
 INSERT INTO product (artist_id, name, price, status, drops_start_at, drops_end_at)
 VALUES (12, '리아 × Drops: [FAIRY SIGNAL] 첫 EP 기념 패키지', 64000, 'ON_SALE',
-        DATE_ADD(NOW(), INTERVAL 1 DAY), DATE_ADD(NOW(), INTERVAL 5 DAY));
+        DATE_ADD(NOW(), INTERVAL 3 DAY), DATE_ADD(NOW(), INTERVAL 7 DAY));
 INSERT INTO inventory (product_id, total_qty, reserved_qty, available_qty, version)
 SELECT id, 120, 0, 120, 0 FROM product WHERE name = '리아 × Drops: [FAIRY SIGNAL] 첫 EP 기념 패키지';
 INSERT INTO product_image (product_id, image_url, sort_order, is_primary)
@@ -506,7 +494,7 @@ INSERT INTO banner (banner_type, agency_id, title, image_url, landing_url, expos
 SELECT 'STORE', 5, '리아 × Drops — FAIRY SIGNAL 오픈 예정',
        'https://placehold.co/1200x400/957DAD/FFFFFF?text=Lia+FAIRY+SIGNAL+Drops',
        'https://fandrops.test/store', 5, true,
-       DATE_ADD(NOW(), INTERVAL 1 DAY), DATE_ADD(NOW(), INTERVAL 5 DAY), id
+       DATE_ADD(NOW(), INTERVAL -1 HOUR), DATE_ADD(NOW(), INTERVAL 7 DAY), id
 FROM product WHERE name = '리아 × Drops: [FAIRY SIGNAL] 첫 EP 기념 패키지';
 
 INSERT INTO banner (banner_type, agency_id, title, image_url, landing_url, exposure_order, is_active, start_at, end_at, product_id)
