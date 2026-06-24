@@ -1127,3 +1127,157 @@ overflow VU (2100-2000 = 100 VU) 흐름:
 ```
 
 > **교훈**: somaxconn을 아무리 높여도 Nginx `listen` 디렉티브에 `backlog` 파라미터를 명시하지 않으면 OS 기본값(511)이 적용된다. 두 파라미터는 독립적이며, 실효 accept queue = `min(listen backlog, somaxconn)`이다. 복수 server block이 포트를 공유하는 Certbot 관리 설정에서는 첫 번째 server block(nginx.conf)에만 `backlog`를 지정하고 나머지(api-ssl.conf)에서는 socket 옵션을 일절 지정하지 않아야 한다.
+
+---
+
+## 15차 실행 결과 (2026-06-24) — dial: i/o timeout
+
+**GHA Run**: [#28067467272](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/actions/runs/28067467272)
+
+15차 수정(PR #431) 머지 → CD 배포 완료 후 첫 실행.
+
+### 증상
+
+| Threshold | 결과 |
+|---|---|
+| `http_req_failed{scenario:boundary}` rate<0.01 | ✗ **rate=100.00%** (571/571) |
+| `http_req_failed{scenario:normal_load}` rate<0.001 | ✓ **0/0** |
+| `sse_connections_rejected` count>0 | ✗ **count=0** |
+
+```
+time="..." level=warning msg="Request Failed"
+  error="Get .../api/v1/queue/stream/4: dial: i/o timeout"
+
+http_req_duration: avg=0s  min=0s  med=0s  max=0s
+iteration_duration: avg=22.69s  med=30s  p(90)=30s  p(95)=30s
+```
+
+- 403 문제는 사라졌으나 TCP 연결 자체가 수립되지 않음 (HTTP 레벨 응답 없음)
+- `normal_load` 요청 건수 0/0 — boundary만 실패로 집계
+
+### 서버 상태 확인
+
+SSM으로 확인한 EC2 타임라인:
+
+| 시각 (UTC) | 이벤트 |
+|---|---|
+| 00:41:40 | Nginx reload (CD 배포 시작) |
+| 00:47:08 | Spring (fandrops-green) 기동 |
+| 00:47:43 | Nginx reload (upstream 전환) |
+| 00:52:53 | k6 s05 시작 |
+| 00:54:53 | boundary 구간 시작 → 전부 timeout |
+
+Spring 기동 후 약 5분 45초 뒤 k6 시작. **서버는 정상이었으나** 원인이 서버 측이 아님을 확인.
+
+---
+
+## 16차 실행 결과 (2026-06-24) — 동일 패턴 재현
+
+**GHA Run**: [#28068063406](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/actions/runs/28068063406)
+
+서버 워밍업(25분) 후 재실행. 15차와 동일한 결과.
+
+| Threshold | 결과 |
+|---|---|
+| `http_req_failed{scenario:boundary}` rate<0.01 | ✗ **rate=100.00%** (654/654) |
+| `http_req_failed{scenario:normal_load}` rate<0.001 | ✓ **0/0** |
+| `sse_connections_rejected` count>0 | ✗ **count=0** |
+
+SSM으로 Nginx access log 직접 확인:
+
+```
+# 2026-06-24 00:54:38~00:58:48 UTC 구간
+# /api/v1/queue/stream/4
+# client: 172.182.212.50 (GHA runner IP)
+→ 3,619건 전부 HTTP 200
+```
+
+**서버는 모든 요청을 200으로 처리했음.** 서버·네트워크 문제가 아닌 **k6 시나리오 구조 문제**로 결론.
+
+---
+
+## 15~16차 실패 근본 원인 분석 — k6 SSE 측정 구조 문제
+
+### 핵심 메커니즘
+
+```
+[k6 동작]
+SSE http.get(timeout='310s')
+  → 서버가 200 + SSE stream 시작
+  → http.get()이 스트림 종료 전까지 blocking (최대 310s)
+  → ramping-vus stage 종료 → k6 VU interrupt
+  → 연결 강제 종료
+
+[metric 집계 결과]
+interrupt된 요청 → http_req_failed에 미집계 (0/0)
+실제로 '완료'된 요청 = dial timeout으로 실패한 요청만 집계됨
+→ http_req_failed{scenario:boundary} = 100% (전부 timeout)
+→ 서버는 200 반환, k6 metric에는 실패만 보임
+```
+
+### 시나리오 타임라인 분석
+
+| 구간 | k6 동작 | 서버 실제 상태 |
+|---|---|---|
+| normal_load (0~1m45s) | 1000 VU 연결 → stage 종료 시 interrupt | 1000건 200 반환 → metric 미집계 |
+| boundary (2m~3m45s) | 1800 VU 연결 시도 → 일부 timeout | 연결 성공 건은 200, timeout 건만 metric에 반영 |
+| overflow (4m30s~) | 2100 VU 시도 → 슬롯 부족 시 429 기대 | 이전 연결이 이미 없어 emitters.size() < 2000 → 429 미발생 |
+
+- `sse_connections_rejected = 0`: normal_load 연결이 stage 종료 시 해제되어 overflow 도달 전 슬롯이 비워짐
+- `http_req_failed{normal_load} = 0/0`: 연결 성공 후 interrupt → 미집계
+- `http_req_failed{boundary} = 100%`: timeout으로 실패한 소수 요청만 집계됨
+
+### 결론
+
+**서버가 잘못된 게 아니라 k6 시나리오가 SSE long-lived 연결 특성을 반영하지 못한 구조적 설계 결함.**
+
+기존 `ramping-vus 3단계` 방식은 SSE처럼 연결이 수분간 유지되는 엔드포인트에서는:
+1. 각 stage가 연결을 끊으면서 다음 단계의 "꽉 찬 상태"를 만들 수 없음
+2. interrupt된 요청은 metric에 미반영되어 성공/실패 여부를 측정할 수 없음
+
+---
+
+## 17차 시나리오 재설계 (2026-06-24) — capacity_fill + overflow_probe 2단계
+
+**PR**: [#433](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/pull/433)
+
+### 설계 변경
+
+| 항목 | 기존 (v1) | 변경 (v2) |
+|---|---|---|
+| 구조 | ramping-vus 3단계 (normal→boundary→overflow) | 2단계 분리 (capacity_fill + overflow_probe) |
+| overflow 검증 방식 | ramping-vus로 2100 VU | constant-arrival-rate 10req/s × 30s |
+| 전체 실행 시간 | ~5m55s | ~3m40s |
+
+### 새 시나리오 구조
+
+```
+T+0       capacity_fill 시작 — ramping-vus 2000 VU
+T+1m      2000 VU 도달 (SSE 슬롯 만석)
+T+2m      overflow_probe 시작 — 10req/s × 30s = 300건 추가 시도
+            → emitters.size() >= 2000 → SseCapacityExceededException
+            → 429 + {"error":{"retryable":true}} 반환
+T+2m30s   overflow_probe 종료
+T+3m30s   capacity_fill 종료 (gracefulRampDown 10s)
+```
+
+### 새 threshold
+
+```javascript
+// capacity_fill: TCP 연결 오류 없어야 함 (interrupt 요청은 0/0으로 집계 → trivially pass)
+'http_req_failed{scenario:capacity_fill}': ['rate<0.001'],
+// overflow_probe: 429 응답에 retryable:true 포함 여부 (99% 이상)
+'checks{scenario:overflow_probe}': ['rate>0.99'],
+// 초과 구간에서 반드시 용량 거부가 발생해야 함
+sse_connections_rejected: ['count>0'],
+```
+
+### 기대 결과
+
+| Threshold | 예상 |
+|---|---|
+| `http_req_failed{scenario:capacity_fill}` rate<0.001 | ✓ interrupt = 0/0 |
+| `checks{scenario:overflow_probe}` rate>0.99 | ✓ 300건 429 retryable:true |
+| `sse_connections_rejected` count>0 | ✓ 300건 거부 |
+
+> **교훈**: SSE처럼 long-lived 연결 엔드포인트는 `ramping-vus`의 stage 종료가 연결을 강제 interrupt하여 정상 응답이 metric에 반영되지 않는다. "슬롯 채우기"와 "초과 검증"을 별도 executor로 분리해야 측정값이 의미를 가진다.
