@@ -11,44 +11,59 @@ import com.fandrops.inventory.domain.InventoryChangeType;
 import com.fandrops.inventory.domain.InventoryHistory;
 import com.fandrops.inventory.domain.InventoryRefType;
 import com.fandrops.inventory.domain.exception.InvalidInventoryStateException;
-import com.fandrops.inventory.domain.exception.OutOfStockException;
-import com.fandrops.inventory.domain.exception.ReserveFailedException;
 import com.fandrops.inventory.domain.port.InventoryHistoryRepository;
 import com.fandrops.inventory.domain.port.InventoryReadRepository;
 import com.fandrops.inventory.domain.port.InventoryRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.transaction.annotation.Transactional;
+import java.util.concurrent.ThreadLocalRandom;
 
-/** 재고 예약·확정·복원·증가를 단일 TX에서 처리하는 application 서비스. */
+/** 재고 예약·확정·복원·증가를 처리하는 application 서비스. */
 public class InventoryCommandService {
+
+    private static final int RESERVE_MAX_ATTEMPTS = 5;
 
     private final InventoryReadRepository inventoryReadRepository;
     private final InventoryRepository inventoryRepository;
     private final InventoryHistoryRepository inventoryHistoryRepository;
+    private final InventoryReserveTxHelper reserveTxHelper;
 
     public InventoryCommandService(InventoryReadRepository inventoryReadRepository,
                                    InventoryRepository inventoryRepository,
-                                   InventoryHistoryRepository inventoryHistoryRepository) {
+                                   InventoryHistoryRepository inventoryHistoryRepository,
+                                   InventoryReserveTxHelper reserveTxHelper) {
         this.inventoryReadRepository = inventoryReadRepository;
         this.inventoryRepository = inventoryRepository;
         this.inventoryHistoryRepository = inventoryHistoryRepository;
+        this.reserveTxHelper = reserveTxHelper;
     }
 
-    @Transactional(noRollbackFor = {OutOfStockException.class, ReserveFailedException.class, InventoryLockConflictException.class})
+    /**
+     * 낙관적 락 충돌 시 bounded retry(최대 5회, jitter 10~50ms).
+     * TX 없이 retry loop를 돌고 단일 시도는 reserveTxHelper.reserveOnce()에 위임한다.
+     * 재시도 소진 후에도 실패 시 InventoryLockConflictException → 409 RESERVE_FAILED.
+     */
     public void reserve(Long orderId, Long productId, int qty) {
-        int affected = inventoryRepository.reserveAtomic(productId, qty, orderId);
-        if (affected == 0) {
-            findByProductId(productId);  // InventoryNotFoundException 체크
-            throw new OutOfStockException(productId);
+        InventoryLockConflictException lastConflict = null;
+        for (int attempt = 0; attempt < RESERVE_MAX_ATTEMPTS; attempt++) {
+            try {
+                reserveTxHelper.reserveOnce(orderId, productId, qty);
+                return;
+            } catch (InventoryLockConflictException e) {
+                lastConflict = e;
+                if (attempt < RESERVE_MAX_ATTEMPTS - 1) {
+                    long backoff = 10 + ThreadLocalRandom.current().nextLong(41); // 10~50ms
+                    try {
+                        Thread.sleep(backoff);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw lastConflict;
+                    }
+                }
+            }
         }
-        // clearAutomatically=true → JPA 캐시 클리어됨, 재조회로 정확한 post-update 값 획득
-        Inventory updated = findByProductId(productId);
-        int qtyAfter = updated.getAvailableQty();
-        InventoryHistory history = InventoryHistory.of(
-                updated.getId(), InventoryChangeType.RESERVE, qty,
-                qtyAfter + qty, qtyAfter, orderId, InventoryRefType.ORDER);
-        saveHistory(history, updated.getId(), orderId);
+        throw lastConflict;
     }
 
     @Transactional

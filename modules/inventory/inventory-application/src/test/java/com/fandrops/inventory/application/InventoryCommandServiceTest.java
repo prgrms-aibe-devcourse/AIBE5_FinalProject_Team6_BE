@@ -1,5 +1,6 @@
 package com.fandrops.inventory.application;
 
+import com.fandrops.inventory.application.exception.InventoryLockConflictException;
 import com.fandrops.inventory.application.exception.InventoryNotFoundException;
 import com.fandrops.inventory.domain.Inventory;
 import com.fandrops.inventory.domain.InventoryChangeType;
@@ -27,7 +28,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.*;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
@@ -43,6 +44,9 @@ class InventoryCommandServiceTest {
     @Mock
     private InventoryHistoryRepository inventoryHistoryRepository;
 
+    @Mock
+    private InventoryReserveTxHelper reserveTxHelper;
+
     @InjectMocks
     private InventoryCommandService sut;
 
@@ -55,48 +59,53 @@ class InventoryCommandServiceTest {
     class Reserve {
 
         @Test
-        @DisplayName("Atomic Update 성공 시 RESERVE 이력 저장, save() 미호출")
-        void reserve_savesHistoryWithoutDirectSave() {
-            // post-update 상태: availableQty=90 (100에서 10 차감됨)
-            Inventory postUpdate = Inventory.reconstitute(1L, PRODUCT_ID, 100, 10, 90, 0);
-            given(inventoryRepository.reserveAtomic(eq(PRODUCT_ID), eq(10), eq(ORDER_ID))).willReturn(1);
-            given(inventoryReadRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(postUpdate));
+        @DisplayName("성공 시 reserveTxHelper.reserveOnce() 1회 호출")
+        void reserve_success_callsReserveOnce() {
+            sut.reserve(ORDER_ID, PRODUCT_ID, 10);
+
+            verify(reserveTxHelper).reserveOnce(ORDER_ID, PRODUCT_ID, 10);
+        }
+
+        @Test
+        @DisplayName("OutOfStockException 발생 시 retry 없이 즉시 전파")
+        void reserve_outOfStock_propagatesImmediately() {
+            doThrow(new OutOfStockException(PRODUCT_ID)).when(reserveTxHelper).reserveOnce(ORDER_ID, PRODUCT_ID, 10);
+
+            assertThrows(OutOfStockException.class, () -> sut.reserve(ORDER_ID, PRODUCT_ID, 10));
+
+            verify(reserveTxHelper, times(1)).reserveOnce(ORDER_ID, PRODUCT_ID, 10);
+        }
+
+        @Test
+        @DisplayName("InventoryNotFoundException 발생 시 retry 없이 즉시 전파")
+        void reserve_inventoryNotFound_propagatesImmediately() {
+            doThrow(new InventoryNotFoundException(PRODUCT_ID)).when(reserveTxHelper).reserveOnce(ORDER_ID, PRODUCT_ID, 10);
+
+            assertThrows(InventoryNotFoundException.class, () -> sut.reserve(ORDER_ID, PRODUCT_ID, 10));
+
+            verify(reserveTxHelper, times(1)).reserveOnce(ORDER_ID, PRODUCT_ID, 10);
+        }
+
+        @Test
+        @DisplayName("InventoryLockConflictException 5회 연속 시 최종 예외 전파, 5회 시도")
+        void reserve_lockConflict_allAttemptsFail_throws() {
+            doThrow(new InventoryLockConflictException(PRODUCT_ID)).when(reserveTxHelper).reserveOnce(ORDER_ID, PRODUCT_ID, 10);
+
+            assertThrows(InventoryLockConflictException.class, () -> sut.reserve(ORDER_ID, PRODUCT_ID, 10));
+
+            verify(reserveTxHelper, times(5)).reserveOnce(ORDER_ID, PRODUCT_ID, 10);
+        }
+
+        @Test
+        @DisplayName("InventoryLockConflictException 1회 후 재시도 성공")
+        void reserve_lockConflictThenSuccess_retries() {
+            doThrow(new InventoryLockConflictException(PRODUCT_ID))
+                    .doNothing()
+                    .when(reserveTxHelper).reserveOnce(ORDER_ID, PRODUCT_ID, 10);
 
             sut.reserve(ORDER_ID, PRODUCT_ID, 10);
 
-            verify(inventoryRepository, never()).save(any());
-            ArgumentCaptor<InventoryHistory> captor = ArgumentCaptor.forClass(InventoryHistory.class);
-            verify(inventoryHistoryRepository).save(captor.capture());
-            InventoryHistory saved = captor.getValue();
-            assertEquals(InventoryChangeType.RESERVE, saved.getChangeType());
-            assertEquals(ORDER_ID, saved.getReferenceId());
-            assertEquals(10, saved.getDeltaQty());
-            assertEquals(100, saved.getQtyBefore());  // qtyAfter(90) + qty(10)
-            assertEquals(90, saved.getQtyAfter());
-        }
-
-        @Test
-        @DisplayName("Atomic Update 0 rows(재고 부족) 시 OutOfStockException, 이력 미저장")
-        void reserve_atomicUpdateZeroRows_throwsOutOfStock() {
-            Inventory inventory = Inventory.create(PRODUCT_ID, 5);
-            given(inventoryRepository.reserveAtomic(eq(PRODUCT_ID), eq(10), eq(ORDER_ID))).willReturn(0);
-            given(inventoryReadRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(inventory));
-
-            assertThrows(OutOfStockException.class,
-                    () -> sut.reserve(ORDER_ID, PRODUCT_ID, 10));
-
-            verify(inventoryRepository, never()).save(any());
-            verify(inventoryHistoryRepository, never()).save(any());
-        }
-
-        @Test
-        @DisplayName("재고 없는 상품이면 InventoryNotFoundException")
-        void reserve_inventoryNotFound() {
-            given(inventoryRepository.reserveAtomic(eq(PRODUCT_ID), eq(10), eq(ORDER_ID))).willReturn(0);
-            given(inventoryReadRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.empty());
-
-            assertThrows(InventoryNotFoundException.class,
-                    () -> sut.reserve(ORDER_ID, PRODUCT_ID, 10));
+            verify(reserveTxHelper, times(2)).reserveOnce(ORDER_ID, PRODUCT_ID, 10);
         }
     }
 

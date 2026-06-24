@@ -2,6 +2,7 @@ package com.fandrops.inventory.infrastructure.config;
 
 import com.fandrops.inventory.application.InventoryCommandService;
 import com.fandrops.inventory.application.InventoryQueryService;
+import com.fandrops.inventory.application.InventoryReserveTxHelper;
 import com.fandrops.inventory.domain.port.InventoryHistoryRepository;
 import com.fandrops.inventory.domain.port.InventoryReadRepository;
 import com.fandrops.inventory.domain.port.InventoryRepository;
@@ -103,10 +104,19 @@ public class InventoryConfig {
     }
 
     @Bean
-    public InventoryCommandService inventoryCommandService(
+    public InventoryReserveTxHelper inventoryReserveTxHelper(
             InventoryReadRepository inventoryReadRepository,
             InventoryRepository inventoryRepository,
             InventoryHistoryRepository inventoryHistoryRepository) {
-        return new InventoryCommandService(inventoryReadRepository, inventoryRepository, inventoryHistoryRepository);
+        return new InventoryReserveTxHelper(inventoryReadRepository, inventoryRepository, inventoryHistoryRepository);
+    }
+
+    @Bean
+    public InventoryCommandService inventoryCommandService(
+            InventoryReadRepository inventoryReadRepository,
+            InventoryRepository inventoryRepository,
+            InventoryHistoryRepository inventoryHistoryRepository,
+            InventoryReserveTxHelper inventoryReserveTxHelper) {
+        return new InventoryCommandService(inventoryReadRepository, inventoryRepository, inventoryHistoryRepository, inventoryReserveTxHelper);
     }
 }
