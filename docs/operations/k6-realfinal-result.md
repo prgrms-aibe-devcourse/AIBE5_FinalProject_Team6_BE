@@ -800,6 +800,28 @@ s01 팀장 합의에 따라 주문 구간은 `P95 < 300ms`를 Pass/Fail 기준�
 
 > 기본 `ORDER_TARGET_RESERVED`는 200이다. s06 사전준비에서 inventory를 200으로 리셋하지 않으면 threshold와 DB 판정이 어긋난다.
 
+#### s06 검증 범위 분리 및 잔여 리스크
+
+**Order accessTicket 분리**
+
+s06 재측정 중 `wl_order_403`이 발생했다. 원인은 queue join 20%와 order 15%가 같은 `product_id=4`를 사용하면서 Redis key `access:ticket:4:{fanId}`를 공유한 것이다. queue join은 해당 fan/product 조합의 access ticket을 새 UUID로 갱신하지만, order 구간은 고정값 `test-ticket-token`을 사용하고 있어 테스트 스크립트 자체가 `INVALID_QUEUE_TICKET(403)`을 만들었다.
+
+이에 따라 s06의 order 요청은 `accessTicket=null` 상시 판매 경로로 분리한다. 이는 테스트 전용 우회가 아니라 현재 `OrderService`의 명시된 분기(`accessTicket == null`이면 검증 스킵)이며, s06의 목적을 대기열 ticket 계약 검증이 아니라 통합 부하 간섭 및 주문 정합성 검증으로 한정하기 위한 결정이다.
+
+- s06에서 검증: feed/queue/order/payment 혼합 부하, 주문 `reserved_qty == ORDER_TARGET_RESERVED`, 오버셀 0건, 주문 5xx/unexpected 0건
+- s01/s05에서 분리 검증: access ticket 포함 주문 정합성, 대기열 capacity 및 429 계약
+- 발표 시 유의: “ticket 검증을 우회했다”가 아니라 “ticket 계약은 별도 시나리오로 분리하고, s06은 통합 부하 간섭을 측정한다”고 설명한다.
+
+**Payment 400 check 실패**
+
+s06 재측정에서 payment 구간은 `wl_payment_duration`, `wl_payment_5xx`, `wl_payment_unexpected` 기준을 만족했지만, `wl_payment_400`이 일부 발생해 k6 check 실패로 집계됐다. `400`은 5xx 장애나 latency 실패는 아니지만, 정상 성공 응답으로 단정하기도 어렵다. 현재 원인은 500개 seed order를 5분 30초 동안 반복 confirm하면서 일부 요청이 결제 가능 상태 또는 요청 계약과 맞지 않게 된 데이터 모델 이슈로 본다.
+
+따라서 payment 400은 SLO 성공 응답으로 포장하지 않고 별도 분석 지표로 기록한다. Payment SLO 판정은 `P95 < 2,000ms`, `5xx < 0.1%`, `wl_payment_unexpected == 0`을 기준으로 하되, `wl_payment_400`은 seed 결제 데이터 모델 개선 과제로 남긴다.
+
+- 통과로 볼 수 있는 부분: payment P95, payment 5xx, payment unexpected
+- 잔여 이슈: payment 400 발생 원인 분리 및 seed order 반복 confirm 모델 개선
+- 발표 시 유의: “400도 정상 성공”이 아니라 “장애는 아니지만 데이터 모델상 잔여 분석 항목으로 분리했다”고 설명한다.
+
 ### 결과 (최종)
 
 | 지표 | 베이스라인 | 결과 (최종) | 목표 | 상태 |

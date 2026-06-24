@@ -191,8 +191,7 @@ export default function () {
     }
     check(res, {
       '[payment] confirm accepted': (r) =>
-        r.status === 200 || r.status === 201 || r.status === 400 ||
-        r.status === 408 || r.status === 409 || r.status === 429,
+        r.status === 200 || r.status === 201 || r.status === 408 || r.status === 409 || r.status === 429,
     });
   }
 }
