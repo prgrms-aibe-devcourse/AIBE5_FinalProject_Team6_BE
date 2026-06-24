@@ -2,6 +2,7 @@ package com.fandrops.order.infrastructure.config;
 
 import com.fandrops.inventory.application.InventoryCommandService;
 import com.fandrops.order.application.CartService;
+import com.fandrops.order.application.OrderCreateTxHelper;
 import com.fandrops.order.application.OrderService;
 import com.fandrops.order.application.ProductService;
 import com.fandrops.order.application.RestockAlertService;
@@ -123,13 +124,19 @@ public class OrderConfig implements AsyncConfigurer {
     }
 
     @Bean
+    public OrderCreateTxHelper orderCreateTxHelper(OrderRepository orderRepository) {
+        return new OrderCreateTxHelper(orderRepository);
+    }
+
+    @Bean
     public OrderService orderService(OrderRepository orderRepository,
+                                     OrderCreateTxHelper orderCreateTxHelper,
                                      InventoryReservePort inventoryReservePort,
                                      InventoryRestorePort inventoryRestorePort,
                                      AccessTicketValidatePort accessTicketValidatePort,
                                      ProductPricePort productPricePort) {
-        return new OrderService(orderRepository, inventoryReservePort, inventoryRestorePort,
-                accessTicketValidatePort, productPricePort);
+        return new OrderService(orderRepository, orderCreateTxHelper, inventoryReservePort,
+                inventoryRestorePort, accessTicketValidatePort, productPricePort);
     }
 
     @Bean
