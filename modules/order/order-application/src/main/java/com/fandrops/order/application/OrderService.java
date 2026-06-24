@@ -25,27 +25,34 @@ import java.util.ArrayList;
 import java.util.List;
 import org.springframework.transaction.annotation.Transactional;
 
-/** 주문 생성 유스케이스. AccessTicket 검증 → 재고 예약 → RESERVED/CANCELLED 단일 트랜잭션. */
+/**
+ * 주문 생성 유스케이스.
+ * AccessTicket 검증 → 주문 PENDING 저장(짧은 TX) → 재고 예약 retry → RESERVED/CANCELLED(짧은 TX).
+ * outer long TX를 제거해 재고 예약 retry 중 HikariCP 커넥션을 점유하지 않는다.
+ */
 public class OrderService {
 
     private final OrderRepository orderRepository;
+    private final OrderCreateTxHelper orderCreateTxHelper;
     private final InventoryReservePort inventoryReservePort;
     private final InventoryRestorePort inventoryRestorePort;
     private final AccessTicketValidatePort accessTicketValidatePort;
     private final ProductPricePort productPricePort;
 
-    public OrderService(OrderRepository orderRepository, InventoryReservePort inventoryReservePort,
+    public OrderService(OrderRepository orderRepository,
+                        OrderCreateTxHelper orderCreateTxHelper,
+                        InventoryReservePort inventoryReservePort,
                         InventoryRestorePort inventoryRestorePort,
-                        AccessTicketValidatePort accessTicketValidatePort, ProductPricePort productPricePort) {
+                        AccessTicketValidatePort accessTicketValidatePort,
+                        ProductPricePort productPricePort) {
         this.orderRepository = orderRepository;
+        this.orderCreateTxHelper = orderCreateTxHelper;
         this.inventoryReservePort = inventoryReservePort;
         this.inventoryRestorePort = inventoryRestorePort;
         this.accessTicketValidatePort = accessTicketValidatePort;
         this.productPricePort = productPricePort;
     }
 
-    // 재고 부족 예외는 롤백 제외 → CANCELLED 상태가 DB에 커밋되어야 함
-    @Transactional(noRollbackFor = {OutOfStockException.class, ReserveConflictException.class})
     public CreateOrderResult createOrder(CreateOrderCommand command) {
         // 1. accessTicket 검증 — null이면 상시 판매로 간주하고 스킵 (TODO: 형성빈 협의 후 정식 처리)
         Long primaryProductId = command.getItems().get(0).getProductId();
@@ -61,24 +68,26 @@ public class OrderService {
                 })
                 .toList();
 
-        // 3. 주문 생성 (PENDING) + 저장
+        // 3. 주문 PENDING 저장 — 짧은 TX로 커밋 후 커넥션 반환
         Order order = Order.create(command.getFanId(), items);
-        Order saved = orderRepository.save(order);
+        Order saved = orderCreateTxHelper.savePendingOrder(order);
 
-        // 4. 재고 예약 + 상태 전이 — 부분 성공 시 이미 예약된 아이템 복구 후 CANCELLED
+        // 4. 재고 예약 retry — TX 없이 실행, reserveOnce(REQUIRED)가 각 시도마다 독립 TX
         List<OrderItem> reserved = new ArrayList<>();
         try {
             for (OrderItem item : saved.getItems()) {
                 inventoryReservePort.reserve(item.getProductId(), item.getQuantity(), saved.getId());
                 reserved.add(item);
             }
-            orderRepository.updateStatus(saved.getId(), OrderStatus.RESERVED);
+            // 5. RESERVED 상태 업데이트 — 짧은 TX
+            orderCreateTxHelper.markReserved(saved.getId());
             return new CreateOrderResult(saved.getId(), OrderStatus.RESERVED.name(), saved.getOrderPaymentKey());
         } catch (OutOfStockException | ReserveConflictException e) {
             for (OrderItem item : reserved) {
                 inventoryRestorePort.restore(item.getProductId(), item.getQuantity(), saved.getId());
             }
-            orderRepository.updateStatus(saved.getId(), OrderStatus.CANCELLED);
+            // 6. CANCELLED 상태 업데이트 — 짧은 TX
+            orderCreateTxHelper.markCancelled(saved.getId());
             throw e;
         }
     }

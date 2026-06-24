@@ -13,16 +13,14 @@ import com.fandrops.inventory.domain.port.InventoryReadRepository;
 import com.fandrops.inventory.domain.port.InventoryRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 낙관적 락 retry 지원을 위한 TX 경계 분리 Bean.
  *
- * REQUIRES_NEW: OrderService 상위 TX와 완전히 분리된 독립 TX에서 실행.
- * 충돌로 인한 rollback-only가 상위 TX를 오염시키지 않는다.
- * noRollbackFor: OptimisticLockingFailureException 발생 시 TX를 rollback-only로 마킹하지 않아
- * catch 후 InventoryLockConflictException으로 정상 변환·전파 가능.
+ * REQUIRED(기본값): outer TX(OrderService) 커넥션을 공유해 HikariCP 추가 소비 없음.
+ * noRollbackFor: OptimisticLockingFailureException·InventoryLockConflictException 발생 시
+ * outer TX를 rollback-only로 마킹하지 않아 retry 후 정상 처리 가능.
  */
 public class InventoryReserveTxHelper {
 
@@ -42,10 +40,7 @@ public class InventoryReserveTxHelper {
      * 단일 TX로 재고 예약 1회 시도.
      * InventoryLockConflictException / OutOfStockException / ReserveFailedException 은 그대로 전파.
      */
-    @Transactional(
-            propagation = Propagation.REQUIRES_NEW,
-            noRollbackFor = {OptimisticLockingFailureException.class, InventoryLockConflictException.class}
-    )
+    @Transactional(noRollbackFor = {OptimisticLockingFailureException.class, InventoryLockConflictException.class})
     public void reserveOnce(Long orderId, Long productId, int qty) {
         int affected = inventoryRepository.reserveAtomic(productId, qty, orderId);
         if (affected == 0) {
