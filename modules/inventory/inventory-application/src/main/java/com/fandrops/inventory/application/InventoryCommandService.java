@@ -22,7 +22,7 @@ import java.util.concurrent.ThreadLocalRandom;
 /** 재고 예약·확정·복원·증가를 처리하는 application 서비스. */
 public class InventoryCommandService {
 
-    private static final int RESERVE_MAX_ATTEMPTS = 5;
+    private static final int RESERVE_MAX_ATTEMPTS = 2;
 
     private final InventoryReadRepository inventoryReadRepository;
     private final InventoryRepository inventoryRepository;
