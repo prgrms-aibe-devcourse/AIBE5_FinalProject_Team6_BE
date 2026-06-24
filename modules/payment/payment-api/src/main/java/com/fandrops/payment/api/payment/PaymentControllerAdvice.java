@@ -5,6 +5,7 @@ import com.fandrops.payment.api.queue.SseCapacityExceededException;
 import com.fandrops.payment.application.payment.PaymentAlreadyFailedException;
 import com.fandrops.payment.application.payment.PaymentAmountMismatchException;
 import com.fandrops.payment.application.payment.PaymentConfirmFailedException;
+import com.fandrops.payment.application.payment.PaymentConfirmTimeoutException;
 import com.fandrops.payment.application.payment.PaymentLockConflictException;
 import com.fandrops.payment.application.payment.PaymentNotFoundException;
 import com.fandrops.payment.application.payment.TossAuthenticationException;
@@ -58,6 +59,12 @@ public class PaymentControllerAdvice {
                 .collect(Collectors.joining(", "));
         return ResponseEntity.status(400)
                 .body(ApiResponse.fail("INVALID_REQUEST", message, false, traceId()));
+    }
+
+    @ExceptionHandler(PaymentConfirmTimeoutException.class)
+    public ResponseEntity<ApiResponse<Void>> handle(PaymentConfirmTimeoutException e) {
+        return ResponseEntity.status(408)
+                .body(ApiResponse.fail("PAYMENT_CONFIRM_TIMEOUT", e.getMessage(), true, traceId()));
     }
 
     @ExceptionHandler(TossPaymentUnavailableException.class)

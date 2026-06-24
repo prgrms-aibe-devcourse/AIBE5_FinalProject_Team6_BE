@@ -532,12 +532,26 @@ JPA `@Version` 낙관적 락(Optimistic Locking) — precheck TX 커밋 후 PG �
 **어떻게 해결했는지**
 충돌 시 단순 throw 대신 `txHelper.precheck(command)` 재시도 → `isDone() == true`면 멱등 200 반환. 충돌 후에도 클라이언트 재시도 없이 정상 응답 보장. `PaymentConfirmServiceTest`에 `optimisticLockConflict_retriesPrecheck_returnsDone` 케이스로 검증됨.
 
+---
+
+#### 지적 3 — Timeout 5xx 제거 (ResourceAccessException → 408)
+
+**어떻게 반영했는지**
+`TossPaymentGatewayAdapter.confirm()` catch 블록에 `ResourceAccessException` 처리를 추가해 PG read timeout이 발생해도 Spring 기본 500 대신 명시적 예외로 전환되도록 했습니다. `PaymentConfirmTimeoutException` 신규 클래스를 `payment-application` 모듈에 추가했습니다. `PaymentControllerAdvice`에 `PaymentConfirmTimeoutException → HTTP 408` 핸들러를 등록했습니다.
+
+**어떤 기술/방법을 적용했는지**
+Spring RestClient의 read timeout은 `java.net.http.HttpTimeoutException`이 `ResourceAccessException`으로 래핑되어 전파됩니다. 기존 catch가 `RestClientResponseException`(HTTP 응답 오류 계열)만 처리하고 `ResourceAccessException`(네트워크·타임아웃 계열)은 미처리였습니다. `ResourceAccessException` catch를 `RestClientResponseException` 앞에 배치해 timeout을 먼저 잡고 `PaymentConfirmTimeoutException`으로 변환합니다. PG 서버 5xx(→ `TossPaymentUnavailableException` → 503)와 클라이언트 read timeout(→ `PaymentConfirmTimeoutException` → 408)을 명확히 분리했습니다.
+
+**어떻게 해결했는지**
+timeout 발생 시 5xx 대신 408 / `PAYMENT_CONFIRM_TIMEOUT` / `retryable=true`가 반환되어 k6 `http_5xx_rate` 임계값(`< 0.001`)은 통과합니다. 단, k6 기본 `http_req_failed`는 4xx도 실패로 집계하므로 408도 포함됩니다. **realfinal `success` 시나리오에서 timeout 0건이 `http_req_failed < 0.001` 통과의 전제 조건**입니다. `timeout`/`mixed` 시나리오 실행 시 408은 의도된 응답이지만 현재 threshold 구조에서는 실패로 표시됩니다 — SLO 실패가 아니라 분석용 시나리오의 예상 실패로 분리합니다.
+
 | 항목 | 변경 전 | 변경 내용 | 적용 기술 |
 |---|---|---|---|
 | TX 경계 | `PaymentConfirmService` 단일 `@Transactional` | `PaymentConfirmTxHelper` Bean 분리, 3개 메서드 독립 TX | Spring AOP 프록시, 별도 Bean |
 | PG 호출 위치 | TX 내부 (DB 커넥션 점유 중 PG 대기) | TX 외부 | `@Transactional` 제거 |
 | 멀티모듈 접근 | `PrecheckResult` package-private (컴파일 에러 위험) | `public` 선언 | Java visibility modifier |
 | 동시성 방어 | 주석 없음 | precheck-PG 타임 윈도 주석 + `OptimisticLockingFailureException` catch 멱등 처리 | JPA `@Version` 낙관적 락 |
+| Timeout 예외 처리 | `ResourceAccessException` uncaught → Spring 500 | `ResourceAccessException` catch → `PaymentConfirmTimeoutException` → 408 / `PAYMENT_CONFIRM_TIMEOUT` / retryable=true | `PaymentConfirmTimeoutException`, `@RestControllerAdvice` |
 
 ### 결과 (최종)
 
@@ -574,6 +588,32 @@ JPA `@Version` 낙관적 락(Optimistic Locking) — precheck TX 커밋 후 PG �
 - Wiremock URL 오지정은 운영 설정 문제로 복구했지만, 올바른 로컬 Wiremock 경로에서도 timeout 5xx가 남았다.
 - `payment=500`, orders `COMPLETED=492`, `RESERVED=8` 불일치가 발생했으므로, PG timeout/예외 시 결제 레코드와 주문 상태 변경이 부분 반영되지 않도록 처리해야 한다.
 - `ResourceAccessException`/`HttpTimeoutException`을 5xx로 노출하지 말고, 팀 계약에 맞는 명시적 timeout 응답(`PAYMENT_CONFIRM_TIMEOUT`, `retryable=true` 등)으로 매핑하는 방안 검토가 필요하다.
+
+### k6 SLO 판정 기준 및 realfinal 측정 조건
+
+#### k6 threshold 구조와 408의 위치
+
+| threshold | 집계 기준 | 408 포함 여부 |
+|---|---|---|
+| `http_5xx_rate: rate < 0.001` | `res.status >= 500` | ❌ 포함 안 됨 |
+| `http_req_failed: rate < 0.001` | k6 기본값 — 4xx + 5xx 모두 실패 | ✅ 포함됨 |
+| `http_req_duration: p(95) < 2000` | 전체 요청 응답시간 | — |
+
+408은 `http_5xx_rate`는 통과하지만 `http_req_failed`는 실패로 집계된다. **realfinal `success` 시나리오에서 timeout이 1건이라도 발생하면 두 threshold 모두 통과 불가**다.
+
+#### realfinal success 시나리오 필수 측정 조건
+
+| 항목 | 필수값 | 비고 |
+|---|---|---|
+| `TOSS_API_BASE_URL` | `http://127.0.0.1:8090` | EC2-1 로컬 Wiremock |
+| `TOSS_API_READ_TIMEOUT` | `2s` | 환경변수 주입 후 서비스 재기동 |
+| Wiremock success stub 지연 | 없음 (즉시 응답) | `docker ps --filter name=wiremock` 기동 확인 |
+| timeout 발생 건수 | **0건** | SLO 통과 전제 조건 |
+| SCENARIO | `success` (기본값) | SLO 측정용 — `timeout`·`mixed`는 분석용 |
+
+#### timeout/mixed 시나리오 분리 기준
+
+`SCENARIO=timeout`·`mixed` 실행 시 408 응답은 계약상 의도된 응답이지만 현재 threshold 구조에서 `http_req_failed` 실패로 표시된다. 이는 SLO 실패가 아니라 **분석용 시나리오의 예상 실패**로 분리해 기록한다. k6 check는 `r.status === 408` 허용으로 `checks_failed` 방지는 완료됐다.
 
 ### 개선 방향
 
