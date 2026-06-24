@@ -81,7 +81,7 @@ fandrops:
   feature-flags:
     enabled: false
   queue:
-    processing-timeout-seconds: 30
+    processing-timeout-seconds: 600
     waiting-timeout-seconds: 600
     advance-batch-size: 20
     max-concurrent-processing: 20
