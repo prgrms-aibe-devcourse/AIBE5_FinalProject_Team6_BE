@@ -303,11 +303,49 @@ Toss PG 응답 지연·오류 상황에서도 중복 결제 없이 P95 2,000ms �
 
 ### 피드백 반영 내용 (장성재)
 
-> 작성 예정
+#### @Transactional 분리 — PaymentConfirmTxHelper Bean 신설
+
+**어떻게 반영했는지**
+`PaymentConfirmService`의 단일 `@Transactional`을 제거하고, `PaymentConfirmTxHelper` Bean을 신설해 `precheck` / `applySuccess` / `applyFailure` 3개 메서드가 각자 독립 TX를 보유하도록 분리했습니다. Service는 TX 없이 오케스트레이션만 담당합니다.
+
+**어떤 기술/방법을 적용했는지**
+Spring AOP 프록시 기반 `@Transactional` — 같은 Bean 내 self-invocation은 프록시를 우회해 TX가 무시되는 문제를 별도 Bean 분리로 회피. `TossPaymentConfig`에서 수동 `@Bean` 등록으로 `txHelper → service` 주입 순서를 명시적으로 제어.
+
+**어떻게 해결했는지**
+PG HTTP 호출(최대 10s 대기)이 TX 범위 밖에 놓여 DB 커넥션 점유 시간이 제거됐습니다. 드롭스 오픈런 동시 요청 집중 시 HikariCP 커넥션 풀 고갈 위험을 차단.
+
+---
+
+#### 지적 1 — PrecheckResult / TxHelper public
+
+**어떻게 반영했는지**
+`PrecheckResult`와 `PaymentConfirmTxHelper` 모두 `public`으로 선언했습니다.
+
+**어떤 기술/방법을 적용했는지**
+Java 멀티모듈 접근 제어 — `payment-application` 타입을 `payment-infrastructure`에서 참조하려면 `public` 필수. package-private(기본값) 상태면 크로스 모듈 참조 시 컴파일 에러 발생.
+
+**어떻게 해결했는지**
+`TossPaymentConfig`(infrastructure)가 `PaymentConfirmTxHelper`(application)를 `@Bean`으로 등록할 때 두 타입 모두 `public`이므로 컴파일이 정상 통과됩니다.
+
+---
+
+#### 지적 2 — precheck-PG 타임 윈도 명시
+
+**어떻게 반영했는지**
+`PaymentConfirmService.confirm()` PG 호출 직전에 타임 윈도 설명 주석 3줄을 추가하고, `OptimisticLockingFailureException` catch 블록으로 실제 방어 로직을 함께 구현했습니다.
+
+**어떤 기술/방법을 적용했는지**
+JPA `@Version` 낙관적 락(Optimistic Locking) — precheck TX 커밋 후 PG 호출 전 사이에 다른 요청이 precheck를 통과하더라도, `applySuccess`에서 동일 Payment 엔티티 저장 시 `@Version` 불일치로 `OptimisticLockingFailureException`이 발생해 중복 처리를 차단.
+
+**어떻게 해결했는지**
+충돌 시 단순 throw 대신 `txHelper.precheck(command)` 재시도 → `isDone() == true`면 멱등 200 반환. 충돌 후에도 클라이언트 재시도 없이 정상 응답 보장. `PaymentConfirmServiceTest`에 `optimisticLockConflict_retriesPrecheck_returnsDone` 케이스로 검증됨.
 
 | 항목 | 변경 전 | 변경 내용 | 적용 기술 |
 |---|---|---|---|
-| | | | |
+| TX 경계 | `PaymentConfirmService` 단일 `@Transactional` | `PaymentConfirmTxHelper` Bean 분리, 3개 메서드 독립 TX | Spring AOP 프록시, 별도 Bean |
+| PG 호출 위치 | TX 내부 (DB 커넥션 점유 중 PG 대기) | TX 외부 | `@Transactional` 제거 |
+| 멀티모듈 접근 | `PrecheckResult` package-private (컴파일 에러 위험) | `public` 선언 | Java visibility modifier |
+| 동시성 방어 | 주석 없음 | precheck-PG 타임 윈도 주석 + `OptimisticLockingFailureException` catch 멱등 처리 | JPA `@Version` 낙관적 락 |
 
 ### 결과 (최종)
 
@@ -361,11 +399,20 @@ Toss PG 응답 지연·오류 상황에서도 중복 결제 없이 P95 2,000ms �
 
 ### 피드백 반영 내용 (장성재, 지영재)
 
-> 작성 예정
+#### heartbeat-ms 배포 환경 명시
+
+**어떻게 반영했는지**
+`application-prod.yml`과 `application-stg.yml` 두 배포 환경 yml에 `heartbeat-ms: 5000`을 명시적으로 추가했습니다.
+
+**어떤 기술/방법을 적용했는지**
+Spring `@Scheduled(fixedDelayString = "${fandrops.queue.scheduler.heartbeat-ms:5000}")` — 코드 기본값(`:5000`)에만 의존하던 상태를 yml에 명시해 환경별 설정으로 격상. 이후 값 조정이 필요할 때 코드 수정 없이 yml만 변경하면 됩니다.
+
+**어떻게 해결했는지**
+기본값 fallback 의존을 제거해 배포 환경에서 heartbeat 주기가 명확히 보장됩니다. 코드 기본값이 추후 변경되더라도 배포 환경은 yml 값(5000ms)을 따르므로 stale emitter 누적으로 인한 2,000 상한 조기 초과 재발 위험이 차단됩니다.
 
 | 항목 | 변경 전 | 변경 내용 | 적용 기술 |
 |---|---|---|---|
-| | | | |
+| heartbeat 주기 설정 | yml 미설정 (코드 기본값 `:5000` fallback) | `application-prod.yml`, `application-stg.yml`에 `heartbeat-ms: 5000` 명시 | Spring `@Scheduled` SpEL 기본값 |
 
 ### 결과 (최종)
 

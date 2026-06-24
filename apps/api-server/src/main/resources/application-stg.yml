@@ -54,6 +54,10 @@ management:
       enabled: true
 
 fandrops:
+  queue:
+    scheduler:
+      interval-ms: 1000
+      heartbeat-ms: 5000
   ops:
     trace:
       response-header-enabled: true
