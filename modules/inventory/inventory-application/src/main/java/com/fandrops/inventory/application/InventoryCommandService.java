@@ -37,7 +37,7 @@ public class InventoryCommandService {
 
     @Transactional(noRollbackFor = {OutOfStockException.class, ReserveFailedException.class, InventoryLockConflictException.class})
     public void reserve(Long orderId, Long productId, int qty) {
-        int affected = inventoryRepository.reserveAtomic(productId, qty);
+        int affected = inventoryRepository.reserveAtomic(productId, qty, orderId);
         if (affected == 0) {
             findByProductId(productId);  // InventoryNotFoundException 체크
             throw new OutOfStockException(productId);

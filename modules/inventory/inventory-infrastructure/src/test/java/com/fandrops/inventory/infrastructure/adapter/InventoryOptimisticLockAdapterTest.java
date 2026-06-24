@@ -39,6 +39,7 @@ class InventoryOptimisticLockAdapterTest {
     private InventoryOptimisticLockAdapter sut;
 
     private static final Long PRODUCT_ID = 1L;
+    private static final Long ORDER_ID = 100L;
     private static final int QTY = 1;
 
     private InventoryJpaEntity entityWithQty(int total, int reserved, int available) {
@@ -55,7 +56,7 @@ class InventoryOptimisticLockAdapterTest {
         void returns0_whenProductNotFound() {
             given(jpaRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.empty());
 
-            assertEquals(0, sut.reserveAtomic(PRODUCT_ID, QTY));
+            assertEquals(0, sut.reserveAtomic(PRODUCT_ID, QTY, ORDER_ID));
             verify(jpaRepository, never()).saveAndFlush(any());
         }
 
@@ -66,7 +67,7 @@ class InventoryOptimisticLockAdapterTest {
                     .willReturn(Optional.of(entityWithQty(0, 0, 0)));
 
             assertThrows(OutOfStockException.class,
-                    () -> sut.reserveAtomic(PRODUCT_ID, QTY));
+                    () -> sut.reserveAtomic(PRODUCT_ID, QTY, ORDER_ID));
             verify(jpaRepository, never()).saveAndFlush(any());
         }
 
@@ -77,7 +78,7 @@ class InventoryOptimisticLockAdapterTest {
                     .willReturn(Optional.of(entityWithQty(5, 4, 1)));
 
             assertThrows(ReserveFailedException.class,
-                    () -> sut.reserveAtomic(PRODUCT_ID, 3));
+                    () -> sut.reserveAtomic(PRODUCT_ID, 3, ORDER_ID));
             verify(jpaRepository, never()).saveAndFlush(any());
         }
 
@@ -90,7 +91,7 @@ class InventoryOptimisticLockAdapterTest {
                     .willThrow(new OptimisticLockingFailureException("version conflict"));
 
             assertThrows(InventoryLockConflictException.class,
-                    () -> sut.reserveAtomic(PRODUCT_ID, QTY));
+                    () -> sut.reserveAtomic(PRODUCT_ID, QTY, ORDER_ID));
             verify(entityManager).clear();
         }
 
@@ -101,7 +102,7 @@ class InventoryOptimisticLockAdapterTest {
             given(jpaRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(entity));
             given(jpaRepository.saveAndFlush(any())).willReturn(entity);
 
-            assertEquals(1, sut.reserveAtomic(PRODUCT_ID, QTY));
+            assertEquals(1, sut.reserveAtomic(PRODUCT_ID, QTY, ORDER_ID));
             verify(jpaRepository).saveAndFlush(any(InventoryJpaEntity.class));
         }
     }

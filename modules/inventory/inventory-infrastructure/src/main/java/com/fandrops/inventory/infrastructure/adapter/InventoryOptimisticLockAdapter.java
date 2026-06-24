@@ -30,13 +30,13 @@ public class InventoryOptimisticLockAdapter implements InventoryRepository {
     private final EntityManager entityManager;
 
     @Override
-    public int reserveAtomic(Long productId, int qty) {
+    public int reserveAtomic(Long productId, int qty, Long orderId) {
         Optional<InventoryJpaEntity> entityOpt = jpaRepository.findByProductId(productId);
         if (entityOpt.isEmpty()) return 0;
 
         Inventory inventory = entityOpt.get().toDomain();
         // OutOfStockException·ReserveFailedException 은 잡지 않고 전파
-        inventory.reserve(qty, null);
+        inventory.reserve(qty, orderId);
         try {
             // saveAndFlush — 즉시 플러시하여 버전 충돌을 어댑터 안에서 감지
             jpaRepository.saveAndFlush(InventoryJpaEntity.from(inventory));

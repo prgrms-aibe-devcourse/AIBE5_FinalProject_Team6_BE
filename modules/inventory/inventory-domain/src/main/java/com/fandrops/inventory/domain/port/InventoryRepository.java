@@ -8,9 +8,10 @@ public interface InventoryRepository {
 
     /**
      * 단일 UPDATE WHERE available_qty >= qty 로 재고를 원자적으로 예약한다.
+     * orderId 는 Read-Check-Write 전략(Redisson·Optimistic)에서 InventoryHistory 생성에 사용된다.
      * @return 업데이트된 row 수 (1=성공, 0=재고 부족)
      */
-    int reserveAtomic(Long productId, int qty);
+    int reserveAtomic(Long productId, int qty, Long orderId);
 
     /**
      * 단일 UPDATE WHERE reserved_qty >= qty 로 재고를 원자적으로 확정한다.

@@ -48,6 +48,7 @@ class InventoryRedissonLockAdapterTest {
     private InventoryRedissonLockAdapter sut;
 
     private static final Long PRODUCT_ID = 1L;
+    private static final Long ORDER_ID = 100L;
     private static final int QTY = 1;
 
     @BeforeEach
@@ -87,7 +88,7 @@ class InventoryRedissonLockAdapterTest {
             given(lock.tryLock(anyLong(), anyLong(), any(TimeUnit.class))).willReturn(false);
 
             assertThrows(InventoryLockConflictException.class,
-                    () -> sut.reserveAtomic(PRODUCT_ID, QTY));
+                    () -> sut.reserveAtomic(PRODUCT_ID, QTY, ORDER_ID));
             verify(jpaRepository, never()).findByProductId(any());
         }
 
@@ -96,7 +97,7 @@ class InventoryRedissonLockAdapterTest {
         void returns0_whenProductNotFound() {
             given(jpaRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.empty());
 
-            assertEquals(0, sut.reserveAtomic(PRODUCT_ID, QTY));
+            assertEquals(0, sut.reserveAtomic(PRODUCT_ID, QTY, ORDER_ID));
             verify(jpaRepository, never()).save(any());
         }
 
@@ -107,7 +108,7 @@ class InventoryRedissonLockAdapterTest {
                     .willReturn(Optional.of(entityWithQty(0, 0, 0)));
 
             assertThrows(OutOfStockException.class,
-                    () -> sut.reserveAtomic(PRODUCT_ID, QTY));
+                    () -> sut.reserveAtomic(PRODUCT_ID, QTY, ORDER_ID));
             verify(jpaRepository, never()).save(any());
         }
 
@@ -118,7 +119,7 @@ class InventoryRedissonLockAdapterTest {
             given(jpaRepository.findByProductId(PRODUCT_ID)).willReturn(Optional.of(entity));
             given(jpaRepository.save(any())).willReturn(entity);
 
-            assertEquals(1, sut.reserveAtomic(PRODUCT_ID, QTY));
+            assertEquals(1, sut.reserveAtomic(PRODUCT_ID, QTY, ORDER_ID));
             verify(jpaRepository).save(any(InventoryJpaEntity.class));
         }
     }

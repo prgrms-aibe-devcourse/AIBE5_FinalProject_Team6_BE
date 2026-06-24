@@ -38,7 +38,7 @@ public class InventoryRedissonLockAdapter implements InventoryRepository {
     private final RedissonClient redissonClient;
 
     @Override
-    public int reserveAtomic(Long productId, int qty) {
+    public int reserveAtomic(Long productId, int qty, Long orderId) {
         RLock lock = redissonClient.getLock(LOCK_KEY_PREFIX + productId);
         try {
             if (!lock.tryLock(LOCK_WAIT_SECONDS, LOCK_LEASE_SECONDS, TimeUnit.SECONDS)) {
@@ -60,7 +60,7 @@ public class InventoryRedissonLockAdapter implements InventoryRepository {
             Inventory inventory = entityOpt.get().toDomain();
             // OutOfStockException·ReserveFailedException 은 잡지 않고 전파
             // → InventoryReserveAdapter 가 각각 OUT_OF_STOCK·RESERVE_FAILED 로 변환
-            inventory.reserve(qty, null);
+            inventory.reserve(qty, orderId);
             jpaRepository.save(InventoryJpaEntity.from(inventory));
             return 1;
         } catch (InterruptedException e) {
