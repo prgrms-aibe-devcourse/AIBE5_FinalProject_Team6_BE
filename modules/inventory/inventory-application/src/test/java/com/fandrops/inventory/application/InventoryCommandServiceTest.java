@@ -1,6 +1,5 @@
 package com.fandrops.inventory.application;
 
-import com.fandrops.inventory.application.exception.InventoryLockConflictException;
 import com.fandrops.inventory.application.exception.InventoryNotFoundException;
 import com.fandrops.inventory.domain.Inventory;
 import com.fandrops.inventory.domain.InventoryChangeType;
@@ -67,8 +66,8 @@ class InventoryCommandServiceTest {
         }
 
         @Test
-        @DisplayName("OutOfStockException 발생 시 retry 없이 즉시 전파")
-        void reserve_outOfStock_propagatesImmediately() {
+        @DisplayName("OutOfStockException 발생 시 즉시 전파")
+        void reserve_outOfStock_propagates() {
             doThrow(new OutOfStockException(PRODUCT_ID)).when(reserveTxHelper).reserveOnce(ORDER_ID, PRODUCT_ID, 10);
 
             assertThrows(OutOfStockException.class, () -> sut.reserve(ORDER_ID, PRODUCT_ID, 10));
@@ -77,35 +76,13 @@ class InventoryCommandServiceTest {
         }
 
         @Test
-        @DisplayName("InventoryNotFoundException 발생 시 retry 없이 즉시 전파")
-        void reserve_inventoryNotFound_propagatesImmediately() {
+        @DisplayName("InventoryNotFoundException 발생 시 즉시 전파")
+        void reserve_inventoryNotFound_propagates() {
             doThrow(new InventoryNotFoundException(PRODUCT_ID)).when(reserveTxHelper).reserveOnce(ORDER_ID, PRODUCT_ID, 10);
 
             assertThrows(InventoryNotFoundException.class, () -> sut.reserve(ORDER_ID, PRODUCT_ID, 10));
 
             verify(reserveTxHelper, times(1)).reserveOnce(ORDER_ID, PRODUCT_ID, 10);
-        }
-
-        @Test
-        @DisplayName("InventoryLockConflictException 2회 연속 시 최종 예외 전파, 2회 시도")
-        void reserve_lockConflict_allAttemptsFail_throws() {
-            doThrow(new InventoryLockConflictException(PRODUCT_ID)).when(reserveTxHelper).reserveOnce(ORDER_ID, PRODUCT_ID, 10);
-
-            assertThrows(InventoryLockConflictException.class, () -> sut.reserve(ORDER_ID, PRODUCT_ID, 10));
-
-            verify(reserveTxHelper, times(2)).reserveOnce(ORDER_ID, PRODUCT_ID, 10);
-        }
-
-        @Test
-        @DisplayName("InventoryLockConflictException 1회 후 재시도 성공")
-        void reserve_lockConflictThenSuccess_retries() {
-            doThrow(new InventoryLockConflictException(PRODUCT_ID))
-                    .doNothing()
-                    .when(reserveTxHelper).reserveOnce(ORDER_ID, PRODUCT_ID, 10);
-
-            sut.reserve(ORDER_ID, PRODUCT_ID, 10);
-
-            verify(reserveTxHelper, times(2)).reserveOnce(ORDER_ID, PRODUCT_ID, 10);
         }
     }
 
