@@ -50,10 +50,10 @@ VALUES (1, 'fan@fandrops.test', '테스트팬', 'LOCAL', 'local-fe-1',
 --    agency_id=1 -- 위에서 생성한 테스트 기획사 계정과 연결
 INSERT INTO artist_profile (id, agency_id, name, fan_count, joined_at, bio)
 VALUES
-    (1, 1, 'NOVA',  0, '2024-01-01 00:00:00',  'FE 검증용 테스트 아티스트 NOVA'),
-    (2, 1, 'LUNA',  0, '2024-01-01 00:00:00',  'FE 검증용 테스트 아티스트 LUNA'),
-    (3, 1, 'ECHO',  0, '2024-01-01 00:00:00',  'FE 검증용 테스트 아티스트 ECHO'),
-    (4, 2, 'PRISM', 0, DATE_ADD(NOW(), INTERVAL -8 DAY), '입점 승인 데모 — Admin 심사 APPROVED 후 생성된 아티스트 그룹');
+    (1, 1, 'NOVA',  20000, '2024-01-01 00:00:00',  'FE 검증용 테스트 아티스트 NOVA'),
+    (2, 1, 'LUNA',  15000, '2024-01-01 00:00:00',  'FE 검증용 테스트 아티스트 LUNA'),
+    (3, 1, 'ECHO',  12000, '2024-01-01 00:00:00',  'FE 검증용 테스트 아티스트 ECHO'),
+    (4, 2, 'PRISM', 10000, DATE_ADD(NOW(), INTERVAL -8 DAY), '입점 승인 데모 — Admin 심사 APPROVED 후 생성된 아티스트 그룹');
 
 -- 3-1. 아티스트 멤버 (finalize_assets.py 프로필 기준 인원·이름)
 --    id=1 고정 -> JWT sub=1 role=ARTIST, login_id: NovaHaneul / Test1234!
