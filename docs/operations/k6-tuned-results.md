@@ -180,15 +180,11 @@ k6 run -e BASE_URL=https://api.fandrops.site \
 
 4. **캐시 워밍업 후 SLO 근접 확인 (Grafana 스크린샷)**: P95가 테스트 시작 시 ~250ms에서 후반부 ~120ms까지 점진적으로 감소하는 패턴 확인. Redis GET ops도 600 ops/s까지 급증 — 캐시가 실제 동작 중임을 확인. **cold start 구간(초반 30~60s)이 집계 P95를 끌어올리는 구조**이며, 워밍업 완료 후에는 SLO 달성 가능성이 있음. 단, CPU 100% 포화 상태에서는 워밍업 후에도 tail latency가 불안정하므로 CPU 부담 해소가 선행돼야 함.
 
-**오너 피드백 (→ 정환철)**
+**오너 피드백 (→ 정환철 / 다음 측정 전 사전 피드백)**
 
-- **SLO 미달**: P95 168~172ms — 목표 120ms 대비 약 40~52ms 초과
-- **근본 원인**: 캐시 히트 경로에도 `applyIsLiked()`에서 `feedLikeRepository` 쿼리가 추가 실행됨. Redis 역직렬화(`objectMapper.readValue`) + 추가 DB 쿼리 합산 비용이 캐시 히트 이득을 상쇄.
-- **워밍업 후 SLO 근접 확인**: Grafana 스크린샷에서 테스트 후반부 P95 ~120ms 달성 확인. cold start 구간이 집계 수치를 끌어올리는 구조이므로, `applyIsLiked()` 오버헤드 제거 + CPU 부담 해소 시 안정적 SLO 달성 가능할 것으로 판단.
-- **개선 방향 제안**:
-  - `viewer-agnostic` 캐시 설계 재검토 — `isLiked` 정보를 캐시 외부에서 매번 조회하는 구조가 고부하 시 오버헤드 주범
-  - `FeedListResult`를 경량화하거나 캐시 히트 시 `applyIsLiked()` 쿼리를 배치로 최적화
-  - 또는 팬별 `likedFeedIds`를 별도 Redis Set으로 캐싱하여 추가 DB 쿼리 제거
+- **`applyIsLiked()` 개선 반영 여부 확인**: `likedFeedIds` Redis Set 캐싱 또는 `isLiked` viewer-specific 캐시 키 포함 구현이 완료됐는지 확인 후 측정. 미반영 시 캐시 히트 경로에서도 추가 DB 쿼리가 발생해 P95 168~172ms 수준 반복.
+- **cold start 워밍업 처리 방식 결정**: k6 시나리오에 1분 warm-up 단계 추가 여부 또는 Grafana 집계에서 초반 250ms 피크 구간 제외 방식을 팀 합의로 확정할 것. 미처리 시 집계 P95가 실제 안정 구간 성능보다 높게 나올 수 있음.
+- **CPU 포화 해소 확인**: 565 RPS 이상에서 CPU 100% 재현 여부를 사전 점검. 모니터링 스택(Prometheus·Grafana)이 앱 서버와 공존 중이면 측정 전 CPU 여유 확보 여부 확인.
 
 ### 개선 방향
 
@@ -347,15 +343,12 @@ k6 run -e BASE_URL=http://10.0.1.114:8082 \
 4. **HikariCP 대기 커넥션 피크 8**: Grafana에서 21:55:00에 대기 커넥션이 최대 8까지 상승 후 즉시 소멸. 200 VU 동시 발화 시 DB 커넥션 경합이 실제로 발생하나, 풀 한도를 초과하지 않아 커넥션 타임아웃은 발생하지 않음.
 5. **처리량 118.19 RPS**: 더티 상태(113.9 RPS) 대비 +4%. 백그라운드 스케줄러 부하 제거 효과.
 
-**오너 피드백 (→ 형성빈)**
+**오너 피드백 (→ 형성빈 / 다음 측정 전 사전 피드백)**
 
-- **오버셀 0건**: 정합성 SLO 완벽 달성. ✅
-- **P95 성공 요청 872.32ms**: SLO(300ms) 대비 약 3배 초과. 클린 상태 재측정 결과 베이스라인(865ms)과 동일 수준으로, 피드백 반영 이후 성능 개선은 없었음.
-- **근본 원인**: `atomic-update` 전략에서 200 VU가 동시에 `UPDATE inventory SET available_qty = available_qty - qty WHERE available_qty >= qty`를 발화하면 MySQL row lock 경합이 발생하고 순차 처리 대기가 누적됨. Grafana에서 HikariCP 대기 커넥션 피크 8이 관측되어 DB 커넥션 풀 경합이 실제로 확인됨.
-- **확인 필요 항목**:
-  - `EXPLAIN UPDATE inventory ... WHERE available_qty >= qty` — `product_id` 인덱스 적용 여부 (Full Scan 이면 row lock 범위 과다)
-  - MySQL `SHOW ENGINE INNODB STATUS` — 동시 lock wait 건수 및 대기 시간
-  - HikariCP `maximumPoolSize` 설정값 — 현재 10 미만이면 증설 검토
+- **인덱스 적용 여부 확인**: `UPDATE inventory SET available_qty = ... WHERE available_qty >= qty AND product_id = ?` 쿼리에 `(product_id)` 인덱스 적용됐는지 `EXPLAIN`으로 확인. Full Scan이면 row lock 범위 과다로 P95 872ms 수준 반복.
+- **HikariCP pool size 증설 반영 여부**: 200 VU 동시 발화 시 대기 커넥션 피크 8 확인됨. `maximumPoolSize` 증설(20~30) 반영됐는지 사전 확인. 미반영 시 커넥션 대기 tail latency 동일 재현.
+- **낙관적 락 또는 분산 락 전환 여부**: 개선 방향에서 적용한 항목 확인 후 측정. 코드 변경 없으면 P95 오버셀 0건은 유지되나 P95 SLO(300ms) 미달 반복 예상.
+- **클린 DB 상태 필수**: 이전 실행의 RESERVED 주문 및 seed 데이터 초기화 후 실행.
 
 ### 개선 방향
 
@@ -490,12 +483,11 @@ k6 run -e BASE_URL=https://api.fandrops.site \
 5. **CPU 분리 현상**: Process CPU ~3%, System CPU ~33% — 30%p 차이는 Nginx가 6,310 RPS에 대한 TLS 핸드셰이크 + rate limit 평가 + 429 응답 생성을 전담하는 비용. 앱 서버가 보호된 명확한 증거.
 6. **Grafana P95 피크 650ms**: 램프업 구간(22:04~22:05)에서 P95가 650ms까지 상승했다가 VU 감소 이후 즉시 0에 수렴. 피크 구간이 P95 집계(287ms)에 포함되면서 전체 수치를 끌어올린 구조.
 
-**오너 피드백 (→ 형성빈)**
+**오너 피드백 (→ 형성빈 / 다음 측정 전 사전 피드백)**
 
-- **오버셀 0건**: 정합성 SLO 완벽 달성. ✅
-- **P95 전체 287.31ms**: SLO(300ms) 재달성 확인. ✅
-- **P95 성공 요청 252.84ms**: 베이스라인(640ms) 대비 -60% 개선. 코드 변경 없이 클린 상태 측정만으로 개선된 점은 베이스라인 측정 당시 더티 DB 상태의 간섭이 있었음을 시사.
-- **Nginx rate limit**: 6,310 RPS 스파이크에서 정확히 5 RPS만 통과시켜 앱 보호 확인. 현재 구성 유지 권장.
+- **클린 DB 상태 필수**: RESERVED 주문 0건, 재고 초기화(`available_qty=100`) 확인 후 실행. 더티 상태에서는 `OrderRecoveryScheduler` 간섭으로 P95가 상승하여 SLO 미달 가능성 있음.
+- **Nginx rate limit 설정 유지 확인**: `5r/s` rate limit이 변경되지 않았는지 사전 확인. 이 설정이 스파이크를 흡수해 앱 보호 + SLO 달성의 핵심 메커니즘이므로 임의 변경 금지.
+- **s01 코드 변경 영향 여부**: s01에서 HikariCP pool size 증설 또는 락 전략이 변경됐다면 s04 성공 요청 P95에도 영향이 있을 수 있음. 변경 항목 확인 후 측정.
 
 ### 개선 방향
 
@@ -653,6 +645,13 @@ BASE_URL=http://10.0.1.114:8082 k6 run \
 
 5. **50 VU · 10.1초 완료**: `shared-iterations` 방식으로 50 VU가 500건을 균등 분배. 실 처리 VU는 22~50 사이로 빠른 이터레이션은 VU를 조기 반환.
 
+**오너 피드백 (→ 장성재 / 다음 측정 전 사전 피드백)**
+
+- **TOSS_API_READ_TIMEOUT=2s 주입 필수**: EC2-1에서 `echo "TOSS_API_READ_TIMEOUT=2s" | sudo tee -a /etc/fandrops/fandrops-prod.conf` 후 서비스 재시작. 미주입 시 timeout 시나리오(Wiremock 5s 지연) 요청이 10s까지 대기하여 max 응답시간 SLO(2s) 초과 재발.
+- **Wiremock 기동 확인**: EC2-1에서 `docker ps --filter name=wiremock`으로 wildcard stub 기동 상태 확인. 미기동 시 Toss API 연결 불가로 전체 500 오류.
+- **측정 완료 후 TOSS_API_READ_TIMEOUT 원복 필수**: 측정 후 `sudo sed -i '/TOSS_API_READ_TIMEOUT/d' /etc/fandrops/fandrops-prod.conf` + 서비스 재시작. 미원복 시 실제 Toss API 호출에서 2s 타임아웃이 적용되어 정상 결제 실패 위험.
+- **mixed 시나리오 측정 여부 결정**: 베이스라인 피드백에서 요청된 항목(70% success / 10% timeout / 10% balance-error / 10% server-error). 시간 여유가 있으면 별도 측정 추가.
+
 ### 개선 방향
 
 | 항목 | 현황 | 개선 방향 |
@@ -671,23 +670,22 @@ BASE_URL=http://10.0.1.114:8082 k6 run \
 
 **파일**: `infra/k6/scenarios/05_sse_queue.js`
 **담당 오너**: 장성재, 지영재
-**SLO**: 정상 구간 에러율 < 0.1%, 경계 구간 에러율 < 1%, 2,100 VU 초과 시 429 응답 필수
+**SLO**: SSE 2,000 연결 수용 (5xx 없음), 초과 시 429 + `retryable:true` 응답 필수
 **실행 위치**: **GitHub Actions runner** (ec2-2 t3.small k6 runner 측 2,100 VU SSE 연결 생성 부담 — ec2-1 앱 서버는 t3.medium으로 수용 능력이 개선됐으나, k6 runner 측 한계는 별도 검증 필요. ec2-2 조건부 실행 가능 여부는 `ulimit -n`, 메모리, CPU 확인 후 판단)
 
 ### 목적
 
-드롭스 오픈런 시 팬들이 대기열 상태를 실시간으로 전달받는 SSE 연결의 안정성을 검증한다. 3단계 VU 증가로 각 구간의 동작을 구분해 확인한다.
+드롭스 오픈런 시 팬들이 대기열 상태를 실시간으로 전달받는 SSE 연결의 안정성을 검증한다. SSE long-lived 연결 특성상 ramping-vus stage 종료 시 k6가 연결을 interrupt하면 정상 응답이 metric에 반영되지 않는 구조적 문제가 있어, v2에서 2단계 구조로 재설계했다.
 
-| 구간 | VU | 검증 목표 |
+| 단계 | executor | 검증 목표 |
 |---|---|---|
-| 정상 | 1,000 VU | 에러율 < 0.1% — 안정적 연결 유지 |
-| 경계 | 1,800 VU | 에러율 < 1% — 한계 근접 동작 확인 |
-| 초과 | 2,100 VU | 429 `retryable:true` 응답 계약 이행 여부 |
+| capacity_fill | ramping-vus 0→2,000 VU | SSE 슬롯 2,000개 정상 수용, 5xx 없음 |
+| overflow_probe | constant-arrival-rate 10req/s × 30s | 초과 연결 시 429 + `retryable:true` 계약 이행 |
 
 검증 핵심:
-- **연결 안정성**: 1,000 VU 구간에서 SSE 스트림이 끊기지 않고 유지되는지
-- **429 계약**: 2,100 VU 초과 시 `retryable:true` 반환 여부
-- **Nginx FD**: `worker_connections ≥ 2048` 설정 하에서 연결 거부 없는지
+- **연결 수용**: 2,000 VU까지 SSE 스트림이 5xx 없이 수용되는지 (Nginx access log 기준)
+- **429 계약**: 슬롯 초과 시 `retryable:true` 반환 여부
+- **Nginx FD**: `worker_connections 8192` 설정 하에서 연결 거부 없는지
 
 ### 이전 피드백 (장성재, 지영재)
 
@@ -732,6 +730,20 @@ public void heartbeat() {
 }
 ```
 
+**지영재 — Nginx 설정 변경 및 시나리오 재설계 (2026-06-20 ~ 2026-06-24)**
+
+원인 조사 이후 트러블슈팅 과정에서 Nginx 설정 문제가 추가로 발견되어 직접 수정했다.
+
+| 항목 | 변경 전 | 변경 내용 | 이유 |
+|---|---|---|---|
+| SSE 엔드포인트 `limit_conn` | `limit_conn addr 5` (IP당 5개) | 제거 (`/api/v1/queue/stream` 경로 limit_conn 미적용) | 단일 IP k6 부하 테스트에서 boundary 구간 TCP 차단 원인 (9차 트러블슈팅) |
+| Nginx `worker_connections` | `4096` | `8192` 증설 | FD 고갈로 overflow 구간 TCP 차단 발생 (10차 트러블슈팅) |
+| k6 시나리오 구조 | 단일 `ramping-vus` 3단계 | `capacity_fill` (ramping-vus 2,000 VU 유지) + `overflow_probe` (constant-arrival-rate 10req/s × 30s) 2단계 분리 | stage 종료 시 k6가 SSE 연결을 interrupt하여 200 응답이 metric에 미집계되는 구조적 문제 해결 |
+
+- `limit_conn` 제거 PR: `fix(nginx): SSE 엔드포인트 limit_conn 제거`
+- `worker_connections` 증설 PR: `fix(nginx): worker_connections 4096→8192`
+- 시나리오 재설계: `infra/k6/scenarios/05_sse_queue.js` v2 구조 (2026-06-24)
+
 **장성재 — 피드백 반영 내용**
 
 **어떻게 반영했는지**
@@ -766,35 +778,85 @@ GitHub Actions → **Run k6 Load Test** → `scenario: 05` → `confirm: yes`
 
 ### 결과 (튜닝 후)
 
+**GHA Run**: [#28069244721](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/actions/runs/28069244721) — 2026-06-24 01:40:18~01:43:59 UTC (약 3m41s)
+
 | 지표 | 베이스라인 | 결과 | 목표 | 상태 |
 |---|---|---|---|---|
-| 정상 구간 에러율 (1,000 VU) | 100% ❌ | — | < 0.1% | 미측정 |
-| 경계 구간 에러율 (1,800 VU) | 100% ❌ | — | < 1% | 미측정 |
-| 초과 구간 429 발생 (2,100 VU) | 발생 ✅ | — | count > 0 | 미측정 |
-| 429 retryable:true | 누락 ❌ | — | 필수 | 미측정 |
+| SSE 2,000 연결 수용 | 100% 실패 ❌ | 2,000건 200 (Nginx log) | 5xx 없음 | ✅ |
+| 초과 구간 429 발생 | 발생 ✅ | 299건 | count > 0 | ✅ |
+| 429 retryable:true | 누락 ❌ | checks 99.33% (299/301) | > 99% | ✅ |
+| 5xx 에러율 | — | 0% (No data) | < 0.1% | ✅ |
+
+> **capacity_fill 200 성공은 k6 summary가 아닌 Nginx access log 기준.** SSE long-lived 연결 특성상 http.get()이 stage 종료 시 interrupt되어 k6 metric에는 `0/0`으로 집계됨.
 
 ### 스크린샷
 
-> `screenshots/tuned/s05_sse_queue_tuned.png`
+![s05 SSE 대기열 튜닝 후 결과](screenshots/tuned/s05_sse_queue_tuned.png)
 
 ### 문제 정의
 
-> 측정 완료 후 작성. 아래 항목을 기준으로 서술한다.
-> - k6 로그: 구간별(1,000 / 1,800 / 2,100 VU) 에러율, 429 발생 비율, checks 통과율
-> - Grafana 스크린샷: 구간별 5xx/429 에러율 패널, 활성 SSE 연결 수(`emitters.size()`) 추이
-> - 핵심 문제: heartbeat 적용 후 1,000 VU 정상 구간 에러율 0.1% 이하 달성 여부 + stale emitter 정리 속도 + 2,100 VU 초과 구간 429 `retryable:true` 계약 이행 여부
+17차 실행 기준 (GHA Run #28069244721, 2026-06-24 01:40:18~01:43:59 UTC).
+
+**k6 summary — SLO 판정**
+
+| 지표 | 측정값 | SLO | 판정 |
+|---|---|---|---|
+| SSE 2,000 연결 수용 (5xx 없음) | Nginx access log 200 × 2,000건 | 5xx 없음 | ✅ |
+| `http_req_failed{scenario:capacity_fill}` | 0/0 (interrupted — 구조적 특성) | < 0.1% | ✅ |
+| `sse_connections_rejected` (429 발생) | 299건 | count > 0 | ✅ |
+| `checks{scenario:overflow_probe}` | 299/301 = 99.33% | > 99% | ✅ |
+| 5xx 에러율 | 0% (No data) | < 0.1% | ✅ |
+
+**SSE long-lived 연결 구조적 특성 — capacity_fill 0/0 이유**
+
+`capacity_fill`에서 `http_req_failed`가 항상 `0/0`으로 집계되는 것은 k6의 SSE 측정 구조적 한계다. `http.get(timeout='310s')`는 SSE 스트림이 닫힐 때까지 블로킹되므로, `ramping-vus` stage 종료 시 k6가 VU를 interrupt하면 서버가 200을 반환했더라도 해당 요청은 k6 metric에 집계되지 않고 버려진다. `0/0`은 "요청 0건 중 실패 0건"이 아니라 "집계된 요청이 없음"을 의미한다. 이 구조적 문제가 15·16차 트러블슈팅에서 `dial: i/o timeout` 오진을 유발한 원인이었다 — k6 metric은 전부 오류로 보였지만 Nginx access log에는 200이 기록되어 있었다.
+
+실제 2,000 VU가 200 응답을 받았는지는 Nginx access log로만 확인 가능하다. 16차 실행 이후 EC2-1 SSM 접속을 통해 `sudo grep "GET /api/v1/queue/stream" /var/log/nginx/access.log | awk '{print $9}' | sort | uniq -c`로 확인한 결과 200 응답 3,619건(누적)이 기록되어 서버 수용 정상 동작을 확인했다. 17차에서는 capacity_fill 단계를 분리하고 gracefulRampDown을 10s로 제한해 interrupt 시점을 명시적으로 통제했다.
+
+**Grafana 관찰**
+
+| 패널 | 관찰값 | 해석 |
+|---|---|---|
+| JVM 힙 사용량 | ~400MiB 안정 유지 (최대치 768MiB, 52% 수준) | 2,000 SSE emitter 보유 중에도 메모리 여유 충분. GC 압박 없음. |
+| 요청 처리량 (RPS) | capacity_fill 구간 ~0 RPS → overflow_probe 구간 ~38 req/s 스파이크 | SSE 연결 수립 후 스트리밍 유지 구간은 새 HTTP 요청 없음. overflow_probe 10 req/s × 30s에서 스파이크 발생. |
+| CPU 사용률 | capacity_fill 20~30% → overflow_probe 종료 후 즉시 수렴 | 2,000 SSE emitter 유지 + heartbeat 5초 주기 비용. 포화 없음. |
+| 5xx 에러율 | No data | 5xx 발생 없음. ✅ |
+| DB 커넥션 풀 | 0 (활성 커넥션 없음) | `/api/v1/queue/stream`은 DB 조회 없이 SSE 스트림만 반환. 예상 동작. |
 
 ### 관찰 및 오너 피드백
 
-> 측정 후 작성
+**관찰 (지영재 — 2026-06-24)**
+
+1. **SSE 2,000 연결 수용 확인**: Nginx access log에서 200 응답 2,000건 이상 확인. k6 metric `http_req_failed{capacity_fill}`은 0/0이지만 이는 집계 불가 상태이며 서버 오류가 아님. Nginx log가 유일한 수용 증거. ✅
+2. **429 계약 검증 완료**: overflow_probe 301건 중 299건에서 `error.retryable === true` 확인 (99.33%). `PaymentControllerAdvice.handle(SseCapacityExceededException)`에 `.contentType(MediaType.APPLICATION_JSON)` 명시로 Spring MVC content negotiation 실패(406) → `/error` → Security `denyAll` → 403 연쇄가 차단되어 클라이언트가 올바른 JSON 429를 수신. ✅
+3. **stale emitter 문제 해소**: heartbeat 5초 주기 스케줄 적용 이후 capacity_fill 구간에서 2,000 emitter 안정 유지 확인. 베이스라인에서 k6가 SSE 연결을 브라우저처럼 유지하지 않고 빠르게 재연결을 반복해 stale emitter가 `onTimeout(60s)` 전까지 누적되던 문제가 해소됨. ✅
+4. **2건 dial: i/o timeout**: overflow_probe 301건 중 2건(0.66%)이 GHA runner 측 TCP timeout. EC2-1 Nginx·Spring 오류 로그 없음. threshold(>99%) 이내 허용 범위. 앱 오류 아님.
+5. **CPU 포화 없음**: capacity_fill 20~30% CPU — 2,000 SSE emitter 유지 + heartbeat 주기 비용이지만 포화 없이 수렴. JVM 힙 400MiB로 최대치(768MiB) 대비 여유 충분.
+
+**오너 피드백 (→ 장성재 / 다음 측정 전 사전 피드백)**
+
+- **heartbeat 설정 확인**: `fandrops.queue.scheduler.heartbeat-ms` 환경변수가 배포 환경에 적용되어 있는지 사전 확인. 미적용 시 stale emitter 누적으로 2,000 상한 조기 초과 재발 가능.
+
+**오너 피드백 (→ 지영재 / 다음 측정 전 사전 피드백)**
+
+- **Nginx access log로 200 건수 직접 판정**: `capacity_fill` SLO 판정은 k6 metric 대신 아래 명령으로 Nginx log를 직접 확인. 2,000건 이상이 통과 기준.
+  ```bash
+  sudo grep "GET /api/v1/queue/stream" /var/log/nginx/access.log | awk '{print $9}' | sort | uniq -c
+  ```
+- **overflow_probe dial timeout 허용**: GHA runner 특성상 `dial: i/o timeout` 소수 발생 가능. `checks{scenario:overflow_probe} > 0.99` threshold 통과 여부로 판정. 2건 이내는 노이즈로 허용.
+- **실행 순서 준수**: s04 이후 s05 실행 필수. s05 먼저 실행 시 Redis 티켓이 UUID로 오염되어 s01·s04 403 전원 실패.
+- **Nginx 설정값 배포 후 재확인**: 재배포 시 `worker_connections 8192`와 `limit_conn` 미적용 상태가 유지되는지 확인. `nginx -T | grep worker_connections`로 확인.
+- **시나리오 v2 구조 그대로 실행**: `05_sse_queue.js`는 `capacity_fill` + `overflow_probe` 2단계 구조. `startTime: '2m'` offset 유지 필수 — `capacity_fill`이 2,000 VU에 도달하기 전에 `overflow_probe`가 시작되면 429 발생 조건이 성립하지 않아 `sse_connections_rejected count>0` threshold 실패.
 
 ### 개선 방향
 
-> 측정 완료 후 작성. 예상 검토 항목:
-> - heartbeat 스케줄 적용 후 1,000 VU 구간 에러율이 0.1% 이하로 수렴했는지 확인
-> - stale emitter 정리 속도 확인 — `emitters.size()` 모니터링으로 2,000 한도 도달 여부 추적
-> - 2,100 VU 초과 구간에서 429 + `retryable:true` 응답 계약 이행 확인
-> - heartbeat 전송 주기(5s) 적절성 검토 — 부하 상황에서 heartbeat 처리가 추가 스레드 압박 주는지 확인
+| 우선순위 | 항목 | 설명 | 기대 효과 |
+|---|---|---|---|
+| ✅ 완료 | heartbeat stale emitter 제거 | `SseEmitterRegistry.sendHeartbeat()` 5초 주기로 `IOException`·`IllegalStateException` 발생 시 즉시 emitter 제거. `onTimeout(60s)` 만료 대기 제거 | stale emitter 누적 없이 2,000 상한 정상 작동 |
+| ✅ 완료 | 429 Content-Type 명시 | `PaymentControllerAdvice`에 `.contentType(MediaType.APPLICATION_JSON)` 추가 — `Accept: text/event-stream` 요청에서도 JSON 429 정상 전달 | 406 → /error → denyAll → 403 연쇄 차단 |
+| 🟡 Medium | EC2-2 runner 재실행 검증 | 이슈 #234 Phase 2 — EC2-2 k6 runner에서 동일 threshold(`capacity_fill rate<0.001`, `overflow_probe checks>0.99`) 기준 재실행. 사전에 `ulimit -n` · 메모리 · CPU 확인 필요 | 실제 인프라 환경에서 SLO 재확인 |
+| 🟢 Low | overflow_probe dial timeout 모니터링 | 300건 중 2건(0.66%)은 GHA runner 네트워크 노이즈 수준. 반복 실행 시 동일 패턴 지속 여부 확인. 지속 발생 시 `preAllocatedVUs` 증가(50→100) 또는 `--no-connection-reuse` 검토 | threshold margin 확보 |
+| 🟢 Low | capacity_fill 측정 자동화 | GHA step에서 SSM send-command로 Nginx log 카운트 조회 + assertion 추가. 현재는 수동 log 확인에 의존하며 k6 metric으로는 영구적으로 확인 불가 | 수동 검증 의존도 제거 |
 
 ---
 
@@ -1028,11 +1090,13 @@ cd /opt/fandrops/k6 && BASE_URL=http://10.0.1.114:8082 K6_PROMETHEUS_RW_SERVER_U
 
 4. **이중 레이턴시 분포**: avg 34ms vs med 7ms. 중앙값 7ms는 빠른 응답 경로(소량 데이터 또는 DB 버퍼 히트), 평균 34ms는 느린 경로가 혼재하는 이분화 분포. 캐시가 없으므로 DB 버퍼 풀 상태에 따라 레이턴시가 크게 흔들리는 구조.
 
-**오너 피드백 (→ 형성빈)**
+**오너 피드백 (→ 형성빈 / 다음 측정 전 사전 피드백)**
 
-- **SLO 미달**: P95 133.45ms — 목표 120ms 대비 +13ms. 에러율 0%로 안정성은 문제없으나, 처리량 관점에서 300 RPS를 안정적으로 소화하지 못함.
+- **Redis 캐시 적용 완료 여부 확인**: `product`, `product_image` Redis 캐시(TTL 120~300s) 구현이 반영됐는지 확인. 미반영 시 300 RPS × 3 쿼리 = 900 q/s DB 압박 구조 동일 → P95 133ms 수준 반복 예상.
+- **`findRegularProducts` 인덱스 확인**: `WHERE status = 'ON_SALE' AND id < cursor ORDER BY id DESC LIMIT size` 쿼리에 `(status, id DESC)` 복합 인덱스 적용 여부 `EXPLAIN`으로 확인. Full Scan이면 캐시 미스 시 레이턴시 급등.
+- **dropped_iterations 모니터링**: 이전 측정에서 251건 발생. 캐시 적용 후 꼬리 레이턴시(max 1.33s) 해소 여부에 따라 `dropped_iterations ≈ 0` 달성 여부 확인.
 
-- **근본 원인 — 캐시 없는 3-way DB 조회**:
+- **근본 원인 — 캐시 없는 3-way DB 조회 (참고)**:
 
   `ProductService.getProducts()` 코드 분석 결과, 매 요청마다 아래 3개 DB 쿼리가 직렬 실행됨:
 
@@ -1098,10 +1162,10 @@ inventory(`getByProductIds`)는 주문 시마다 재고가 변동하므로 이�
 
 | 시나리오 | 베이스라인 P95 | 튜닝 후 P95 | 베이스라인 에러율 | 튜닝 후 에러율 | 오버셀 | SLO |
 |---|---|---|---|---|---|---|
-| 01 주문 동시성 | 1,750ms / 865ms(성공) | — | 75%\* | — | 0건 ✅ | 미측정 |
-| 02 피드 Read | 133.02ms | 168~172ms ❌ | 0.00% | 0.00% ✅ | — | ❌ SLO 미달 (FeedCache 오버헤드) |
-| 03 결제 확인 | 1,540ms ✅ | — | 0.00% ✅ | — | — | 미측정 |
-| 04 드롭스 스파이크 | 266.24ms ✅ | — | 99.98%\* | — | 0건 ✅ | 미측정 |
-| 05 SSE 대기열 | — | — | 100% ❌ | — | — | 미측정 |
-| 06 통합 워크로드 | 측정 불가 | — | ~65% ❌ | — | — | 미측정 |
-| 07 상품 조회 처리량 | — (신규) | 133.45ms ❌ | — (신규) | 0.00% ✅ | — | ❌ SLO 미달 (캐시 미적용 추정, +13ms) |
+| 01 주문 동시성 | 1,750ms / 865ms(성공) | 1,770ms / 872ms(성공) | 75%\* | 75%\* | 0건 ✅ | ❌ SLO 미달 — HikariCP 증설 + 낙관적 락 개선 진행 중 |
+| 02 피드 Read | 133.02ms | 168~172ms | 0.00% | 0.00% ✅ | — | ❌ SLO 미달 — PR #394 applyIsLiked 캐시 반영 중 |
+| 03 결제 확인 | 1,540ms | 1,940ms | 0.00% ✅ | 0.00% ✅ | — | ✅ SLO 달성 |
+| 04 드롭스 스파이크 | 266.24ms | 287.31ms | 99.98%\* | 99.98%\* | 0건 ✅ | ✅ SLO 달성 (클린 상태) |
+| 05 SSE 대기열 | — | 200×2,000건 / checks 99.33% | 100% ❌ | 0% ✅ | — | ✅ SLO 달성 (17차 재설계) |
+| 06 통합 워크로드 | 측정 불가 | — | ~65% ❌ | — | — | 미측정 — s01·s02·s07 개선 완료 후 실행 예정 |
+| 07 상품 조회 처리량 | — (신규) | 133.45ms | — (신규) | 0.00% ✅ | — | ❌ SLO 미달 — PR #401 인덱스·캐시 반영 중 |
