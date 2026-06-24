@@ -96,9 +96,9 @@ export default function () {
 
   http5xxRate.add(res.status >= 500);
 
-  // success/timeout: 200·201 기대 / balance-error: 400 / server-error: 5xx
+  // success/timeout: 200·201 기대 / balance-error: 400 / server-error: 5xx / PG timeout: 408
   check(res, {
     'confirm accepted or expected error': (r) =>
-      r.status === 200 || r.status === 201 || r.status === 400 || r.status === 500,
+      r.status === 200 || r.status === 201 || r.status === 400 || r.status === 408 || r.status === 500,
   });
 }

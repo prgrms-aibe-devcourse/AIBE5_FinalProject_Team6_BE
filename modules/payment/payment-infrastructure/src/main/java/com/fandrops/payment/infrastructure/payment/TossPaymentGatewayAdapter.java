@@ -1,5 +1,6 @@
 package com.fandrops.payment.infrastructure.payment;
 
+import com.fandrops.payment.application.payment.PaymentConfirmTimeoutException;
 import com.fandrops.payment.application.payment.TossAuthenticationException;
 import com.fandrops.payment.application.payment.TossConfirmResult;
 import com.fandrops.payment.application.payment.TossPaymentPort;
@@ -12,6 +13,7 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
@@ -49,6 +51,9 @@ class TossPaymentGatewayAdapter implements TossPaymentPort {
             Instant approvedAt = OffsetDateTime.parse(response.approvedAt()).toInstant();
             return TossConfirmResult.success(response.method(), approvedAt);
 
+        } catch (ResourceAccessException e) {
+            log.warn("Toss PG 호출 타임아웃 또는 네트워크 오류: {}", e.getMessage());
+            throw new PaymentConfirmTimeoutException("Toss PG 타임아웃: " + e.getMessage());
         } catch (RestClientResponseException e) {
             int status = e.getStatusCode().value();
             if (status == 401 || status == 403) {
