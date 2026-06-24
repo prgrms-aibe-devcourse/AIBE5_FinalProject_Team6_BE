@@ -9,6 +9,7 @@ public class Banner {
     private final Long id;
     private final BannerType bannerType;
     private final Long agencyId;
+    private final Long productId;
     private String title;
     private String imageUrl;
     private String landingUrl;
@@ -21,6 +22,7 @@ public class Banner {
         this.id = builder.id;
         this.bannerType = builder.bannerType;
         this.agencyId = builder.agencyId;
+        this.productId = builder.productId;
         this.title = builder.title;
         this.imageUrl = builder.imageUrl;
         this.landingUrl = builder.landingUrl;
@@ -60,6 +62,7 @@ public class Banner {
     public Long getId() { return id; }
     public BannerType getBannerType() { return bannerType; }
     public Long getAgencyId() { return agencyId; }
+    public Long getProductId() { return productId; }
     public String getTitle() { return title; }
     public String getImageUrl() { return imageUrl; }
     public String getLandingUrl() { return landingUrl; }
@@ -72,6 +75,7 @@ public class Banner {
         private Long id;
         private BannerType bannerType = BannerType.MAIN;
         private Long agencyId;
+        private Long productId;
         private String title;
         private String imageUrl;
         private String landingUrl;
@@ -83,6 +87,7 @@ public class Banner {
         public Builder id(Long id) { this.id = id; return this; }
         public Builder bannerType(BannerType bannerType) { this.bannerType = bannerType; return this; }
         public Builder agencyId(Long agencyId) { this.agencyId = agencyId; return this; }
+        public Builder productId(Long productId) { this.productId = productId; return this; }
         public Builder title(String title) { this.title = title; return this; }
         public Builder imageUrl(String imageUrl) { this.imageUrl = imageUrl; return this; }
         public Builder landingUrl(String landingUrl) { this.landingUrl = landingUrl; return this; }

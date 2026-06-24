@@ -46,7 +46,7 @@ class AdminBannerControllerTest {
     @BeforeEach
     void setUp() {
         controller = new AdminBannerController(bannerService, environment);
-        stub = new BannerResult(1L, null, "배너 제목", "img.jpg", "https://fandrops.com", 1, true, null, null);
+        stub = new BannerResult(1L, null, null, "배너 제목", "img.jpg", "https://fandrops.com", 1, true, null, null);
     }
 
     private void givenAuthenticated() {

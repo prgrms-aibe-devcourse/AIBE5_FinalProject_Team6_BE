@@ -42,6 +42,9 @@ public class BannerJpaEntity {
     @Column(name = "agency_id")
     private Long agencyId;
 
+    @Column(name = "product_id")
+    private Long productId;
+
     protected BannerJpaEntity() {}
 
     public static BannerJpaEntity from(Banner domain) {
@@ -56,6 +59,7 @@ public class BannerJpaEntity {
         entity.startAt = domain.getStartAt();
         entity.endAt = domain.getEndAt();
         entity.agencyId = domain.getAgencyId();
+        entity.productId = domain.getProductId();
         return entity;
     }
 
@@ -71,6 +75,7 @@ public class BannerJpaEntity {
                 .startAt(startAt)
                 .endAt(endAt)
                 .agencyId(agencyId)
+                .productId(productId)
                 .build();
     }
 }

@@ -46,7 +46,7 @@ class AgencyBannerControllerTest {
     @BeforeEach
     void setUp() {
         controller = new AgencyBannerController(bannerService, environment);
-        stub = new BannerResult(1L, 20L, "에이전시 배너", "img.jpg", "https://fandrops.com", 1, true, null, null);
+        stub = new BannerResult(1L, 20L, null, "에이전시 배너", "img.jpg", "https://fandrops.com", 1, true, null, null);
     }
 
     private void givenAuthenticated() {
