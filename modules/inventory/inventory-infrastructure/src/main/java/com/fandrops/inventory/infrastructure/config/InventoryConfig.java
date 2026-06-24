@@ -7,6 +7,7 @@ import com.fandrops.inventory.domain.port.InventoryReadRepository;
 import com.fandrops.inventory.domain.port.InventoryRepository;
 import com.fandrops.inventory.infrastructure.adapter.InventoryHistoryRepositoryAdapter;
 import com.fandrops.inventory.infrastructure.adapter.InventoryOptimisticLockAdapter;
+import com.fandrops.inventory.infrastructure.adapter.InventoryReadRepositoryAdapter;
 import com.fandrops.inventory.infrastructure.adapter.InventoryRedissonLockAdapter;
 import com.fandrops.inventory.infrastructure.adapter.InventoryRepositoryAdapter;
 import com.fandrops.inventory.infrastructure.persistence.InventoryHistoryJpaRepository;
@@ -28,10 +29,10 @@ public class InventoryConfig {
     @PersistenceContext
     private EntityManager entityManager;
 
-    /** 재고 읽기 포트 — 전략과 무관하게 항상 JPA 어댑터 사용. */
+    /** 재고 읽기 포트 — 전략과 무관하게 항상 읽기 전용 어댑터 사용. */
     @Bean
     public InventoryReadRepository inventoryReadRepository(InventoryJpaRepository jpaRepository) {
-        return new InventoryRepositoryAdapter(jpaRepository);
+        return new InventoryReadRepositoryAdapter(jpaRepository);
     }
 
     /**
