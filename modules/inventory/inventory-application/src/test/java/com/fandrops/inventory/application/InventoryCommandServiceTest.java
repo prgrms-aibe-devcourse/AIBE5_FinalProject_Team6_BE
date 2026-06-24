@@ -87,13 +87,13 @@ class InventoryCommandServiceTest {
         }
 
         @Test
-        @DisplayName("InventoryLockConflictException 5회 연속 시 최종 예외 전파, 5회 시도")
+        @DisplayName("InventoryLockConflictException 2회 연속 시 최종 예외 전파, 2회 시도")
         void reserve_lockConflict_allAttemptsFail_throws() {
             doThrow(new InventoryLockConflictException(PRODUCT_ID)).when(reserveTxHelper).reserveOnce(ORDER_ID, PRODUCT_ID, 10);
 
             assertThrows(InventoryLockConflictException.class, () -> sut.reserve(ORDER_ID, PRODUCT_ID, 10));
 
-            verify(reserveTxHelper, times(5)).reserveOnce(ORDER_ID, PRODUCT_ID, 10);
+            verify(reserveTxHelper, times(2)).reserveOnce(ORDER_ID, PRODUCT_ID, 10);
         }
 
         @Test
