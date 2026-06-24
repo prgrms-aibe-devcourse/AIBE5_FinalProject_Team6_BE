@@ -102,12 +102,29 @@
 - Redis fail-open (DB fallback)
 - `@TransactionalEventListener(AFTER_COMMIT)` evict
 
+#### FeedLikeCache 적용 (PR #394)
+
+**문제 원인**
+캐시 히트 이후 `applyIsLiked()`가 요청마다 Redis를 추가 조회하면서 s02 final 측정에서 P95 276.44ms가 발생했다.
+
+**반영 내용**
+`FeedLikeCachePort` / `FeedLikeCacheAdapter`를 구현해 피드 목록 캐시 히트 이후 좋아요 여부 조회 경로를 분리했다.
+
+- 캐시 키: `feed:liked:{fanId}:{sortedFeedIds}`
+- TTL 30s
+- `FeedCache hit + FeedLikeCache hit` 경로에서 DB 쿼리 0회
+- 피드 좋아요/취소 시 즉시 evict
+
+**재측정 기대 효과**
+FeedCache와 FeedLikeCache가 모두 hit되면 피드 조회 경로의 DB 쿼리가 0회로 수렴한다. final 측정에서 관찰된 Redis GET P95 50ms 상승이 완화되고, Read P95 120ms 이하 달성을 기대한다.
+
 | 항목 | 변경 전 | 변경 내용 | 적용 기술 |
 |---|---|---|---|
 | 이미지·좋아요 조회 | 피드 수 × 개별 쿼리 (N+1) | bulk IN 쿼리 (`findByFeedIdIn`, `findLikedFeedIdsByFanId`) | JPA IN 쿼리 |
 | 대댓글 조회 | 댓글 수 × 개별 쿼리 | `findRepliesByParentIds` bulk 조회 | JPA IN 쿼리 |
 | 커서 인덱스 | `artist_id` 단일 인덱스 | `idx_artist_feed_artist_cursor (artist_id, id DESC)` 추가 | DB 인덱스 |
 | 캐시 레이어 | 없음 | Redis TTL 60s + jitter + SingleFlight | Redis, ConcurrentHashMap |
+| 좋아요 여부 후처리 | 캐시 히트 후 `applyIsLiked()` 추가 조회 | `FeedLikeCache` TTL 30s + 좋아요/취소 evict | Redis |
 
 ### 결과 (최종)
 
