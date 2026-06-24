@@ -127,42 +127,49 @@ FeedCache와 FeedLikeCache가 모두 hit되면 피드 조회 경로의 DB 쿼리
 | 캐시 레이어 | 없음 | Redis TTL 60s + jitter + SingleFlight | Redis, ConcurrentHashMap |
 | 좋아요 여부 후처리 | 캐시 히트 후 `applyIsLiked()` 추가 조회 | `FeedLikeCache` TTL 30s + 좋아요/취소 evict | Redis |
 
-### 결과 (최종)
+### 측정 결과 요약
 
-| 지표 | 튜닝 후 | 결과 (최종) | 목표 | 상태 |
-|---|---|---|---|---|
-| P95 응답시간 (안정 구간) | 168~172ms ❌ | **114.4ms ✅** | < 120ms | 달성 |
-| P95 응답시간 (워밍업 포함 max) | — | 192.7ms | — | 참고 |
-| 에러율 | 0.00% ✅ | 0.00% ✅ | < 0.1% | 달성 |
-| checks 통과율 | — | 100.00% ✅ | — | 달성 |
-| 총 요청 수 | — | 80,368건 | — | 참고 |
-| P99 (max) | — | 265.9ms | — | 참고 |
+| 구분 | 적용 상태 | P95 | 에러율 | 판정 |
+|---|---|---:|---:|---|
+| final | FeedCache 적용, FeedLikeCache 미적용 | 276.44ms ❌ | 0.00% ✅ | Read SLO 미달성 |
+| real-final | PR #394 FeedLikeCache 적용 | 114.4ms ✅ | 0.00% ✅ | Read SLO 달성 |
 
-### 스크린샷
+### final 측정 — FeedLikeCache 적용 전
+
+| 지표 | 결과 | 목표 | 상태 |
+|---|---:|---:|---|
+| P95 응답시간 | 276.44ms | < 120ms | 미달성 |
+| 에러율 | 0.00% | < 0.1% | 달성 |
+| 처리량(RPS) | 311.90/s | — | 참고 |
+
+![s02_feed_read_final](screenshots/final/s02_feed_read_final.png)
+
+final 측정에서는 모든 요청이 200으로 응답했지만, 캐시 히트 이후 `applyIsLiked()` 후처리에서 요청마다 Redis 추가 조회가 발생해 P95가 276.44ms까지 상승했다. 장애성 오류가 아니라 피드 조회 정상 응답 경로의 꼬리 지연 문제로 분류했다.
+
+### real-final 재측정 — PR #394 적용 후
+
+| 지표 | 결과 | 목표 | 상태 |
+|---|---:|---:|---|
+| P95 응답시간 (안정 구간) | 114.4ms | < 120ms | 달성 |
+| P95 응답시간 (워밍업 포함 max) | 192.7ms | — | 참고 |
+| 에러율 | 0.00% | < 0.1% | 달성 |
+| checks 통과율 | 100.00% | — | 달성 |
+| 총 요청 수 | 80,368건 | — | 참고 |
+| P99 (max) | 265.9ms | — | 참고 |
 
 ![s02_feed_read_realfinal](screenshots/realfinal/s02_feed_read_realfinal.png)
 
-### 문제 정의
-
-final 측정(k6-final-results.md)에서 FeedCache는 적용됐으나 `applyIsLiked()` 후처리 경로에서 요청마다 Redis 추가 조회가 발생해 P95 276.44ms로 SLO를 초과했다. PR #394에서 `FeedLikeCachePort` / `FeedLikeCacheAdapter`를 신설해 좋아요 여부 조회를 별도 캐시(TTL 30s)로 분리한 뒤 real final을 재측정했다.
-
-real final 측정 결과 P95는 워밍업 직후 162ms에서 출발해 캐시 안정화 이후 **114.4ms로 수렴**했다. 에러율 0.00%, checks 100.00%로 Read SLO를 달성했다.
+PR #394에서 `FeedLikeCachePort` / `FeedLikeCacheAdapter`를 신설해 좋아요 여부 조회를 별도 캐시(TTL 30s)로 분리한 뒤 real-final을 재측정했다. Prometheus `k6_http_req_duration_p95{scenario="feed_read"}` 기준 P95가 워밍업 시작 시점 162.3ms에서 약 1분 30초 후 114.4ms로 안정화되어 이후 전 구간 유지됐다.
 
 > Prometheus 복구 기준: k6 실행 시 `--out experimental-prometheus-rw` 사용으로 메트릭이 저장됨. SSM → `localhost:9090` 쿼리로 복구.
 
 ### 관찰 및 오너 피드백
 
-- Prometheus `k6_http_req_duration_p95{scenario="feed_read"}` 기준 P95가 워밍업 시작 시점 162.3ms → 약 1분 30초 후 114.4ms로 안정화되어 이후 전 구간 유지됐다.
-- max_over_time P95 = 192.7ms는 캐시 cold start 구간 스파이크로, 운영 환경에서는 캐시가 미리 워밍된 상태라 재현되지 않는다.
-- Grafana Redis 명령 처리율 패널에서 SCAN ops/s가 최대 ~1.5K까지 상승한 것이 관찰됐다. FeedLikeCache가 `likedFeedIds` 조회 시 SCAN을 사용하는 것으로 보이며, 캐시 안정화 후 Redis P95 레이턴시도 25ms → 5ms로 수렴했다.
-- HTTP P95 패널에서 `GET /api/v1/artists/{artistId}/feeds`가 피크 ~140ms 이후 ~100ms 수준으로 안정화된 것이 Prometheus 수치와 일치한다.
-- `http_req_failed=0.00%`, `checks_succeeded=100.00%`, 총 80,368건 처리.
-
-**오너 피드백 (→ 정환철 / 다음 측정 전 사전 피드백)**
-
-- s02 Read SLO 달성 (P95 114.4ms). 재측정 불필요.
-- FeedLikeCache SCAN 패턴이 확인됐으므로, 트래픽이 더 높아지는 경우 Redis SCAN → SMEMBERS 또는 키 구조 변경으로 개선 여지를 모니터링한다.
-- 워밍업 cold start(192.7ms) 구간은 운영 환경에서는 문제가 없으나, 배포 직후 캐시 워밍 절차가 필요한지 팀 내 합의해 두면 좋다.
+- s02 Read SLO 달성. 재측정 불필요.
+- max_over_time P95 = 192.7ms는 캐시 cold start 구간 스파이크로, 운영 환경에서는 캐시가 미리 워밍된 상태라 재현 가능성이 낮다.
+- Grafana Redis 명령 처리율 패널에서 SCAN ops/s가 최대 ~1.5K까지 상승한 것이 관찰됐다. FeedLikeCache가 `likedFeedIds` 조회 시 SCAN을 사용하는 것으로 보이며, 캐시 안정화 후 Redis P95 레이턴시는 25ms → 5ms로 수렴했다.
+- 트래픽이 더 높아지는 경우 Redis SCAN → SMEMBERS 또는 키 구조 변경으로 개선 여지를 모니터링한다.
+- 배포 직후 cold start P95 구간을 줄이기 위한 캐시 워밍 절차가 필요한지 팀 내 합의해 두면 좋다.
 
 ### 개선 방향
 
@@ -325,97 +332,68 @@ real-final 재측정 후 s01의 Pass/Fail 기준을 재정의했다. `P95 < 300m
 - 참고 지표: 주문 P95, 평균 응답시간, HikariCP active/waiting, retry/409/5xx 비율
 - s06 적용: 통합 워크로드에서도 주문 구간은 P95로 판정하지 않고 정합성/계약 응답 기준으로 판정한다.
 
-### 결과 (최종)
+### 측정 흐름 요약
 
-| 지표 | 튜닝 후 | 결과 (최종) | 목표 | 상태 |
-|---|---|---|---|---|
-| P95 응답시간 (전체) | 1,770ms ❌ | 4.97s ❌ | < 300ms | 미달성 |
-| P95 응답시간 (성공 요청) | 872ms ❌ | 4.33s ❌ | < 300ms | 미달성 |
-| 에러율 | 75%\* | 96.00% ❌ | < 0.1%\* | 미달성 |
-| orders_reserved | 100건 ✅ | 16건 ❌ | ≤ 100 | 미달성 |
+| 구분 | 적용 상태 | P95 | orders_reserved | 5xx/계약 응답 | 오버셀 | 판정 |
+|---|---|---:|---:|---|---|---|
+| tuned | atomic update / row lock 경합 | 1,770ms | 100건 | 409 정상 응답 | 0건 | 정합성 OK, P95 참고 |
+| final | 낙관적 락 전환 후 retry 없음 | 4.97s | 16건 | `UnexpectedRollbackException` 다수 | 0건 | 실패 |
+| real-final | PR #450 bounded retry 5회 | 25.74s | 14건 | 5xx 약 80% | 0건 | 실패 |
 
-> \* 에러율 75% = 300×409(DEPLETED) 정상 응답. checks_succeeded 기준 실제 오류 없음.
-> 최종 측정의 에러율 96.00%는 정상 409 계약이 아니라 check 실패 응답이므로 실패로 판정.
+> s01 팀장 합의에 따라 P95는 Pass/Fail 기준에서 제외하고 참고 지표로 기록한다. 다만 `orders_reserved=100`, 5xx 없음, 정상 409 계약 응답은 반드시 만족해야 한다.
 
-### 스크린샷
+### final 측정 — PR #450 적용 전
+
+| 지표 | 튜닝 후 | final | 목표 | 상태 |
+|---|---:|---:|---:|---|
+| P95 응답시간 (전체) | 1,770ms | 4.97s | 참고 지표 | 악화 |
+| P95 응답시간 (성공 요청) | 872ms | 4.33s | 참고 지표 | 악화 |
+| k6 http_req_failed | 75%\* | 96.00% | 참고 지표 | — |
+| orders_reserved | 100건 | 16건 | 100건 | 미달성 |
+| 오버셀 | 0건 | 0건 | 0건 | 달성 |
+
+> \* 튜닝 후 에러율 75% = 300×409(DEPLETED) 정상 응답. checks_succeeded 기준 실제 오류 없음.
 
 ![s01_order_concurrency_final](screenshots/final/s01_order_concurrency_final.png)
 
-### 문제 정의
+final 측정은 active slot green(8082), `product_id=4`, inventory `available_qty=100`, Redis access ticket 재적재 상태에서 실행했다. active port 오지정, product id 불일치, access ticket 오염 문제는 아니었다.
 
-최종 측정은 active slot green(8082), `product_id=4`, inventory `available_qty=100`, Redis access ticket 재적재 상태에서 실행했다. 따라서 active port 오지정, product id 불일치, access ticket 오염 문제는 아니다.
+400건 주문 요청 중 16건만 RESERVED 처리됐고, inventory도 `available_qty=84`, `reserved_qty=16`, `version=16`에서 멈췄다. 서버 로그에서는 `InventoryLockConflictException` → `ReserveConflictException` 이후 트랜잭션이 rollback-only로 표시되고, 최종적으로 `UnexpectedRollbackException`이 발생했다. 즉 낙관적 락 충돌이 정상 동시성 상황으로 처리되지 않고 애플리케이션 예외로 번져 k6 check 실패 응답을 만든 것이 핵심 문제다.
 
-400건 주문 요청 중 16건만 RESERVED 처리됐고, inventory도 `available_qty=84`, `reserved_qty=16`, `version=16`에서 멈췄다. 오버셀은 발생하지 않았지만, 재고 100개 중 16개만 선점되어 s01의 핵심 기대값인 `100 RESERVED + 나머지 정상 409`를 만족하지 못했다.
+**오너 피드백 (→ 형성빈 / PR #450 전)**
 
-서버 로그에서는 `InventoryLockConflictException` → `ReserveConflictException` 이후 트랜잭션이 rollback-only로 표시되고, 최종적으로 `UnexpectedRollbackException`이 발생했다. 즉 낙관적 락 충돌이 정상 동시성 상황으로 처리되지 않고 애플리케이션 예외로 번져 k6 check 실패 응답을 만든 것이 핵심 문제다.
+- 재고 선점 충돌은 정상 동시성 상황이므로 bounded retry + jitter backoff를 적용하고, 최종 실패 시 409 계약 응답으로 매핑하는 수정이 필요하다.
+- 수정 후에는 동일 사전준비(inventory 100, access ticket 2,100개, active direct port)로 재측정해 `orders_reserved=100`, 5xx 0건, 정상 409 수렴을 재확인해야 한다.
 
-### 관찰 및 오너 피드백
+### real-final 재측정 — PR #450 적용 후
 
-- k6 summary 기준 `orders_reserved=16`, `orders_cancelled=384`, `checks_succeeded=16/400(4.00%)`이다.
-- `http_req_failed=96.00%`는 기존 튜닝 후 측정의 409 정상 응답 집계와 다르다. 이번 실패는 k6 check가 허용하는 201/409가 아닌 응답으로 처리됐다.
-- P95 전체는 4.97s, expected response 기준 P95도 4.33s로 Write SLO 300ms를 크게 초과했다.
-- AWS에서 확인한 실행 직후 inventory는 `available_qty=84`, `reserved_qty=16`, `total_qty=100`, `version=16`이다.
-- 애플리케이션 로그에 `InventoryLockConflictException: 재고 선점 충돌 (동시성): productId=4`와 `UnexpectedRollbackException: Transaction silently rolled back because it has been marked as rollback-only`가 반복됐다.
-- 스크린샷의 `[k6] orders_reserved` 패널도 16건에서 평탄 유지되어 재고 100개를 모두 소진하지 못한 상태를 보여준다.
-
-**오너 피드백 (→ 형성빈 / 다음 측정 전 사전 피드백)**
-
-- s01 최종 테스트에서 product_id=4 재고 100개 기준 400 동시 주문을 발화했지만 `orders_reserved=16`만 성공했다.
-- 오버셀은 없으나, 낙관적 락 충돌(`InventoryLockConflictException`)이 재시도 없이 `UnexpectedRollbackException`으로 번져 384건이 실패 응답 처리됐다.
-- 재고 선점 충돌은 정상 동시성 상황이므로 3~5회 bounded retry + jitter backoff를 적용하고, 최종 실패 시 409 계약 응답으로 매핑하는 수정이 필요하다.
-- 수정 후에는 동일 사전준비(inventory 100, access ticket 2,100개, active direct port)로 재측정해 `orders_reserved=100`, check 100%, 오버셀 0건을 재확인해야 한다.
-
-### 개선 방향
-
-- `InventoryOptimisticLockAdapter.reserveAtomic()` 또는 상위 `InventoryCommandService.reserve()`에서 `InventoryLockConflictException` 발생 시 bounded retry를 적용한다.
-- 재시도 횟수는 3~5회, backoff는 10~50ms jitter로 제한해 동시 재충돌을 줄인다.
-- 재시도 후에도 선점 실패 시에는 애플리케이션 예외가 아니라 정상 409 계약 응답으로 변환한다.
-- 트랜잭션 rollback-only 상태에서 `UnexpectedRollbackException`이 컨트롤러 바깥으로 노출되지 않도록 예외 매핑과 트랜잭션 경계를 점검한다.
-- 임시 우회(VU 축소, k6 check에 500 허용, 재고 수량 확대, Nginx rate limit 경유)는 s01 목적을 훼손하므로 사용하지 않는다.
-
-### 결과 (real-final) — PR #450 bounded retry 반영 후 재측정
-
-**실행 조건**: EC2-2 direct port(`http://10.0.1.114:8082`), `product_id=4`, 200 VU, 2 iterations/VU (총 400 요청), `--out experimental-prometheus-rw`
-
-| 지표 | 최종 측정 | 결과 (real-final) | 목표 | 상태 |
-|---|---|---|---|---|
+| 지표 | final | real-final | 목표 | 상태 |
+|---|---:|---:|---:|---|
 | P95 응답시간 (전체) | 4.97s | 25.74s | 참고 지표 | 악화 |
 | P95 응답시간 (성공 요청) | 4.33s | 25.66s | 참고 지표 | 악화 |
-| 평균 응답시간 | — | 19.07s | — | — |
-| 5xx 에러율 | — | ~80% ❌ | 0건 | 미달성 |
-| k6 http_req_failed | 96.00% ❌ | 96.50% ❌ | 참고 지표 | — |
-| orders_reserved | 16건 ❌ | 14건 ❌ | 100건 | 미달성 |
-| orders_cancelled | 384건 | 386건 | — | — |
-| 총 요청 수 | — | 400건 | — | — |
-
-### 스크린샷 (real-final)
+| 평균 응답시간 | — | 19.07s | — | 참고 |
+| 5xx 에러율 | — | ~80% | 0건 | 미달성 |
+| k6 http_req_failed | 96.00% | 96.50% | 참고 지표 | — |
+| orders_reserved | 16건 | 14건 | 100건 | 미달성 |
+| orders_cancelled | 384건 | 386건 | — | 참고 |
+| 총 요청 수 | 400건 | 400건 | — | 참고 |
+| 오버셀 | 0건 | 0건 | 0건 | 달성 |
 
 ![s01_order_concurrency_realfinal](screenshots/realfinal/s01_order_concurrency_realfinal.png)
 
-### 문제 정의 (real-final)
+PR #450에서 `InventoryReserveTxHelper.reserveOnce()`를 별도 Bean으로 분리하고, 최대 5회 bounded retry + 10~50ms jitter backoff를 적용했다. 기대 효과는 낙관적 락 충돌 흡수 후 `orders_reserved=100` 수렴이었으나, 결과는 오히려 악화됐다.
 
-PR #450에서 `InventoryReserveTxHelper.reserveOnce()`를 별도 Bean으로 분리하고, 최대 5회 bounded retry + 10~50ms jitter backoff를 적용했다. 기대 효과는 낙관적 락 충돌 흡수 후 `orders_reserved=100` 수렴이었으나 결과는 오히려 악화됐다.
+400건 주문 요청 중 14건만 RESERVED 처리됐고, P95는 4.97s → 25.74s로 5배 이상 상승했다. 오버셀은 발생하지 않았지만, 합의된 s01 통과 기준인 `orders_reserved=100`, 5xx 없음, 정상 409 계약 응답을 만족하지 못했다.
 
-400건 주문 요청 중 14건만 RESERVED 처리됐고(이전 final 16건보다 감소), P95는 4.97s → 25.74s로 5배 이상 상승했다. 오버셀은 발생하지 않았다.
-
-### 관찰 (real-final)
-
-- **HTTP P95 응답시간**: `P95 POST /api/v1/orders` 라인이 약 25~30s 구간까지 치솟음. 다른 엔드포인트 영향 없음.
-- **[k6] orders_reserved**: 초반 증가 후 14건에서 평탄 유지. 이전 final(16건)보다 오히려 감소.
-- **5xx 에러율**: Grafana 패널 기준 약 80% 수준. 정상 409 응답이 아닌 5xx가 다수 발생.
-- **HikariCP 활성 커넥션**: 최대 약 20까지 급증 후 급감. maximumPoolSize:30 반영됐으나 retry loop에서 커넥션을 소모해 피크 발생.
-- **retry storm 추정**: 200 VU 동시 발화 × 최대 5회 retry = 최대 1,000 동시 요청 발화. retry 간 backoff(10~50ms)가 200 VU 환경에서는 충분한 분산 효과를 내지 못하고, 재충돌이 반복되면서 P95가 폭증함.
-
-**오너 피드백 (→ 형성빈 / real-final 재측정 후 피드백)**
+### 관찰 및 오너 피드백
 
 - PR #450 bounded retry 적용 후 오히려 P95가 4.97s → 25.74s로 악화됐다. 200 VU 동시 발화 환경에서 최대 5회 retry는 retry storm을 만드는 구조적 문제가 있다.
 - orders_reserved가 14건으로 감소했으므로 retry가 선점 성공률을 높이지 못했다.
 - 5xx 에러율 ~80%는 여전히 rollback-only / UnexpectedRollbackException 계열 예외가 상위로 노출되고 있음을 시사한다. 트랜잭션 경계 분리가 의도대로 동작하는지 로그 재확인 필요.
-- 합의된 s01 통과 기준은 P95가 아니라 `orders_reserved=100`, 오버셀 0건, 5xx 없음, 정상 409 계약 응답이다. 현재 real-final은 P95 참고 지표 이전에 `orders_reserved=14`와 5xx 다수로 실패다.
 - 근본 원인은 200 VU가 단일 row(product_id=4)를 동시에 쟁탈하는 구조다. retry 횟수 축소(1~2회) + 충돌 즉시 409 계약 응답 반환 방식으로 전환하거나, Redis 분산 락(Redisson)으로 선점 순서를 보장하는 방안을 검토해야 한다.
 - 재측정 시 5xx 응답과 409 응답을 Grafana 패널에서 구분해 retry 효과와 계약 응답 비율을 별도로 측정한다.
 
-### 개선 방향 (real-final)
+### 개선 방향
 
 - retry 횟수를 1~2회로 축소하거나 충돌 즉시 409 계약 응답으로 전환해 retry storm을 차단한다.
 - 또는 Redisson 분산 락으로 선점 순서를 보장해 낙관적 락 충돌 자체를 제거한다.
