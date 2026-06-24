@@ -27,6 +27,7 @@ public class FeedCacheAdapter implements FeedCachePort {
     private static final Logger log = LoggerFactory.getLogger(FeedCacheAdapter.class);
     private static final String KEY_PREFIX = "community:feed:";
     private static final Duration BASE_TTL = Duration.ofSeconds(60);
+    private static final Duration LOCAL_TTL = Duration.ofSeconds(2);
     private static final int JITTER_MAX_SECONDS = 30;
     private static final int SINGLEFLIGHT_TIMEOUT_SECONDS = 5;
 
@@ -34,6 +35,7 @@ public class FeedCacheAdapter implements FeedCachePort {
     private final ObjectMapper objectMapper;
     // SingleFlight: 동일 캐시 키에 대한 동시 DB 쿼리를 한 번으로 줄임
     private final ConcurrentHashMap<String, CompletableFuture<FeedListResult>> inFlight = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, LocalEntry<FeedListResult>> localCache = new ConcurrentHashMap<>();
 
     public FeedCacheAdapter(StringRedisTemplate redisTemplate, ObjectMapper objectMapper) {
         this.redisTemplate = redisTemplate;
@@ -43,12 +45,22 @@ public class FeedCacheAdapter implements FeedCachePort {
     @Override
     public Optional<FeedListResult> get(Long artistId, Long cursorId, int size) {
         String key = buildKey(artistId, cursorId, size);
+        LocalEntry<FeedListResult> local = localCache.get(key);
+        if (local != null && !local.isExpired()) {
+            return Optional.of(local.value());
+        }
+        if (local != null) {
+            localCache.remove(key, local);
+        }
+
         try {
             String json = redisTemplate.opsForValue().get(key);
             if (json == null) {
                 return Optional.empty();
             }
-            return Optional.of(objectMapper.readValue(json, FeedListResult.class));
+            FeedListResult result = objectMapper.readValue(json, FeedListResult.class);
+            putLocal(key, result);
+            return Optional.of(result);
         } catch (Exception e) {
             log.warn("[FeedCache] get failed key={}", key, e);
             return Optional.empty();
@@ -63,6 +75,7 @@ public class FeedCacheAdapter implements FeedCachePort {
             int jitter = ThreadLocalRandom.current().nextInt(JITTER_MAX_SECONDS + 1);
             Duration ttl = BASE_TTL.plusSeconds(jitter);
             redisTemplate.opsForValue().set(key, json, ttl);
+            putLocal(key, result);
         } catch (Exception e) {
             log.warn("[FeedCache] put failed key={}", key, e);
         }
@@ -112,6 +125,7 @@ public class FeedCacheAdapter implements FeedCachePort {
     @Override
     public void evictByArtistId(Long artistId) {
         String pattern = KEY_PREFIX + artistId + ":*";
+        localCache.keySet().removeIf(key -> key.startsWith(KEY_PREFIX + artistId + ":"));
         try {
             redisTemplate.execute((RedisCallback<Void>) connection -> {
                 ScanOptions options = ScanOptions.scanOptions().match(pattern).count(100).build();
@@ -133,5 +147,15 @@ public class FeedCacheAdapter implements FeedCachePort {
 
     private String buildKey(Long artistId, Long cursorId, int size) {
         return KEY_PREFIX + artistId + ":cursor:" + cursorId + ":size:" + size;
+    }
+
+    private void putLocal(String key, FeedListResult result) {
+        localCache.put(key, new LocalEntry<>(result, System.nanoTime() + LOCAL_TTL.toNanos()));
+    }
+
+    private record LocalEntry<T>(T value, long expiresAtNanos) {
+        boolean isExpired() {
+            return System.nanoTime() >= expiresAtNanos;
+        }
     }
 }

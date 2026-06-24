@@ -63,6 +63,23 @@ class FeedCacheAdapterTest {
         }
 
         @Test
+        @DisplayName("local hot cache 히트 → Redis 재조회 없이 Optional 반환")
+        void localHotCacheHit_skipsRedis() throws Exception {
+            FeedListResult expected = new FeedListResult(List.of(), null, false);
+            when(valueOps.get(anyString())).thenReturn("{...}");
+            when(objectMapper.readValue(anyString(), eq(FeedListResult.class))).thenReturn(expected);
+
+            Optional<FeedListResult> first = adapter.get(10L, null, 20);
+            Optional<FeedListResult> second = adapter.get(10L, null, 20);
+
+            assertTrue(first.isPresent());
+            assertTrue(second.isPresent());
+            assertSame(expected, second.get());
+            verify(valueOps, times(1)).get(anyString());
+            verify(objectMapper, times(1)).readValue(anyString(), eq(FeedListResult.class));
+        }
+
+        @Test
         @DisplayName("Redis 예외 → 예외 삼킴, Optional.empty() 반환 (fail-open)")
         void redisException_returnsEmpty() {
             when(valueOps.get(anyString())).thenThrow(new RuntimeException("Redis down"));
@@ -103,6 +120,24 @@ class FeedCacheAdapterTest {
 
             assertSame(loaded, result);
             verify(valueOps).set(anyString(), eq("{}"), any(Duration.class));
+        }
+
+        @Test
+        @DisplayName("loader 결과 저장 후 local hot cache 히트 → loader/Redis get 미호출")
+        void loadedResultStoredInLocalHotCache() throws Exception {
+            when(valueOps.get(anyString())).thenReturn(null);
+            when(objectMapper.writeValueAsString(any())).thenReturn("{}");
+            FeedListResult loaded = new FeedListResult(List.of(), null, false);
+
+            FeedListResult first = adapter.getOrLoad(10L, null, 20, () -> loaded);
+            @SuppressWarnings("unchecked")
+            java.util.function.Supplier<FeedListResult> loader = mock(java.util.function.Supplier.class);
+            FeedListResult second = adapter.getOrLoad(10L, null, 20, loader);
+
+            assertSame(loaded, first);
+            assertSame(loaded, second);
+            verifyNoInteractions(loader);
+            verify(valueOps, times(1)).get(anyString());
         }
 
         @Test
