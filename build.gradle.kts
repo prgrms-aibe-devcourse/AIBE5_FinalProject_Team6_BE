@@ -18,6 +18,9 @@ allprojects {
         options.encoding = "UTF-8"
         options.compilerArgs.add("-parameters")
     }
+    tasks.withType<JavaExec> {
+        jvmArgs("-Dfile.encoding=UTF-8", "-Dconsole.encoding=UTF-8", "-Dstdout.encoding=UTF-8", "-Dstderr.encoding=UTF-8")
+    }
 }
 
 subprojects {
