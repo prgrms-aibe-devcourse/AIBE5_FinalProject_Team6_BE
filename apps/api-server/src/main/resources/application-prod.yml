@@ -75,8 +75,6 @@ toss:
     read-timeout: ${TOSS_API_READ_TIMEOUT:10s}
 
 fandrops:
-  inventory:
-    lock-strategy: optimistic
   mail:
     from: ${MAIL_FROM}
   ops:

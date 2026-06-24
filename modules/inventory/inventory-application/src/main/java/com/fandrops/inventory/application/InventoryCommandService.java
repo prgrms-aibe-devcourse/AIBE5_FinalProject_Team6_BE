@@ -17,12 +17,9 @@ import com.fandrops.inventory.domain.port.InventoryRepository;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.transaction.annotation.Transactional;
-import java.util.concurrent.ThreadLocalRandom;
 
 /** 재고 예약·확정·복원·증가를 처리하는 application 서비스. */
 public class InventoryCommandService {
-
-    private static final int RESERVE_MAX_ATTEMPTS = 2;
 
     private final InventoryReadRepository inventoryReadRepository;
     private final InventoryRepository inventoryRepository;
@@ -39,31 +36,9 @@ public class InventoryCommandService {
         this.reserveTxHelper = reserveTxHelper;
     }
 
-    /**
-     * 낙관적 락 충돌 시 bounded retry(최대 5회, jitter 10~50ms).
-     * TX 없이 retry loop를 돌고 단일 시도는 reserveTxHelper.reserveOnce()에 위임한다.
-     * 재시도 소진 후에도 실패 시 InventoryLockConflictException → 409 RESERVE_FAILED.
-     */
+    /** atomic UPDATE 전략 — TX 경계는 reserveTxHelper에 위임한다. */
     public void reserve(Long orderId, Long productId, int qty) {
-        InventoryLockConflictException lastConflict = null;
-        for (int attempt = 0; attempt < RESERVE_MAX_ATTEMPTS; attempt++) {
-            try {
-                reserveTxHelper.reserveOnce(orderId, productId, qty);
-                return;
-            } catch (InventoryLockConflictException e) {
-                lastConflict = e;
-                if (attempt < RESERVE_MAX_ATTEMPTS - 1) {
-                    long backoff = 10 + ThreadLocalRandom.current().nextLong(41); // 10~50ms
-                    try {
-                        Thread.sleep(backoff);
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                        throw lastConflict;
-                    }
-                }
-            }
-        }
-        throw lastConflict;
+        reserveTxHelper.reserveOnce(orderId, productId, qty);
     }
 
     @Transactional

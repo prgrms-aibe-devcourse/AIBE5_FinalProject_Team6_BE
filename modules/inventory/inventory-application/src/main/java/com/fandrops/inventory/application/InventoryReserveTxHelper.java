@@ -1,7 +1,6 @@
 package com.fandrops.inventory.application;
 
 import com.fandrops.inventory.application.exception.DuplicateHistoryException;
-import com.fandrops.inventory.application.exception.InventoryLockConflictException;
 import com.fandrops.inventory.application.exception.InventoryNotFoundException;
 import com.fandrops.inventory.domain.Inventory;
 import com.fandrops.inventory.domain.InventoryChangeType;
@@ -12,15 +11,10 @@ import com.fandrops.inventory.domain.port.InventoryHistoryRepository;
 import com.fandrops.inventory.domain.port.InventoryReadRepository;
 import com.fandrops.inventory.domain.port.InventoryRepository;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 낙관적 락 retry 지원을 위한 TX 경계 분리 Bean.
- *
- * REQUIRED(기본값): outer TX(OrderService) 커넥션을 공유해 HikariCP 추가 소비 없음.
- * noRollbackFor: OptimisticLockingFailureException·InventoryLockConflictException 발생 시
- * outer TX를 rollback-only로 마킹하지 않아 retry 후 정상 처리 가능.
+ * TX 경계 분리 Bean — atomic UPDATE 전략에서 재고 예약 1회를 독립 TX로 처리한다.
  */
 public class InventoryReserveTxHelper {
 
@@ -36,11 +30,8 @@ public class InventoryReserveTxHelper {
         this.inventoryHistoryRepository = inventoryHistoryRepository;
     }
 
-    /**
-     * 단일 TX로 재고 예약 1회 시도.
-     * InventoryLockConflictException / OutOfStockException / ReserveFailedException 은 그대로 전파.
-     */
-    @Transactional(noRollbackFor = {OptimisticLockingFailureException.class, InventoryLockConflictException.class})
+    /** 단일 TX로 재고 예약 1회 시도. OutOfStockException / ReserveFailedException 은 그대로 전파. */
+    @Transactional
     public void reserveOnce(Long orderId, Long productId, int qty) {
         int affected = inventoryRepository.reserveAtomic(productId, qty, orderId);
         if (affected == 0) {
