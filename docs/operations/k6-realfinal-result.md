@@ -41,7 +41,7 @@
 |---|---|---|
 | 재측정 대상 | s01 주문 동시성 | 형성빈 오너 피드백 반영 후 재측정 |
 | 재측정 대상 | s02 피드 Read | 정환철 오너 피드백 반영 후 재측정 |
-| 재측정 대상 | s03 결제 확인 | 장성재 오너 피드백 반영 후 재측정 |
+| 완료 | s03 결제 확인 | PR #453 반영 후 real-final SLO 달성 |
 | 결과 이월 | s04 드롭스 스파이크 | final SLO 달성 결과 유지 |
 | 결과 이월 | s05 SSE 대기열 | final SLO 달성 결과 유지 |
 | 보류 | s06 통합 워크로드 | s01·s02·s03 재측정 성공 후 실행 |
@@ -551,6 +551,25 @@ JPA `@Version` 낙관적 락(Optimistic Locking) — precheck TX 커밋 후 PG �
 
 ![s03_payment_confirm_final](screenshots/final/s03_payment_confirm_final.png)
 
+### real-final 재측정 — PR #453 적용 후
+
+| 지표 | final | real-final | 목표 | 상태 |
+|---|---|---|---|---|
+| P95 응답시간 | 2.08s ❌ | 1.59s ✅ | < 2,000ms | 달성 |
+| 최대 응답시간 | 2.71s ❌ | 1.98s ✅ | < 2,000ms 참고 | 개선 |
+| http_req_failed | 1.60% ❌ | 0.00% ✅ | < 0.1% | 달성 |
+| http_5xx_rate | 1.60% ❌ | 0.00% ✅ | < 0.1% | 달성 |
+| checks_succeeded | 500/500 ✅ | 500/500 ✅ | 500/500 | 달성 |
+| 처리량 | 32.53 RPS | 52.45 RPS | — | 개선 |
+
+![s03_payment_confirm_realfinal](screenshots/realfinal/s03_payment_confirm_realfinal.png)
+
+PR #453에서 `ResourceAccessException`을 `PaymentConfirmTimeoutException`으로 변환하고, `PaymentControllerAdvice`에서 408 / `PAYMENT_CONFIRM_TIMEOUT` / `retryable=true` 계약 응답으로 매핑했다. EC2-1 active green(8082)은 EC2-2 Wiremock(`http://10.0.1.47:8090`)을 바라보도록 설정했고, `TOSS_API_READ_TIMEOUT=2s`를 주입한 뒤 seed 주문 500건을 `RESERVED`로 초기화해 측정했다.
+
+realfinal success 시나리오에서는 timeout이 발생하지 않았고, 500건 모두 정상 처리됐다. k6 기준 P95는 1.59s, max는 1.98s로 2초 경계 안에 들어왔으며, `http_req_failed`와 `http_5xx_rate` 모두 0.00%로 수렴했다. 따라서 s03의 SLO 판정은 성공으로 확정한다.
+
+`SCENARIO=timeout` 및 `SCENARIO=mixed`는 408 계약 확인용 분석 시나리오로 분리한다. 408은 5xx에는 포함되지 않지만 k6 기본 `http_req_failed`에는 포함되므로, success 시나리오 SLO Pass/Fail과 같은 기준으로 판정하지 않는다.
+
 ### 문제 정의
 
 최초 final 실행은 `TOSS_API_BASE_URL=http://10.0.1.47:8090`으로 설정되어 있었고, Wiremock은 EC2-2 로컬 `127.0.0.1:8090`에서 동작 중이었다. 이로 인해 500/500건이 5xx로 실패했으므로 해당 실행은 운영 설정 오지정에 의한 무효 측정으로 분리한다.
@@ -583,6 +602,7 @@ JPA `@Version` 낙관적 락(Optimistic Locking) — precheck TX 커밋 후 PG �
 - PG 호출은 DB 트랜잭션 밖에 유지하되, 호출 전 precheck와 호출 후 apply 단계 사이에서 timeout이 발생했을 때의 상태 전이 규칙을 명확히 한다.
 - SLO margin 확보를 위해 결제 확인 경로의 쿼리 플랜(`orders.order_payment_key`, `payment.order_id`, `payment.payment_key`)과 HikariCP waiting connection, DB lock wait를 함께 계측한다.
 - s03 실행 전후 설정(`TOSS_API_BASE_URL`, `TOSS_API_READ_TIMEOUT`)과 seed 초기화/원복 절차를 스크립트화해 운영 설정 오지정을 방지한다.
+- realfinal 측정 후 `TOSS_API_READ_TIMEOUT=2s`는 운영 기본값으로 원복해야 한다.
 
 ---
 
@@ -798,10 +818,10 @@ s01 팀장 합의에 따라 주문 구간은 `P95 < 300ms`를 Pass/Fail 기준�
 |---|---|---|---|---|---|---|
 | 01 주문 동시성 | 872ms(성공) ❌ | 25.74s ❌ | 75%\* | 5xx ~80% ❌ | 0건 ✅ | 미달성 |
 | 02 피드 Read | 168~172ms ❌ | 114.4ms ✅ | 0.00% ✅ | 0.00% ✅ | — | 달성 |
-| 03 결제 확인 | 1,940ms ✅ | 재측정 예정 | 0.00% ✅ | 재측정 예정 | — | 재측정 대상 |
+| 03 결제 확인 | 1,940ms ✅ | 1.59s ✅ | 0.00% ✅ | 0.00% ✅ | — | 달성 |
 | 04 드롭스 스파이크 | 287.31ms ✅ | 278.33ms ✅ | 99.98%\* | 99.97%\* ✅ | 0건 ✅ | 성공(이월) |
 | 05 SSE 대기열 | checks 99.33% ✅ | checks 99.33% ✅ | 0% ✅ | 0건 ✅ | — | 성공(이월) |
-| 06 통합 워크로드 | 미측정 | 보류 | — | 보류 | — | s01·s02·s03 이후 |
+| 06 통합 워크로드 | 미측정 | 보류 | — | 보류 | — | s01 이후 |
 | 07 상품 조회 처리량 | 133.45ms ❌ | 16.35ms ✅ | 0.00% ✅ | 0.00% ✅ | — | 성공(이월) |
 
 > \*\* s01 오버셀은 없었지만 `orders_reserved=16`으로 재고 100개를 모두 선점하지 못해 실패.
