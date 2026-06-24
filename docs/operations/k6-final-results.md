@@ -70,11 +70,31 @@
 
 ### 피드백 반영 내용 (정환철)
 
-> 작성 예정
+#### N+1 쿼리 제거 (PR #330)
+
+`FeedService.getFeeds()` 이미지·좋아요 조회를 개별 쿼리 → `findByFeedIdIn` / `findLikedFeedIdsByFanId` bulk IN 쿼리로 변경. `CommentService.getComments()` 대댓글 조회도 N번 개별 쿼리 → `findRepliesByParentIds` bulk 조회로 변경.
+
+#### 인덱스 추가
+
+`idx_artist_feed_artist_cursor (artist_id, id DESC)` 추가 → 커서 페이지네이션 Full Scan 제거.
+
+#### Redis 캐시 적용 (PR #341)
+
+`FeedCachePort` / `FeedCacheAdapter` 구현.
+
+- 캐시 키: `community:feed:{artistId}:cursor:{cursorId}:size:{size}`
+- TTL 60s + 0~30s jitter (캐시 스탬피드 방지)
+- SingleFlight (`ConcurrentHashMap<String, CompletableFuture>`) 적용 → 캐시 미스 시 동시 DB 쿼리 1건으로 수렴
+- viewer-agnostic 캐시 + `applyIsLiked()` 후처리
+- Redis fail-open (DB fallback)
+- `@TransactionalEventListener(AFTER_COMMIT)` evict
 
 | 항목 | 변경 전 | 변경 내용 | 적용 기술 |
 |---|---|---|---|
-| | | | |
+| 이미지·좋아요 조회 | 피드 수 × 개별 쿼리 (N+1) | bulk IN 쿼리 (`findByFeedIdIn`, `findLikedFeedIdsByFanId`) | JPA IN 쿼리 |
+| 대댓글 조회 | 댓글 수 × 개별 쿼리 | `findRepliesByParentIds` bulk 조회 | JPA IN 쿼리 |
+| 커서 인덱스 | `artist_id` 단일 인덱스 | `idx_artist_feed_artist_cursor (artist_id, id DESC)` 추가 | DB 인덱스 |
+| 캐시 레이어 | 없음 | Redis TTL 60s + jitter + SingleFlight | Redis, ConcurrentHashMap |
 
 ### 결과 (최종)
 
@@ -126,11 +146,31 @@
 
 ### 피드백 반영 내용 (형성빈)
 
-> 작성 예정
+s07은 신규 시나리오로 기존 피드백 반영 항목이 없습니다. 초기 측정 결과를 바탕으로 원인 분석 및 개선 방향을 도출했습니다.
+
+#### 원인 분석
+
+`ProductService.getProducts()` 호출 시 매 요청마다 3개 쿼리가 직렬 실행됩니다.
+
+1. `productRepository.findRegularProducts()` → product 테이블
+2. `inventoryReadPort.getByProductIds()` → inventory 테이블
+3. `productImageRepository.findThumbnailsByProductIds()` → product_image 테이블
+
+300 RPS × 3 = 900 q/s DB 직행, 캐시 레이어 없음.
+
+`findRegularProducts` 쿼리 조건(`WHERE dropsStartAt IS NULL AND id < :cursor ORDER BY id DESC`)에서 `(drops_start_at, id)` 복합 인덱스가 없어 풀 스캔 가능성 존재. 현재 product 테이블에는 `artist_id` 인덱스만 있음.
+
+#### 개선 예정 항목
+
+- `(drops_start_at, id)` 복합 인덱스 추가 (Flyway 마이그레이션)
+- `findRegularProducts` + `findThumbnailsByProductIds` Redis 캐시 (TTL 120s) + 상품 변경 시 evict
+- inventory 단기 캐시 (TTL 5~10s) 검토
 
 | 항목 | 변경 전 | 변경 내용 | 적용 기술 |
 |---|---|---|---|
-| | | | |
+| 쿼리 구조 | 매 요청 3개 쿼리 DB 직행 (캐시 없음) | `findRegularProducts` + 이미지 Redis 캐시 TTL 120s | Spring Cache, Redis |
+| product 인덱스 | `artist_id` 단일 인덱스만 존재 | `(drops_start_at, id)` 복합 인덱스 추가 | Flyway 마이그레이션 |
+| inventory 조회 | 매 요청 DB 직행 | TTL 5~10s 단기 캐시 검토 | Redis |
 
 ### 결과 (최종)
 
@@ -184,11 +224,25 @@
 
 ### 피드백 반영 내용 (형성빈)
 
-> 작성 예정
+#### HikariCP 풀 크기 분석
+
+`application.yml`, `application-prod.yml` 어디에도 `hikari.maximum-pool-size` 설정 없음 → HikariCP 기본값 10 적용 중.
+
+200 VU 동시 발화 시 커넥션 10개로 처리해야 하므로 190개가 대기 상태에 빠짐. Grafana에서 대기 커넥션 피크 8/10 관측 — 풀이 거의 포화 상태였음.
+
+#### inventory 인덱스 및 락 분석
+
+`PRIMARY KEY (id)` + `UNIQUE INDEX uk_inventory_product_id (product_id)` 존재. `WHERE product_id = ?` 단일 행 탐색은 인덱스로 충분하나, 200 VU가 동일 `product_id=4` 단일 행을 동시에 UPDATE하면 MySQL row lock이 직렬화됨. `available_qty >= qty` 조건 체크도 같은 행에서 발생하므로 결국 1개씩 순서대로 처리됨.
+
+#### 최종 결론 및 액션 플랜
+
+- 단기 조치: `maximumPoolSize: 30` 설정 → 커넥션 대기 해소
+- 근본 해결: `inventory.version` 컬럼이 이미 존재 → 낙관적 락(Optimistic Lock) 전환으로 row lock 경합 제거
 
 | 항목 | 변경 전 | 변경 내용 | 적용 기술 |
 |---|---|---|---|
-| | | | |
+| HikariCP 풀 크기 | 기본값 10 (yml 미설정) | `maximumPoolSize: 30` | HikariCP |
+| 락 전략 | 단일 행 row lock 직렬화 | `@Version` 낙관적 락 전환 | JPA Optimistic Lock |
 
 ### 결과 (최종)
 
@@ -399,20 +453,70 @@ JPA `@Version` 낙관적 락(Optimistic Locking) — precheck TX 커밋 후 PG �
 
 ### 피드백 반영 내용 (장성재, 지영재)
 
-#### heartbeat-ms 배포 환경 명시
+#### heartbeat-ms 배포 환경 명시 (장성재)
 
 **어떻게 반영했는지**
-`application-prod.yml`과 `application-stg.yml` 두 배포 환경 yml에 `heartbeat-ms: 5000`을 명시적으로 추가했습니다.
+`application-prod.yml`과 `application-stg.yml` 두 배포 환경 yml에 `heartbeat-ms: 5000`을 명시 추가했습니다.
 
 **어떤 기술/방법을 적용했는지**
-Spring `@Scheduled(fixedDelayString = "${fandrops.queue.scheduler.heartbeat-ms:5000}")` — 코드 기본값(`:5000`)에만 의존하던 상태를 yml에 명시해 환경별 설정으로 격상. 이후 값 조정이 필요할 때 코드 수정 없이 yml만 변경하면 됩니다.
+Spring `@Scheduled(fixedDelayString = "${fandrops.queue.scheduler.heartbeat-ms:5000}")` — 코드 기본값(`:5000`) 단독 의존 상태를 yml로 격상해 환경별 설정으로 관리.
 
 **어떻게 해결했는지**
-기본값 fallback 의존을 제거해 배포 환경에서 heartbeat 주기가 명확히 보장됩니다. 코드 기본값이 추후 변경되더라도 배포 환경은 yml 값(5000ms)을 따르므로 stale emitter 누적으로 인한 2,000 상한 조기 초과 재발 위험이 차단됩니다.
+코드 기본값이 추후 변경되더라도 배포 환경은 yml 값(5000ms)을 따르므로 stale emitter 누적으로 인한 2,000 상한 조기 초과 재발 위험이 차단됩니다.
+
+---
+
+#### Nginx 설정 검증 (지영재)
+
+**어떻게 반영했는지**
+`nginx/nginx.conf`와 `nginx/fandrops-location.conf` 직접 확인했습니다.
+
+**어떤 기술/방법을 적용했는지**
+- `worker_connections 8192` — `nginx/nginx.conf` events 블록 확인 ✅
+- `/api/v1/queue/stream` `limit_conn` 미적용 — `fandrops-location.conf` 해당 location 블록에 `limit_conn` 지시자 없음 ✅ (`fandrops-zones.conf`에 `limit_conn_zone fandrops_sse` 정의는 있으나 어느 location에도 적용하지 않음)
+
+**어떻게 해결했는지**
+두 설정 모두 Git 형상관리 대상이므로 재배포 후에도 변경 추적 가능. 별도 EC2 직접 확인 없이 코드 검토로 사전 검증 완료.
+
+---
+
+#### k6 시나리오 v2 threshold · startTime 검증 (지영재)
+
+**어떻게 반영했는지**
+`infra/k6/scenarios/05_sse_queue.js` 직접 확인했습니다.
+
+**어떤 기술/방법을 적용했는지**
+- `'checks{scenario:overflow_probe}': ['rate>0.99']` — threshold 설정 확인 ✅ (GHA runner 특성상 소수 `dial: i/o timeout` 허용 범위)
+- `startTime: '2m'` offset — capacity_fill이 2,000 VU 도달 후 overflow_probe 시작 보장 ✅
+
+**어떻게 해결했는지**
+threshold와 startTime 모두 v2 구조 재설계 당시 반영 완료. 재측정 시 별도 수정 없이 그대로 실행 가능.
+
+---
+
+#### capacity_fill SLO 판정 기준 문서화 (지영재)
+
+**어떻게 반영했는지**
+k6 metric `http_req_failed{scenario:capacity_fill}`은 SSE long-lived 연결 특성상 stage 종료 시 interrupt되어 `0/0`으로 집계됨. 200 수용 판정은 Nginx access log 기준으로 확정했습니다.
+
+**어떤 기술/방법을 적용했는지**
+판정 명령:
+```bash
+sudo grep "GET /api/v1/queue/stream" /var/log/nginx/access.log | awk '{print $9}' | sort | uniq -c
+```
+2,000건 이상 200 응답이면 capacity_fill SLO 통과.
+
+**어떻게 해결했는지**
+k6 summary 대신 Nginx access log를 유일한 수용 증거로 삼는 판정 기준을 명시했습니다. 17차 튜닝 측정 당시 이 방식으로 2,000건 이상 확인 완료.
 
 | 항목 | 변경 전 | 변경 내용 | 적용 기술 |
 |---|---|---|---|
-| heartbeat 주기 설정 | yml 미설정 (코드 기본값 `:5000` fallback) | `application-prod.yml`, `application-stg.yml`에 `heartbeat-ms: 5000` 명시 | Spring `@Scheduled` SpEL 기본값 |
+| heartbeat 주기 설정 | yml 미설정 (코드 기본값 `:5000` fallback) | `application-prod.yml`, `application-stg.yml`에 `heartbeat-ms: 5000` 명시 | Spring `@Scheduled` SpEL |
+| Nginx FD 한계 | `worker_connections 4096` | `worker_connections 8192` 증설 (기확인) | nginx.conf |
+| SSE 경로 연결 제한 | `limit_conn addr 5` 적용 | `limit_conn` 제거 (기확인) | fandrops-location.conf |
+| capacity_fill SLO 판정 | k6 metric (0/0 집계 불가) | Nginx access log 기준 2,000건 200 확인 | Nginx access log |
+| overflow_probe threshold | 미설정 | `checks{scenario:overflow_probe} > 0.99` | k6 thresholds |
+| overflow_probe 시작 타이밍 | 즉시 시작 (슬롯 미충전 상태) | `startTime: '2m'` offset — 2,000 VU 도달 후 시작 보장 | k6 scenario startTime |
 
 ### 결과 (최종)
 

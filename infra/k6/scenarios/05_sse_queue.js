@@ -14,7 +14,7 @@
  * 파라미터: 장성재 확정 (2026-06-05) / 시나리오 재설계 지영재 (2026-06-24)
  *
  * 사전 준비:
- *   - Nginx: worker_connections ≥ 4096 확인 (지영재)
+ *   - Nginx: worker_connections 8192 확인 (nginx/nginx.conf)
  *   - JVM: ulimit -n ≥ 65535 확인 (지영재)
  *   - tokens.csv: infra/k6/seed/tokens.csv (fan_id 1~2100 JWT)
  *   - 실행: k6 run -e BASE_URL=... -e PRODUCT_ID=4 scenarios/05_sse_queue.js
