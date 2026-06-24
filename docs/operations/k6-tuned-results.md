@@ -835,9 +835,6 @@ GitHub Actions → **Run k6 Load Test** → `scenario: 05` → `confirm: yes`
 
 **오너 피드백 (→ 장성재 / 다음 측정 전 사전 피드백)**
 
-- **capacity_fill 판정 기준**: k6 summary `http_req_failed{capacity_fill}`은 구조상 항상 0/0이므로 threshold 통과 여부와 무관하게 Nginx access log에서 200 응답 건수를 직접 확인해야 함. log 기준 2,000건 이상이 실질적 SLO 판정 기준.
-- **overflow_probe dial timeout 허용**: GHA runner 특성상 `dial: i/o timeout` 소수 발생 가능. `checks{scenario:overflow_probe} > 0.99` threshold 통과 여부로 판정. 2건 이내는 노이즈로 허용.
-- **실행 순서 준수**: s04 이후 s05 실행 필수. s05 먼저 실행 시 Redis 티켓이 UUID로 오염되어 s01·s04 403 전원 실패.
 - **heartbeat 설정 확인**: `fandrops.queue.scheduler.heartbeat-ms` 환경변수가 배포 환경에 적용되어 있는지 사전 확인. 미적용 시 stale emitter 누적으로 2,000 상한 조기 초과 재발 가능.
 
 **오너 피드백 (→ 지영재 / 다음 측정 전 사전 피드백)**
@@ -846,6 +843,8 @@ GitHub Actions → **Run k6 Load Test** → `scenario: 05` → `confirm: yes`
   ```bash
   sudo grep "GET /api/v1/queue/stream" /var/log/nginx/access.log | awk '{print $9}' | sort | uniq -c
   ```
+- **overflow_probe dial timeout 허용**: GHA runner 특성상 `dial: i/o timeout` 소수 발생 가능. `checks{scenario:overflow_probe} > 0.99` threshold 통과 여부로 판정. 2건 이내는 노이즈로 허용.
+- **실행 순서 준수**: s04 이후 s05 실행 필수. s05 먼저 실행 시 Redis 티켓이 UUID로 오염되어 s01·s04 403 전원 실패.
 - **Nginx 설정값 배포 후 재확인**: 재배포 시 `worker_connections 8192`와 `limit_conn` 미적용 상태가 유지되는지 확인. `nginx -T | grep worker_connections`로 확인.
 - **시나리오 v2 구조 그대로 실행**: `05_sse_queue.js`는 `capacity_fill` + `overflow_probe` 2단계 구조. `startTime: '2m'` offset 유지 필수 — `capacity_fill`이 2,000 VU에 도달하기 전에 `overflow_probe`가 시작되면 429 발생 조건이 성립하지 않아 `sse_connections_rejected count>0` threshold 실패.
 
