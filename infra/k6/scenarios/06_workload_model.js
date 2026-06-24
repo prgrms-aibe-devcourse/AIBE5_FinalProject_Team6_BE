@@ -1,16 +1,20 @@
 /**
  * 통합 워크로드 모델 — 피드 60% · 대기열 20% · 주문 15% · 결제 5%
  * 목표: 단일 스크립트로 실제 서비스 트래픽 패턴 재현 및 혼합 부하 하 SLO 측정
+ *   - Feed/Payment latency는 threshold로 판정
+ *   - Order는 s01 합의안에 따라 P95를 참고 지표로 기록하고 정합성/계약 응답으로 판정
  *
  * 사전 준비:
  *   - DB seed: fans.csv, orders.json (infra/k6/seed/ 참고)
- *   - Redis: access:ticket:1:{fanId} = "test-ticket-token" (fan_id 1~2100 일괄 적재)
+ *   - inventory: product_id=4, available_qty=200, reserved_qty=0, total_qty=200, version=0
+ *   - Redis: access:ticket:4:{fanId} = "test-ticket-token" (fan_id 1~2100 일괄 적재)
  *   - tokens.csv: infra/k6/seed/tokens.csv (fan_id 1~2100 JWT)
  *   - Wiremock 기동 (결제 5% 구간): infra/k6/wiremock/ 참고
  *   - 실행:
  *     k6 run \
- *       -e PRODUCT_ID=1 \
+ *       -e PRODUCT_ID=4 \
  *       -e ARTIST_ID=1 \
+ *       -e ORDER_TARGET_RESERVED=200 \
  *       -e ORDERS_JSON="$(cat seed/orders.json)" \
  *       --out experimental-prometheus-rw \
  *       scenarios/06_workload_model.js
@@ -19,15 +23,15 @@
  */
 import http from 'k6/http';
 import { check } from 'k6';
-import { Counter } from 'k6/metrics';
+import { Counter, Rate, Trend } from 'k6/metrics';
 import { SharedArray } from 'k6/data';
 import papaparse from 'https://jslib.k6.io/papaparse/5.1.1/index.js';
 import { BASE_URL, authHeaders } from '../lib/auth.js';
-import { WRITE_THRESHOLDS } from '../lib/thresholds.js';
 
 const PRODUCT_ID = parseInt(__ENV.PRODUCT_ID || '1');
 const ARTIST_ID  = parseInt(__ENV.ARTIST_ID  || '1');
 const ORDERS = JSON.parse(__ENV.ORDERS_JSON || '[{"orderId":1,"amount":15000,"fanId":1}]');
+const ORDER_TARGET_RESERVED = parseInt(__ENV.ORDER_TARGET_RESERVED || '200');
 
 const userTokens = new SharedArray('users', function () {
   return papaparse.parse(open('../seed/tokens.csv'), { header: true }).data;
@@ -38,6 +42,17 @@ const wlFeed    = new Counter('wl_feed');
 const wlQueue   = new Counter('wl_queue');
 const wlOrder   = new Counter('wl_order');
 const wlPayment = new Counter('wl_payment');
+
+const wlFeedDuration = new Trend('wl_feed_duration');
+const wlFeedFailed = new Rate('wl_feed_failed');
+const wlPaymentDuration = new Trend('wl_payment_duration');
+const wlPayment5xx = new Rate('wl_payment_5xx');
+
+const wlOrderReserved = new Counter('wl_order_reserved');
+const wlOrderConflict409 = new Counter('wl_order_conflict_409');
+const wlOrderRateLimited429 = new Counter('wl_order_rate_limited_429');
+const wlOrder5xx = new Counter('wl_order_5xx');
+const wlOrderUnexpected = new Counter('wl_order_unexpected');
 
 export const options = {
   scenarios: {
@@ -54,7 +69,13 @@ export const options = {
     },
   },
   thresholds: {
-    ...WRITE_THRESHOLDS,       // P95 < 300ms, error rate < 0.1% (혼합 전체 기준)
+    wl_feed_duration: ['p(95)<120'],
+    wl_feed_failed: ['rate<0.001'],
+    wl_payment_duration: ['p(95)<2000'],
+    wl_payment_5xx: ['rate<0.001'],
+    wl_order_reserved: [`count==${ORDER_TARGET_RESERVED}`],
+    wl_order_5xx: ['count==0'],
+    wl_order_unexpected: ['count==0'],
     wl_feed:    ['count>0'],   // 각 구간에 실제 요청이 발생했는지 확인
     wl_queue:   ['count>0'],
     wl_order:   ['count>0'],
@@ -71,8 +92,10 @@ export default function () {
     wlFeed.add(1);
     const res = http.get(
       `${BASE_URL}/api/v1/artists/${ARTIST_ID}/feeds`,
-      { headers: authHeaders(token) },
+      { headers: authHeaders(token), tags: { workload: 'feed' } },
     );
+    wlFeedDuration.add(res.timings.duration);
+    wlFeedFailed.add(res.status !== 200);
     check(res, { '[feed] status 200': (r) => r.status === 200 });
 
   } else if (r < 0.80) {
@@ -81,7 +104,7 @@ export default function () {
     const res = http.post(
       `${BASE_URL}/api/v1/queue/join/${PRODUCT_ID}`,
       null,
-      { headers: authHeaders(token) },
+      { headers: authHeaders(token), tags: { workload: 'queue' } },
     );
     check(res, {
       '[queue] join accepted': (r) => r.status === 200 || r.status === 201 || r.status === 409 || r.status === 429,
@@ -93,8 +116,19 @@ export default function () {
     const res = http.post(
       `${BASE_URL}/api/v1/orders`,
       JSON.stringify({ accessTicket: 'test-ticket-token', items: [{ productId: PRODUCT_ID, quantity: 1 }] }),
-      { headers: authHeaders(token) },
+      { headers: authHeaders(token), tags: { workload: 'order' } },
     );
+    if (res.status === 201) {
+      wlOrderReserved.add(1);
+    } else if (res.status === 409) {
+      wlOrderConflict409.add(1);
+    } else if (res.status === 429) {
+      wlOrderRateLimited429.add(1);
+    } else if (res.status >= 500) {
+      wlOrder5xx.add(1);
+    } else {
+      wlOrderUnexpected.add(1);
+    }
     check(res, {
       '[order] reserved or depleted': (r) => r.status === 201 || r.status === 409 || r.status === 429,
     });
@@ -108,8 +142,10 @@ export default function () {
     const res = http.post(
       `${BASE_URL}/api/v1/payments/toss/confirm`,
       JSON.stringify({ tossPaymentKey, orderId: order.orderId, amount: order.amount }),
-      { headers: authHeaders(orderToken) },
+      { headers: authHeaders(orderToken), tags: { workload: 'payment' } },
     );
+    wlPaymentDuration.add(res.timings.duration);
+    wlPayment5xx.add(res.status >= 500);
     check(res, {
       '[payment] confirm accepted': (r) => r.status === 200 || r.status === 201 || r.status === 429,
     });
