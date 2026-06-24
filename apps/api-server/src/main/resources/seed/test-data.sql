@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS shedlock (
 INSERT INTO agency_account (id, login_id, password_hash, company_name, contact_email, status, role, created_at)
 VALUES (1, 'agency@fandrops.test',
         '$2a$10$IXraSx3hpYkrj8jRqqIsxOkdIfRCZKYxPafAJT7v3ZrlvB43gl7Re',
-        '테스트 기획사', 'agency@fandrops.test', 'ACTIVE', 'AGENCY', NOW());
+        'starlight 엔터', 'agency@fandrops.test', 'ACTIVE', 'AGENCY', NOW());
 
 -- 입점 승인 에이전시 (id=2 — A3 agency_application APPROVED 건과 쌍)
 INSERT INTO agency_account (id, login_id, password_hash, company_name, contact_email, status, role, created_at)
@@ -477,7 +477,7 @@ FROM product WHERE name = '소영 × Drops: [GLOW UP] 뷰티 한정 컬렉션';
 -- E2: 리아 × Drops [FAIRY SIGNAL] (버튜버, artist_id=12, agency_id=5)
 INSERT INTO product (artist_id, name, price, status, drops_start_at, drops_end_at)
 VALUES (12, '리아 × Drops: [FAIRY SIGNAL] 첫 EP 기념 패키지', 64000, 'ON_SALE',
-        DATEADD('DAY', 1, NOW()), DATEADD('DAY', 5, NOW()));
+        DATEADD('DAY', 3, NOW()), DATEADD('DAY', 7, NOW()));
 INSERT INTO inventory (product_id, total_qty, reserved_qty, available_qty, version)
 SELECT id, 120, 0, 120, 0 FROM product WHERE name = '리아 × Drops: [FAIRY SIGNAL] 첫 EP 기념 패키지';
 INSERT INTO product_image (product_id, image_url, sort_order, is_primary)
@@ -506,7 +506,7 @@ INSERT INTO banner (banner_type, agency_id, title, image_url, landing_url, expos
 SELECT 'STORE', 5, '리아 × Drops — FAIRY SIGNAL 오픈 예정',
        'https://placehold.co/1200x400/957DAD/FFFFFF?text=Lia+FAIRY+SIGNAL+Drops',
        'https://fandrops.test/store', 5, true,
-       DATEADD('DAY', 1, NOW()), DATEADD('DAY', 5, NOW()), id
+       DATEADD('HOUR', -1, NOW()), DATEADD('DAY', 7, NOW()), id
 FROM product WHERE name = '리아 × Drops: [FAIRY SIGNAL] 첫 EP 기념 패키지';
 
 INSERT INTO banner (banner_type, agency_id, title, image_url, landing_url, exposure_order, is_active, start_at, end_at, product_id)

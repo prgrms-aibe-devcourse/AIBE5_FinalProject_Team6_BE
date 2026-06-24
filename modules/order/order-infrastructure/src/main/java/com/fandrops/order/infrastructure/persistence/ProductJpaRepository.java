@@ -18,10 +18,10 @@ public interface ProductJpaRepository extends JpaRepository<ProductJpaEntity, Lo
     List<ProductJpaEntity> findRegular(@Param("artistId") Long artistId,
                                        @Param("cursor") Long cursor, Pageable pageable);
 
-    // 드롭스 상품: dropsStartAt ≤ now ≤ dropsEndAt, artistId null이면 전체
+    // 드롭스 상품: dropsEndAt >= now, artistId null이면 전체 (오픈 예정 상품 포함)
     @Query("SELECT p FROM ProductJpaEntity p " +
            "WHERE p.dropsStartAt IS NOT NULL " +
-           "AND p.dropsStartAt <= :now AND p.dropsEndAt >= :now " +
+           "AND p.dropsEndAt >= :now " +
            "AND (:artistId IS NULL OR p.artistId = :artistId) " +
            "AND (:cursor IS NULL OR p.id < :cursor) " +
            "ORDER BY p.id DESC")

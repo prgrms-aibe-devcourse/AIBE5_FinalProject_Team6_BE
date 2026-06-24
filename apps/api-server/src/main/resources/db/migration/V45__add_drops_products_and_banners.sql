@@ -22,7 +22,7 @@ FROM product WHERE name = '소영 × Drops: [GLOW UP] 뷰티 한정 컬렉션';
 -- E2: 리아 × Drops [FAIRY SIGNAL] (버튜버, artist_id=12)
 INSERT INTO product (artist_id, name, price, status, drops_start_at, drops_end_at)
 VALUES (12, '리아 × Drops: [FAIRY SIGNAL] 첫 EP 기념 패키지', 64000, 'ON_SALE',
-        DATE_ADD(NOW(), INTERVAL 1 DAY), DATE_ADD(NOW(), INTERVAL 5 DAY));
+        DATE_ADD(NOW(), INTERVAL 3 DAY), DATE_ADD(NOW(), INTERVAL 7 DAY));
 
 INSERT INTO inventory (product_id, total_qty, reserved_qty, available_qty, version)
 SELECT id, 120, 0, 120, 0 FROM product WHERE name = '리아 × Drops: [FAIRY SIGNAL] 첫 EP 기념 패키지';
@@ -58,7 +58,7 @@ INSERT INTO banner (banner_type, agency_id, title, image_url, landing_url, expos
 SELECT 'STORE', 5, '리아 × Drops — FAIRY SIGNAL 오픈 예정',
        'https://placehold.co/1200x400/957DAD/FFFFFF?text=Lia+FAIRY+SIGNAL+Drops',
        'https://fandrops.test/store', 5, true,
-       DATE_ADD(NOW(), INTERVAL 1 DAY), DATE_ADD(NOW(), INTERVAL 5 DAY), id
+       DATE_ADD(NOW(), INTERVAL -1 HOUR), DATE_ADD(NOW(), INTERVAL 7 DAY), id
 FROM product WHERE name = '리아 × Drops: [FAIRY SIGNAL] 첫 EP 기념 패키지';
 
 INSERT INTO banner (banner_type, agency_id, title, image_url, landing_url, exposure_order, is_active, start_at, end_at, product_id)
