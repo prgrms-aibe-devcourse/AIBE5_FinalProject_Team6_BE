@@ -11,6 +11,7 @@ import com.fandrops.payment.application.payment.TossAuthenticationException;
 import com.fandrops.payment.application.payment.TossPaymentUnavailableException;
 import java.util.stream.Collectors;
 import org.slf4j.MDC;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -79,8 +80,11 @@ public class PaymentControllerAdvice {
 
     @ExceptionHandler(SseCapacityExceededException.class)
     public ResponseEntity<ApiResponse<Void>> handle(SseCapacityExceededException e) {
+        // Accept: text/event-stream 요청에서도 JSON 429가 정상 전달되도록 Content-Type 명시
+        // (명시하지 않으면 콘텐츠 협상 실패 → HttpMediaTypeNotAcceptableException → 406 → /error 디스패치 → Security denyAll → 403)
         return ResponseEntity.status(429)
                 .header("Retry-After", "60")
+                .contentType(MediaType.APPLICATION_JSON)
                 .body(ApiResponse.fail("RATE_LIMITED", e.getMessage(), true, traceId()));
     }
 

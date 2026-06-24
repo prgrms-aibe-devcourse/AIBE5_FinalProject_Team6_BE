@@ -40,6 +40,7 @@ public class ApiSecurityConfig {
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))   // 토큰 자체에 정보가 있어서 서버가 기억할 필요가 없음. -> 세션 안 만듦
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)   // 필터 순서에 맞게 끼워넣기
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/error").permitAll()
                         .requestMatchers("/api/v1/auth/**").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/prometheus").permitAll()
                         // 공개 피드 조회 — 비인증 브라우징 허용 (타 모듈 공개 경로 추가 시 여기에 등록)

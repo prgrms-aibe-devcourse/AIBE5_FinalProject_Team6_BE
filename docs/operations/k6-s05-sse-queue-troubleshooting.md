@@ -1007,4 +1007,123 @@ LISTEN 0  8192     [::]:443
 
 > **reload vs restart**: `nginx -s reload`는 설정 파일만 재로드하고 기존 소켓을 유지한다. `listen backlog`는 소켓 생성 시에만 적용되므로 반드시 `systemctl restart nginx`로 소켓을 재생성해야 한다.
 
+---
+
+## 14차 트러블슈팅 (2026-06-24) — overflow 구간 403 반환 분석
+
+### 테스트 결과
+
+```
+시나리오: s05 (SSE 대기열 안정성, PRODUCT_ID=4)
+GHA Run: #28049743211
+
+threshold 결과:
+  ✅ http_req_failed{scenario:normal_load}  rate<0.001  → PASS
+  ✅ http_req_failed{scenario:boundary}     rate<0.01   → PASS (0% 실패)
+  ❌ sse_connections_rejected: count>0      → FAIL (count=0, 429 수신 없음)
+
+Nginx access log 분석:
+  HTTP 200: 4,800건 (normal_load 1,000 + boundary 1,800 + overflow 2,000)
+  HTTP 403: 7,373건 (overflow 구간 집중)
+  → 403 VU 수 추산: 7373 / ~73req = 약 100 VU
+  → 2100 VU - 2000(capacity) = 100 VU 초과분이 403을 반복 수신
+```
+
+**경계(boundary) 구간은 완전히 통과**. 13차에서 수정한 Nginx listen backlog 8192 + `systemctl restart nginx` 효과로 dial timeout 완전 해소. 단, overflow 구간에서 예상 429 대신 403 반환.
+
+---
+
+### 원인 분석 — Accept: text/event-stream + 예외 핸들러 콘텐츠 협상 실패
+
+**조사 과정**
+
+| 단계 | 확인 내용 | 결과 |
+|------|----------|------|
+| JWT 시크릿 | `tokens.csv` fanId=1 토큰으로 `curl` → `/api/v1/queue/status` | HTTP 200 ✅ |
+| Spring 포트 | `ss -tlnp \| grep java` | 8082 리스닝 (Nginx upstream도 8082) ✅ |
+| Nginx limit_conn | `fandrops-upstream.conf` 확인 | zone 정의만 있고 SSE location에 미적용 ✅ |
+| Spring Security | `@PreAuthorize`, 다중 FilterChain | payment 모듈에 메서드 보안 없음 ✅ |
+| SSE stream curl | `curl -H "Accept: text/event-stream"` → `/api/v1/queue/stream/4` | HTTP 200 + heartbeat ✅ |
+
+**403 반환 경로 (정확한 원인)**
+
+```
+[overflow VU]  Accept: text/event-stream  →  /api/v1/queue/stream/4
+     │
+     ├─ JwtAuthenticationFilter: JWT 유효 → SecurityContext 설정 ✓
+     ├─ AuthorizationFilter: authenticated() 통과 ✓
+     ├─ WaitQueueController.stream(): resolveFanId() 성공 ✓
+     │
+     ├─ SseEmitterRegistry.registerOrReject():
+     │      emitters.size() == 2000 >= sseMaxEmitters
+     │      → SseCapacityExceededException
+     │
+     ├─ PaymentControllerAdvice.handle(SseCapacityExceededException):
+     │      return ResponseEntity.status(429).body(JSON)
+     │      ← Content-Type 미지정
+     │
+     ├─ Spring MVC 콘텐츠 협상:
+     │      Accept: text/event-stream  ↔  producible: [application/json, application/*+json]
+     │      → 교집합 없음
+     │      → HttpMediaTypeNotAcceptableException
+     │
+     ├─ DefaultHandlerExceptionResolver:
+     │      response.sendError(406)
+     │
+     ├─ Tomcat: /error 에러 페이지 디스패치
+     │
+     ├─ Spring Security FilterChain (/error 경로):
+     │      .anyRequest().denyAll()  ← /error 명시적 허용 없음
+     │      → AccessDeniedException
+     │
+     └─ AccessDeniedHandler → response.sendError(403) → **클라이언트에 403 전달**
+```
+
+핵심: `WaitQueueController.stream()`이 `produces = TEXT_EVENT_STREAM_VALUE`로 선언되어 k6가 `Accept: text/event-stream` 헤더를 전송. 예외 핸들러가 Content-Type 미지정 상태로 JSON ResponseEntity를 반환하면 Spring이 콘텐츠 협상을 시도하고, 교집합 없으면 406을 내려 `/error` 디스패치를 유발. `ApiSecurityConfig`에 `/error` 경로가 없어서 `denyAll()`에 걸려 최종 403.
+
+---
+
+## 15차 수정 (2026-06-24) — SseCapacityExceededException 핸들러 Content-Type 명시
+
+### 수정 1: `PaymentControllerAdvice` — `.contentType(APPLICATION_JSON)` 추가
+
+```java
+// modules/payment/payment-api/.../PaymentControllerAdvice.java
+@ExceptionHandler(SseCapacityExceededException.class)
+public ResponseEntity<ApiResponse<Void>> handle(SseCapacityExceededException e) {
+    // Accept: text/event-stream 요청에서도 JSON 429 정상 전달
+    // (미지정 시 콘텐츠 협상 실패 → HttpMediaTypeNotAcceptableException → 406 → /error → denyAll → 403)
+    return ResponseEntity.status(429)
+            .header("Retry-After", "60")
+            .contentType(MediaType.APPLICATION_JSON)   // ← 추가
+            .body(ApiResponse.fail("RATE_LIMITED", e.getMessage(), true, traceId()));
+}
+```
+
+`ResponseEntity`에 Content-Type을 명시하면 `AbstractMessageConverterMethodProcessor.writeWithMessageConverters()`가 협상 단계를 건너뛰고 지정된 타입으로 직접 직렬화한다.
+
+### 수정 2: `ApiSecurityConfig` — `/error` permitAll 추가 (방어적 설정)
+
+```java
+// apps/api-server/.../ApiSecurityConfig.java
+.authorizeHttpRequests(auth -> auth
+    .requestMatchers("/error").permitAll()              // ← 추가: 에러 디스패치 허용
+    .requestMatchers("/api/v1/auth/**").permitAll()
+    // ...
+)
+```
+
+Spring Boot가 에러 페이지를 `/error`로 디스패치할 때 Security 필터가 차단하지 않도록 명시적으로 허용.
+
+### 기대 결과
+
+```
+overflow VU (2100-2000 = 100 VU) 흐름:
+  SseCapacityExceededException
+    → PaymentControllerAdvice (Content-Type: application/json 명시)
+    → ResponseEntity 429 + Retry-After: 60 + {"error":{"retryable":true}}
+    → k6: res.status === 429 → connectionRejected.add(1)
+    → sse_connections_rejected: count > 0  ✅ PASS
+```
+
 > **교훈**: somaxconn을 아무리 높여도 Nginx `listen` 디렉티브에 `backlog` 파라미터를 명시하지 않으면 OS 기본값(511)이 적용된다. 두 파라미터는 독립적이며, 실효 accept queue = `min(listen backlog, somaxconn)`이다. 복수 server block이 포트를 공유하는 Certbot 관리 설정에서는 첫 번째 server block(nginx.conf)에만 `backlog`를 지정하고 나머지(api-ssl.conf)에서는 socket 옵션을 일절 지정하지 않아야 한다.
