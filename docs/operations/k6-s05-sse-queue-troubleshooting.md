@@ -1281,3 +1281,56 @@ sse_connections_rejected: ['count>0'],
 | `sse_connections_rejected` count>0 | ✓ 300건 거부 |
 
 > **교훈**: SSE처럼 long-lived 연결 엔드포인트는 `ramping-vus`의 stage 종료가 연결을 강제 interrupt하여 정상 응답이 metric에 반영되지 않는다. "슬롯 채우기"와 "초과 검증"을 별도 executor로 분리해야 측정값이 의미를 가진다.
+
+---
+
+## 17차 실행 결과 (2026-06-24) — 목적 달성 ✅
+
+**GHA Run**: [#28069244721](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/actions/runs/28069244721)  
+**실행 시간**: 01:40:18 ~ 01:43:59 UTC (약 3m41s)  
+**커밋**: PR #433 (1447792)
+
+### k6 summary
+
+| 지표 | 값 | threshold | 판정 |
+|---|---|---|---|
+| `http_req_failed{scenario:capacity_fill}` | 0/0 (interrupted) | rate<0.001 | ✓ |
+| `checks{scenario:overflow_probe}` | 299/301 = 99.33% | rate>0.99 | ✓ |
+| `sse_connections_rejected` | 299건 | count>0 | ✓ |
+| `429 has retryable:true` | 통과 | — | ✓ |
+
+### Nginx access log 기준 서버 응답 분포
+
+| 상태 코드 | 건수 | 의미 |
+|---|---|---|
+| 200 | 2,000건 | capacity_fill — SSE 슬롯 정상 수용 |
+| 429 | 299건 | overflow_probe — 초과 연결 정상 거부 |
+
+### 남은 2건 실패 분석
+
+```
+overflow_probe 301건 중 2건: dial: i/o timeout
+```
+
+앱 오류(5xx)가 아니라 GHA runner 측 TCP 연결 시도 timeout. 비율 0.66%로 threshold(rate>0.99) 통과 범위 내. 허용 가능한 수준.
+
+### 측정상 한계 (기록)
+
+`capacity_fill`의 2,000건 성공은 **k6 summary 기준이 아니라 Nginx access log 기준**으로 검증.
+
+- k6 내부: `http_req_failed{capacity_fill} = 0/0`, `2,000 interrupted iterations`
+- SSE long-lived 연결이 stage 종료 시 interrupt되므로 http.get() 완료 전에 VU가 중단됨
+- 서버가 200을 반환했어도 k6 metric에는 미집계
+- 실제 성공 증거는 Nginx access log의 200 × 2,000건
+
+### 최종 결론
+
+| 검증 항목 | 결과 |
+|---|---|
+| SSE 2,000 연결 수용 | ✅ Nginx access log 2,000건 200 확인 |
+| 초과 연결 429 발생 | ✅ 299건 거부 |
+| 429 retryable:true 계약 | ✅ checks 99.33% 통과 |
+| 서버·Nginx 오류 | ✅ error log 없음 |
+| Spring journal 오류 | ✅ 없음 |
+
+**s05 시나리오 목적(SSE 용량 한계 검증 + 429 계약 검증) 달성.**
