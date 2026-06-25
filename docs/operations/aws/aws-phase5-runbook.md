@@ -1,6 +1,6 @@
-# AWS Phase 5 발표 준비 및 마무리
+﻿# AWS Phase 5 발표 준비 및 마무리
 
-> **관련:** [aws-phase4-runbook.md](./aws-phase4-runbook.md) · [observability-metrics.md](./observability-metrics.md) · **담당:** 지영재 (SRE/Platform)
+> **관련:** [aws-phase4-runbook.md](./aws-phase4-runbook.md) · [observability-metrics.md](../observability-metrics.md) · **담당:** 지영재 (SRE/Platform)
 
 Phase 4(부하 테스트·SLO 검증)에서 Phase 5(STAR 리포트·발표·문서 마무리)로 이행하는 작업을 기록한다.
 
@@ -140,6 +140,7 @@ docs/assets/phase5/
 | --- | --- |
 | [aws-phase4-runbook.md](./aws-phase4-runbook.md) | 부하 테스트·D 실험·SLO 검증 |
 | [nginx-bluegreen-strategy.md](./nginx-bluegreen-strategy.md) | Blue/Green 포트폴리오 스토리라인 §10 |
-| [ADR-008](../adr/ADR-008-nginx-bluegreen-deployment.md) | 무중단 배포 의사결정 |
-| [observability-metrics.md](./observability-metrics.md) | SLO·메트릭·알람 기준 |
-| [incident-response.md](./incident-response.md) | P0 알람 실전 테스트 절차 |
+| [ADR-008](../../adr/ADR-008-nginx-bluegreen-deployment.md) | 무중단 배포 의사결정 |
+| [observability-metrics.md](../observability-metrics.md) | SLO·메트릭·알람 기준 |
+| [incident-response.md](../incident-response.md) | P0 알람 실전 테스트 절차 |
+

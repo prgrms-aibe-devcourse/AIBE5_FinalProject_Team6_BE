@@ -1,6 +1,6 @@
-ㅁ# AWS Phase 1 인프라 구축 결과 및 수동 배포 검증 기록
+﻿ㅁ# AWS Phase 1 인프라 구축 결과 및 수동 배포 검증 기록
 
-> **관련:** [incident-response.md](./incident-response.md) · [failure-policy.md](./failure-policy.md) · [observability-metrics.md](./observability-metrics.md) · **담당:** 지영재 (SRE/Platform)
+> **관련:** [incident-response.md](../incident-response.md) · [failure-policy.md](../failure-policy.md) · [observability-metrics.md](../observability-metrics.md) · **담당:** 지영재 (SRE/Platform)
 
 FANDROPS **단일 prod AWS 환경** Phase 1 구축 결과를 기록한다.
 팀원이 현재 운영 환경을 이해하고, 동일 환경을 재현하거나, Phase 2 CD 자동화를 설계할 때 이 문서를 참고한다.
@@ -398,7 +398,7 @@ curl http://localhost/actuator/health
 
 | 문서 | 설명 |
 | --- | --- |
-| [incident-response.md](./incident-response.md) | P0~P2 장애 대응 |
-| [failure-policy.md](./failure-policy.md) | Redis·DB 장애 정책 |
-| [observability-metrics.md](./observability-metrics.md) | SLO·메트릭·알람 |
-| [personas/jiyoungjae.md](../ai/personas/jiyoungjae.md) | SRE 담당 체크리스트 |
+| [incident-response.md](../incident-response.md) | P0~P2 장애 대응 |
+| [failure-policy.md](../failure-policy.md) | Redis·DB 장애 정책 |
+| [observability-metrics.md](../observability-metrics.md) | SLO·메트릭·알람 |
+| [personas/jiyoungjae.md](../../ai/personas/jiyoungjae.md) | SRE 담당 체크리스트 |

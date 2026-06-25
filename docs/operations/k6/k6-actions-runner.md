@@ -6,6 +6,22 @@
 
 ---
 
+## 0. 현재 실행 모델 (2026-06-25 검증)
+
+| 목적 | 실행 위치 | 기준 |
+|---|---|---|
+| latency SLO 최종 판정 | **EC2-2 `team06-fandrops-2` (`t3.small`)** | 서울 리전/VPC 내부에서 `api.fandrops.site` 또는 EC2-1 active slot에 부하 생성 |
+| workflow 검증·원격 실행 | GitHub Actions runner | `run-k6.yml`, S3 seed 다운로드, WireMock 상태 확인 |
+| SSE 대용량 연결 검증 | GitHub Actions runner 또는 별도 runner | k6 runner 메모리 한계와 서버 수용 능력을 분리해서 해석 |
+
+2026-06-25 SSM 확인 기준 EC2-2에는 `k6 v2.0.0`이 설치되어 있고, `https://api.fandrops.site/actuator/health` 및 EC2-1 active slot `http://10.0.1.114:8081/actuator/health` 접근이 가능하다.
+
+Actions runner는 미국 리전에서 실행되어 서울 EC2까지 네트워크 오버헤드가 크다. 따라서 P95 같은 latency SLO는 EC2-2 측정값을 우선하고, Actions 결과는 자동화 검증·에러율·회귀 감지 중심으로 해석한다.
+
+정확한 AWS 리소스와 현재 런타임 상태는 [`../aws/current-infra-state.md`](../aws/current-infra-state.md)를 기준으로 한다.
+
+---
+
 ## 1. 왜 Actions Runner로 전환했나
 
 ### 기존 방식의 문제

@@ -5,7 +5,7 @@
 | **상태** | Accepted |
 | **결정일** | 2026-06-23 |
 | **선행 ADR** | [ADR-006 결제 confirm 멱등성](./ADR-006-payment-confirm-idempotency.md) · [ADR-011 결제 Saga](./ADR-011-payment-saga-choreography.md) |
-| **관련** | [k6 튜닝 결과](../operations/k6-tuned-results.md) · [결제 플로우](../sequence/payment-flow-reason.md) |
+| **관련** | [k6 튜닝 결과](../operations/k6/k6-tuned-results.md) · [결제 플로우](../sequence/payment-flow-reason.md) |
 | **담당** | 장성재 (`payment`) |
 
 ---
@@ -228,6 +228,6 @@ public PrecheckResult precheck(PaymentConfirmCommand command) {
 | --- | --- |
 | 결제 confirm 멱등성 | [ADR-006](./ADR-006-payment-confirm-idempotency.md) |
 | 결제 Saga | [ADR-011](./ADR-011-payment-saga-choreography.md) |
-| k6 부하 테스트 결과 | [k6-tuned-results.md](../operations/k6-tuned-results.md) |
+| k6 부하 테스트 결과 | [k6-tuned-results.md](../operations/k6/k6-tuned-results.md) |
 | 결제 상태 머신 | [invariants-and-state-machines.md §3](../state/invariants-and-state-machines.md) |
 | 결제 시퀀스 | [payment-flow-reason.md](../sequence/payment-flow-reason.md) |

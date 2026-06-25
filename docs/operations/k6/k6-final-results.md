@@ -4,7 +4,7 @@
 > **실행 환경**: EC2-2 t3.small (k6 전용 러너) → EC2-1 Spring Boot (api.fandrops.site)
 > **실행일**: 2026-06-
 > **기준 SLO**: `docs/observability-metrics.md` 참고
-> **이전 결과**: `docs/operations/k6-tuned-results.md`
+> **이전 결과**: `docs/operations/k6/k6-tuned-results.md`
 
 ---
 

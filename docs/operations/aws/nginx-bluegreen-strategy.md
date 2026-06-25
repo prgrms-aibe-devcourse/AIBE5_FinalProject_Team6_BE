@@ -1,8 +1,23 @@
-# Nginx Blue/Green 배포 전략 및 분산 설계 검증
+﻿# Nginx Blue/Green 배포 전략 및 분산 설계 검증
 
-> **관련:** [aws-phase3-runbook.md](./aws-phase3-runbook.md) · [observability-metrics.md](./observability-metrics.md) · **담당:** 지영재 (SRE/Platform)
+> **관련:** [aws-phase3-runbook.md](./aws-phase3-runbook.md) · [current-infra-state.md](./current-infra-state.md) · [observability-metrics.md](../observability-metrics.md) · **담당:** 지영재 (SRE/Platform)
 
 ALB 없는 예산 제약 환경에서 Nginx를 활용해 무중단 배포와 분산 설계 검증을 구현한 의사결정 과정과 기술 상세를 기록한다.
+
+---
+
+## 0. 현재 검증 상태 (2026-06-25)
+
+| 항목 | 현재 상태 |
+| --- | --- |
+| EC2-1 | `team06-fandrops` (`t3.medium`, `10.0.1.114`) |
+| EC2-2 | `team06-fandrops-2` (`t3.small`, k6 runner, `10.0.1.47`) |
+| Active slot | `blue:8081` |
+| Inactive slot | `green:8082` (배포 시 기동, 평상시 정지 가능) |
+| Nginx upstream | `/etc/nginx/fandrops-active.conf` → `127.0.0.1:8081` |
+| Sidecars on EC2-1 | WireMock `8090`, Prometheus `9090`, Grafana `3000` |
+
+정확한 리소스 ID, 보안그룹, VPC/Subnet, RDS/Redis/S3 상태는 [current-infra-state.md](./current-infra-state.md)를 기준으로 한다.
 
 ---
 
@@ -610,6 +625,7 @@ RDS MySQL (공유)    ElastiCache Redis (공유)
 | --- | --- |
 | [aws-phase2-runbook.md](./aws-phase2-runbook.md) | CI/CD · 모니터링 · CloudWatch · Rate Limit |
 | [aws-phase3-runbook.md](./aws-phase3-runbook.md) | Redis 관측 · AUTH · S3 CORS · k6 스크립트 |
-| [incident-response.md](./incident-response.md) | P0~P2 장애 대응 절차 |
-| [observability-metrics.md](./observability-metrics.md) | SLO · 메트릭 · 알람 기준 |
-| [personas/jiyoungjae.md](../ai/personas/jiyoungjae.md) | SRE 담당 체크리스트 |
+| [incident-response.md](../incident-response.md) | P0~P2 장애 대응 절차 |
+| [observability-metrics.md](../observability-metrics.md) | SLO · 메트릭 · 알람 기준 |
+| [personas/jiyoungjae.md](../../ai/personas/jiyoungjae.md) | SRE 담당 체크리스트 |
+

@@ -1,6 +1,6 @@
-# AWS Phase 4 부하 테스트 및 SLO 검증
+﻿# AWS Phase 4 부하 테스트 및 SLO 검증
 
-> **관련:** [aws-phase3-runbook.md](./aws-phase3-runbook.md) · [nginx-bluegreen-strategy.md](./nginx-bluegreen-strategy.md) · [observability-metrics.md](./observability-metrics.md) · **담당:** 지영재 (SRE/Platform)
+> **관련:** [aws-phase3-runbook.md](./aws-phase3-runbook.md) · [nginx-bluegreen-strategy.md](./nginx-bluegreen-strategy.md) · [observability-metrics.md](../observability-metrics.md) · **담당:** 지영재 (SRE/Platform)
 
 Phase 3(고도화·FE 연동·배포 안정화)에서 Phase 4(부하 테스트·SLO 측정·분산 검증·튜닝)로 이행하는 작업 계획과 결과를 기록한다.
 팀원이 부하 테스트 방법과 결과를 이해하거나, Phase 5 발표 자료를 준비할 때 이 문서를 참고한다.
@@ -122,7 +122,7 @@ sudo systemctl restart "fandrops-$ACTIVE"
 ### 3-3. JWT 생성 및 Redis 사전 적재
 
 > **인증 방식:** prod 프로파일 유지 — JWT 사전 생성(CSV) + Redis AccessTicket 사전 적재 방식으로 운영 코드 수정 없이 실행.
-> 상세 배경 및 결정 이유: [`k6-execution-plan.md §2`](./k6-execution-plan.md)
+> 상세 배경 및 결정 이유: [`k6-execution-plan.md §2`](../k6/k6-execution-plan.md)
 
 **JWT tokens.csv 생성 (로컬):**
 
@@ -154,7 +154,7 @@ redis-cli -h <REDIS_ENDPOINT> get "access:ticket:1:2100" # → "test-ticket-toke
 
 > **2026-06-17 변경:** k6를 EC2에서 직접 실행하면 t3.small CPU 경합으로 측정값이 왜곡된다.  
 > (시나리오 05 OOM 크래시, 시나리오 06 피드 0% 실패 실제 발생)  
-> **현재는 GitHub Actions runner에서 k6를 실행한다.** 상세: [`k6-actions-runner.md`](./k6-actions-runner.md)
+> **현재는 GitHub Actions runner에서 k6를 실행한다.** 상세: [`k6-actions-runner.md`](../k6/k6-actions-runner.md)
 
 **실행 절차 요약:**
 
@@ -666,7 +666,7 @@ curl -s "http://admin:admin@localhost:3000/api/health"
 | 4 | 2026-06-17 | 시나리오 04 전체 403 | 시나리오 05를 04보다 먼저 실행 → `RedisAccessTicketRepository.issue()`가 티켓 UUID로 덮어씀 | 04 실행 전 Redis 재적재 필수. 실행 순서: 04 → 05 (절대 역순 금지) |
 | 5 | 2026-06-17 | 시나리오 03 전체 99% 실패 | `TossConfirmBody` inner private record Jackson 직렬화 불가 → Wiremock 빈 body 수신 → 404 → payment FAILED → 이후 전부 409 DUPLICATE_PAYMENT | 이슈 [#318](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/issues/318) 수정(담당: 장성재) 후 재측정 |
 | 6 | 2026-06-17 | DB reset 후 k6 실행해도 전부 409 | `updated_at` 미갱신 → OrderRecoveryScheduler(60초 주기, 30분 타임아웃)가 즉시 CANCEL | `UPDATE orders SET status='RESERVED', updated_at=NOW() WHERE ...` |
-| 7 | 2026-06-17 | 시나리오 05 OOM 크래시, 시나리오 06 피드 0% | k6와 앱 서버가 같은 t3.small에서 실행 → CPU/메모리 경합 | k6를 GitHub Actions runner로 이관 ([k6-actions-runner.md](./k6-actions-runner.md)) |
+| 7 | 2026-06-17 | 시나리오 05 OOM 크래시, 시나리오 06 피드 0% | k6와 앱 서버가 같은 t3.small에서 실행 → CPU/메모리 경합 | k6를 GitHub Actions runner로 이관 ([k6-actions-runner.md](../k6/k6-actions-runner.md)) |
 | 8 | 2026-06-17 | inventory 리셋 후 50건 초과 시 주문 전부 실패 | `available_qty=200`으로 리셋했으나 `total_qty=50` 그대로 → invariant 위반 | 리셋 SQL에 `total_qty`도 포함: `SET available_qty=200, reserved_qty=0, total_qty=200` |
 | 9 | 2026-06-18 | Prometheus/Grafana 컨테이너 Exited (255) — 메트릭 수집 중단 | 시나리오 05 OOM 크래시 이후 19시간 미재기동 — docker compose가 restart policy 없이 기동됐음 | `start-monitoring.sh` 스크립트로 재기동 (§6-3). `GMAIL_APP_PASSWORD`는 SSM `/fandrops/prod/gmail-app-password`에 저장, EC2 역할로 읽어 주입 |
 
@@ -697,10 +697,11 @@ curl -s "http://admin:admin@localhost:3000/api/health"
 
 | 문서 | 설명 |
 | --- | --- |
-| [k6-actions-runner.md](./k6-actions-runner.md) | k6 GitHub Actions runner 실행 가이드 — 전환 이유, 아키텍처, Secrets, S3 업로드, EC2 사전 준비 |
+| [k6-actions-runner.md](../k6/k6-actions-runner.md) | k6 GitHub Actions runner 실행 가이드 — 전환 이유, 아키텍처, Secrets, S3 업로드, EC2 사전 준비 |
 | [aws-phase3-runbook.md](./aws-phase3-runbook.md) | Redis 관측 · AUTH · S3 CORS · k6 스크립트 · Blue/Green 설계 |
 | [aws-phase5-runbook.md](./aws-phase5-runbook.md) | STAR 리포트 · 발표 자료 · 최종 SLO 수치 기록 |
 | [nginx-bluegreen-strategy.md](./nginx-bluegreen-strategy.md) | Blue/Green 아키텍처 의사결정 · 배포 스크립트 · 롤백 시나리오 · 분산 설계 검증 |
-| [incident-response.md](./incident-response.md) | P0~P2 장애 대응 절차 · 실전 테스트 절차 |
-| [observability-metrics.md](./observability-metrics.md) | SLO · 메트릭 · 알람 기준 |
-| [personas/jiyoungjae.md](../ai/personas/jiyoungjae.md) | SRE 담당 체크리스트 |
+| [incident-response.md](../incident-response.md) | P0~P2 장애 대응 절차 · 실전 테스트 절차 |
+| [observability-metrics.md](../observability-metrics.md) | SLO · 메트릭 · 알람 기준 |
+| [personas/jiyoungjae.md](../../ai/personas/jiyoungjae.md) | SRE 담당 체크리스트 |
+

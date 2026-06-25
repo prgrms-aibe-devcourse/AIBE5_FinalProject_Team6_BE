@@ -164,21 +164,22 @@ PR 머지 전 **해당 도메인 오너 리뷰** · API·이벤트 페이로드 
 
 ## 운영 인프라 / 배포 구조 요약
 
-FANDROPS 백엔드는 단일 Spring Boot 멀티모듈 모놀리스로 배포되며, 운영 인프라는 EC2-1 앱 서버와 EC2-2 k6 부하 생성 서버로 역할을 분리한다.
+FANDROPS 백엔드는 단일 Spring Boot 멀티모듈 모놀리스로 배포되며, 운영 인프라는 EC2-1 앱 서버와 EC2-2 k6 부하 생성 서버로 역할을 분리한다.  
+정확한 AWS 리소스 ID와 현재 상태는 [`docs/operations/aws/current-infra-state.md`](../operations/aws/current-infra-state.md)를 기준으로 한다.
 
 ### Runtime
 
 | 구성 요소 | 내용 |
 | --- | --- |
 | FE | Vercel (`fandrops.site`) |
-| BE | EC2-1 (`t3.medium`, `api.fandrops.site`) |
-| Reverse Proxy | Nginx |
-| App Runtime | Spring Boot Blue/Green slot (blue: `8081` / green: `8082`) |
-| DB | RDS MySQL |
-| Cache / Queue | ElastiCache Redis |
-| Storage | S3 |
-| Monitoring | Prometheus / Grafana (EC2-1 공존) |
-| Load Test | EC2-2 (`t3.small`, k6 전용 runner — 운영 트래픽 미수신) |
+| BE | EC2-1 `team06-fandrops` (`t3.medium`, `api.fandrops.site`) |
+| Reverse Proxy | Nginx (`80`, `443`) |
+| App Runtime | Spring Boot Blue/Green slot (blue: `8081`, green: `8082`; 배포 완료 후 active 슬롯만 상시 실행) |
+| DB | RDS MySQL `8.0.46` (`db.t3.micro`, private) |
+| Cache / Queue | ElastiCache Redis `7.1.0` (`cache.t3.micro`, private) |
+| Storage | S3 `fandrops-prod-storage-495264909330-ap-northeast-2-an` (public access block enabled, presigned URL) |
+| Monitoring | Prometheus `9090` / Grafana `3000` (EC2-1 Docker) |
+| Load Test | EC2-2 `team06-fandrops-2` (`t3.small`, k6 runner — 운영 트래픽 미수신) |
 
 ### Blue/Green 배포 요약
 
@@ -191,7 +192,9 @@ FANDROPS 백엔드는 단일 Spring Boot 멀티모듈 모놀리스로 배포되�
 5. `nginx -t` 후 `systemctl reload nginx`를 수행한다.
 6. 기존 slot은 graceful shutdown한다.
 
-상세 명령어와 운영 절차는 [`docs/operations/nginx-bluegreen-strategy.md`](../operations/nginx-bluegreen-strategy.md)를 SSOT로 둔다.
+상세 명령어와 운영 절차는 [`docs/operations/aws/nginx-bluegreen-strategy.md`](../operations/aws/nginx-bluegreen-strategy.md)를 SSOT로 둔다.
+
+2026-06-25 검증 기준 현재 active slot은 `blue:8081`이며, `green:8082`는 배포 시 기동되는 inactive slot이다.
 
 ### k6 실행 구조
 
@@ -208,5 +211,6 @@ active Spring Boot slot on ec2-1 (t3.medium)
 - ec2-1은 운영 앱 서버이자 서버 사이드 지표 기준점이다.
 - ec2-2는 운영 트래픽을 받지 않는 k6 전용 부하 생성 서버다.
 - k6를 앱 서버와 분리한 이유: 앱 서버 리소스와 부하 생성기 리소스 경합 방지, 서버 성능과 k6 runner 성능을 분리해서 해석.
+- GitHub Actions runner는 실행 자동화와 일부 검증에는 유효하지만, 서울 리전 EC2 대비 네트워크 오버헤드가 커서 latency SLO 판정에는 EC2-2 측정값을 우선한다.
 
-상세 실행 방식은 [`docs/operations/k6-tuned-results.md`](../operations/k6-tuned-results.md) 및 [`docs/operations/k6-actions-runner.md`](../operations/k6-actions-runner.md)를 참고한다.
+상세 실행 방식은 [`docs/operations/k6/k6-tuned-results.md`](../operations/k6/k6-tuned-results.md) 및 [`docs/operations/k6/k6-actions-runner.md`](../operations/k6/k6-actions-runner.md)를 참고한다.

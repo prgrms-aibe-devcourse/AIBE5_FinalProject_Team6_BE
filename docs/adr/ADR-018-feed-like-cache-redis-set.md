@@ -5,7 +5,7 @@
 | **상태** | Accepted |
 | **결정일** | 2026-06-20 |
 | **선행 ADR** | [ADR-012 큐 저장소 Redis ZSet](./ADR-012-queue-storage-redis-zset.md) · [ADR-013 FeedCache viewer-agnostic 전략](./ADR-013-feed-cache-viewer-agnostic.md) |
-| **관련** | [k6-tuned-results.md § s02](../operations/k6-tuned-results.md) |
+| **관련** | [k6-tuned-results.md § s02](../operations/k6/k6-tuned-results.md) |
 | **담당** | 정환철 (`community`) |
 | **관련 PR** | [#394](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/pull/394) · [#463](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/pull/463) |
 
@@ -195,8 +195,8 @@ TTL 만료(`isExpired()`)를 확인해 stale 엔트리를 제거한 뒤 Redis를
 | --- | --- |
 | FeedCache viewer-agnostic 전략 | [ADR-013](./ADR-013-feed-cache-viewer-agnostic.md) |
 | Redis ZSet 큐 패턴 | [ADR-012](./ADR-012-queue-storage-redis-zset.md) |
-| k6 s02 초기 측정 결과 | [k6-tuned-results.md](../operations/k6-tuned-results.md) |
-| k6 s02 final 측정 결과 | [k6-final-results.md](../operations/k6-final-results.md) |
-| k6 s02·s06 real-final 측정 결과 | [k6-realfinal-result.md](../operations/k6-realfinal-result.md) |
+| k6 s02 초기 측정 결과 | [k6-tuned-results.md](../operations/k6/k6-tuned-results.md) |
+| k6 s02 final 측정 결과 | [k6-final-results.md](../operations/k6/k6-final-results.md) |
+| k6 s02·s06 real-final 측정 결과 | [k6-realfinal-result.md](../operations/k6/k6-realfinal-result.md) |
 | FeedLikeCache 구현 PR | [#394](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/pull/394) |
 | JVM local hot cache 추가 PR | [#463](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/pull/463) |
