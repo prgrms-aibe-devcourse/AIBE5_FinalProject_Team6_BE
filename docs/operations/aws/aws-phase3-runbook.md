@@ -1,6 +1,6 @@
-# AWS Phase 3 고도화 결과
+﻿# AWS Phase 3 고도화 결과
 
-> **관련:** [aws-phase2-runbook.md](./aws-phase2-runbook.md) · [observability-metrics.md](./observability-metrics.md) · **담당:** 지영재 (SRE/Platform)
+> **관련:** [aws-phase2-runbook.md](./aws-phase2-runbook.md) · [observability-metrics.md](../observability-metrics.md) · **담당:** 지영재 (SRE/Platform)
 
 Phase 2(자동화·관측·트래픽 제어)에서 Phase 3(고도화·FE 연동·부하 테스트 준비)로 이행한 결과를 기록한다.
 팀원이 모니터링 구성과 부하 테스트 설계를 이해하거나, Phase 4 k6 SLO 검증 작업을 설계할 때 이 문서를 참고한다.
@@ -540,6 +540,7 @@ curl -s http://localhost:80/actuator/health
 | [aws-phase2-runbook.md](./aws-phase2-runbook.md) | CI/CD 자동화 · 모니터링 · CloudWatch · Rate Limit |
 | [aws-phase4-runbook.md](./aws-phase4-runbook.md) | k6 부하 테스트 · D 분산 실험 · SLO 튜닝 |
 | [nginx-bluegreen-strategy.md](./nginx-bluegreen-strategy.md) | Blue/Green 아키텍처 의사결정 · 배포 스크립트 · 롤백 시나리오 |
-| [incident-response.md](./incident-response.md) | P0~P2 장애 대응 절차 |
-| [observability-metrics.md](./observability-metrics.md) | SLO·메트릭·알람 기준 |
-| [personas/jiyoungjae.md](../ai/personas/jiyoungjae.md) | SRE 담당 체크리스트 |
+| [incident-response.md](../incident-response.md) | P0~P2 장애 대응 절차 |
+| [observability-metrics.md](../observability-metrics.md) | SLO·메트릭·알람 기준 |
+| [personas/jiyoungjae.md](../../ai/personas/jiyoungjae.md) | SRE 담당 체크리스트 |
+

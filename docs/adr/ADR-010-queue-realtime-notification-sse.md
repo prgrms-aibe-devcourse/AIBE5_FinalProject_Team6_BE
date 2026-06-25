@@ -202,4 +202,5 @@ spring:
 | Wait Queue API 스펙 | [mvp-api-spec.md § Wait Queue](../api/mvp-api-spec.md) |
 | SSE 상한·RateLimit 계약 | [api-contract.md](../api/api-contract.md) |
 | Redis 장애 정책 | [failure-policy.md §3.1](../operations/failure-policy.md) |
-| k6 SSE 부하 측정 결과 | [k6-tuned-results.md § s05](../operations/k6-tuned-results.md) |
+| k6 SSE 부하 측정 결과 | [k6-tuned-results.md § s05](../operations/k6/k6-tuned-results.md) |
+

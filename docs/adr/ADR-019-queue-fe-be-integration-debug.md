@@ -302,4 +302,5 @@ timeout=30s로 변경 시 소멸 시간 = 150초 → 여유 시간 127초 확보
 | SSE 채택 결정 | [ADR-010](./ADR-010-queue-realtime-notification-sse.md) |
 | 대기열 Redis ZSET 저장 | [ADR-012](./ADR-012-queue-storage-redis-zset.md) |
 | 대기열 불변식 | [invariants-and-state-machines.md §6](../state/invariants-and-state-machines.md) |
-| Blue/Green 배포 · systemd 구조 | [aws-phase3-runbook.md](../operations/aws-phase3-runbook.md) |
+| Blue/Green 배포 · systemd 구조 | [aws-phase3-runbook.md](../operations/aws/aws-phase3-runbook.md) |
+

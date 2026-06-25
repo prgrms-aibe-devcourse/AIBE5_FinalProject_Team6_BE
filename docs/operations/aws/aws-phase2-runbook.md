@@ -1,6 +1,6 @@
-# AWS Phase 2 운영 자동화 구축 결과
+﻿# AWS Phase 2 운영 자동화 구축 결과
 
-> **관련:** [aws-phase1-runbook.md](./aws-phase1-runbook.md) · [incident-response.md](./incident-response.md) · [observability-metrics.md](./observability-metrics.md) · **담당:** 지영재 (SRE/Platform)
+> **관련:** [aws-phase1-runbook.md](./aws-phase1-runbook.md) · [incident-response.md](../incident-response.md) · [observability-metrics.md](../observability-metrics.md) · **담당:** 지영재 (SRE/Platform)
 
 Phase 1(수동 배포·인프라 구축)에서 Phase 2(자동화·관측·트래픽 제어)로 이행한 결과를 기록한다.
 팀원이 운영 자동화 흐름을 이해하거나, 동일 환경을 재현하거나, Phase 3·4 k6·SLO 검증 작업을 설계할 때 이 문서를 참고한다.
@@ -306,7 +306,8 @@ SSE는 HTTP Keep-Alive 장기 연결이므로 `proxy_buffering off`와 긴 `prox
 | 문서 | 설명 |
 | --- | --- |
 | [aws-phase1-runbook.md](./aws-phase1-runbook.md) | VPC/EC2/RDS/Redis/Nginx 기초 구성 |
-| [incident-response.md](./incident-response.md) | P0~P2 장애 대응 절차 |
-| [failure-policy.md](./failure-policy.md) | Redis·DB·Outbox 장애 정책 |
-| [observability-metrics.md](./observability-metrics.md) | SLO·메트릭·알람 기준 |
-| [personas/jiyoungjae.md](../ai/personas/jiyoungjae.md) | SRE 담당 체크리스트 |
+| [incident-response.md](../incident-response.md) | P0~P2 장애 대응 절차 |
+| [failure-policy.md](../failure-policy.md) | Redis·DB·Outbox 장애 정책 |
+| [observability-metrics.md](../observability-metrics.md) | SLO·메트릭·알람 기준 |
+| [personas/jiyoungjae.md](../../ai/personas/jiyoungjae.md) | SRE 담당 체크리스트 |
+

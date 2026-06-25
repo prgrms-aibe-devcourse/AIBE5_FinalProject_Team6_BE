@@ -4,7 +4,7 @@
 > **실행 환경**: EC2-2 t3.small (k6 전용 러너) → EC2-1 Spring Boot (api.fandrops.site)
 > **실행일**: 2026-06- ~
 > **기준 SLO**: `docs/observability-metrics.md` 참고
-> **이전 결과**: `docs/operations/k6-baseline-results.md`
+> **이전 결과**: `docs/operations/k6/k6-baseline-results.md`
 
 ---
 
@@ -771,7 +771,7 @@ GitHub Actions → **Run k6 Load Test** → `scenario: 05` → `confirm: yes`
 
 
 > 트러블슈팅 기록(1차~11차)은 분량이 방대하여 전용 문서로 분리되었습니다.  
-> **상세**: [`docs/operations/k6-s05-sse-queue-troubleshooting.md`](./k6-s05-sse-queue-troubleshooting.md)
+> **상세**: [`docs/operations/k6/k6-s05-sse-queue-troubleshooting.md`](./k6-s05-sse-queue-troubleshooting.md)
 
 
 ---

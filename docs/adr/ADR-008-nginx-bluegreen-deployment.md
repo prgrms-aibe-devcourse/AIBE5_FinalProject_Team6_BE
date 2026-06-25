@@ -6,7 +6,7 @@
 | **결정일** | 2026-06-10 |
 | **구현 완료일** | 2026-06-11 (PR #221, #222) |
 | **선행 ADR** | [ADR-001 멀티모듈 모놀리스](./ADR-001-multi-module-monolith.md) |
-| **관련** | [nginx-bluegreen-strategy.md](../operations/nginx-bluegreen-strategy.md) · [aws-phase3-runbook.md §8](../operations/aws-phase3-runbook.md) · [aws-phase4-runbook.md](../operations/aws-phase4-runbook.md) |
+| **관련** | [nginx-bluegreen-strategy.md](../operations/aws/nginx-bluegreen-strategy.md) · [aws-phase3-runbook.md §8](../operations/aws/aws-phase3-runbook.md) · [aws-phase4-runbook.md](../operations/aws/aws-phase4-runbook.md) |
 | **담당** | 지영재 (SRE/Platform) |
 
 ---
@@ -187,7 +187,8 @@ B안(단일 EC2 Blue/Green)은 추가 비용 없이 배포 다운타임을 0~2�
 
 | 문서 | 경로 |
 | --- | --- |
-| Blue/Green 기술 상세 및 배포 스크립트 | [nginx-bluegreen-strategy.md](../operations/nginx-bluegreen-strategy.md) |
-| Phase 3 Blue/Green EC2 적용 절차 | [aws-phase3-runbook.md §8](../operations/aws-phase3-runbook.md) |
-| Phase 4 D 실험 및 SLO 검증 계획 | [aws-phase4-runbook.md](../operations/aws-phase4-runbook.md) |
+| Blue/Green 기술 상세 및 배포 스크립트 | [nginx-bluegreen-strategy.md](../operations/aws/nginx-bluegreen-strategy.md) |
+| Phase 3 Blue/Green EC2 적용 절차 | [aws-phase3-runbook.md §8](../operations/aws/aws-phase3-runbook.md) |
+| Phase 4 D 실험 및 SLO 검증 계획 | [aws-phase4-runbook.md](../operations/aws/aws-phase4-runbook.md) |
 | SLO 메트릭 정의 | [observability-metrics.md](../operations/observability-metrics.md) |
+

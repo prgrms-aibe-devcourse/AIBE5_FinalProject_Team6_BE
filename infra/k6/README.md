@@ -1,5 +1,8 @@
 # k6 부하 테스트
 
+> 현재 AWS 실행 모델과 최종 측정 해석은 `docs/operations/k6/` 문서를 기준으로 한다.  
+> 특히 현행 runner 역할은 `docs/operations/k6/k6-actions-runner.md`, AWS 리소스 상태는 `docs/operations/aws/current-infra-state.md`, 최종 결과는 `docs/operations/k6/k6-realfinal-result.md`를 참고한다.
+
 ## 목차
 
 1. [디렉터리 구조](#디렉터리-구조)
@@ -25,7 +28,9 @@ infra/k6/
 │   ├── 02_feed_read.js          # 피드 조회 읽기 성능
 │   ├── 03_payment_confirm.js    # 결제 확인 (Wiremock)
 │   ├── 04_drop_spike.js         # 드롭 스파이크 (0→1000 VU)
-│   └── 05_sse_queue.js          # SSE 동시 연결 한계
+│   ├── 05_sse_queue.js          # SSE 동시 연결 한계
+│   ├── 06_workload_model.js     # 통합 워크로드
+│   └── 07_product_read.js       # 상품 조회 읽기 성능
 ├── seed/
 │   ├── seed.sql         # DB 테스트 데이터 삽입 스크립트
 │   └── orders.json      # 시나리오 03 주문 픽스처
@@ -399,7 +404,22 @@ threshold 실패 예시:
 
 ---
 
-## Phase 4 — 서버 환경 실행
+## Phase 4 이후 — AWS 서버 환경 실행
+
+2026-06-25 기준 운영 측정 구조는 아래와 같다.
+
+```text
+EC2-2 team06-fandrops-2 (t3.small, k6 runner)
+  └─ HTTPS / direct private traffic
+     └─ EC2-1 team06-fandrops (t3.medium)
+        ├─ Nginx :80/:443
+        ├─ Spring Boot active slot :8081 or :8082
+        ├─ WireMock Docker :8090
+        ├─ Prometheus :9090
+        └─ Grafana :3000
+```
+
+GitHub Actions runner는 자동화와 일부 회귀 검증에 사용하되, latency SLO 최종 판정은 서울 리전의 EC2-2 runner 측정값을 우선한다.
 
 ### 현재(로컬) vs Phase 4 구성 비교
 
