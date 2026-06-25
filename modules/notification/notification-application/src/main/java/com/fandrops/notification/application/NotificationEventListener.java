@@ -45,8 +45,9 @@ public class NotificationEventListener {
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void handleRestockAlert(RestockAlertEvent event) {
         log.info("재입고 알림 이벤트 수신: fanId={}, productId={}", event.getFanId(), event.getProductId());
+        String escapedName = event.getProductName().replace("\\", "\\\\").replace("\"", "\\\"");
         publish("RESTOCK", event.getProductId(),
-                "{\"fanId\":" + event.getFanId() + ",\"productId\":" + event.getProductId() + "}");
+                "{\"fanId\":" + event.getFanId() + ",\"productId\":" + event.getProductId() + ",\"productName\":\"" + escapedName + "\"}");
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)

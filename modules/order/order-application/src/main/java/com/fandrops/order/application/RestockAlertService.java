@@ -76,7 +76,7 @@ public class RestockAlertService {
         for (RestockAlert alert : pending) {
             alert.markSent();
             restockAlertRepository.save(alert);
-            eventPublisher.publishEvent(new RestockAlertEvent(alert.getFanId(), productId));
+            eventPublisher.publishEvent(new RestockAlertEvent(alert.getFanId(), productId, product.getName()));
         }
 
         InventoryInfo info = inventoryReadPort.getByProductId(productId);

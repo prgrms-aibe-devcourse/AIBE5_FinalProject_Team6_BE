@@ -5,12 +5,15 @@ public class RestockAlertEvent {
 
     private final Long fanId;
     private final Long productId;
+    private final String productName;
 
-    public RestockAlertEvent(Long fanId, Long productId) {
+    public RestockAlertEvent(Long fanId, Long productId, String productName) {
         this.fanId = fanId;
         this.productId = productId;
+        this.productName = productName;
     }
 
     public Long getFanId() { return fanId; }
     public Long getProductId() { return productId; }
+    public String getProductName() { return productName; }
 }
