@@ -97,7 +97,9 @@ FANDROPS 백엔드는 단일 EC2 인스턴스에 앱 서버·Nginx·모니터링
 **이유**:
 - 키페어 분실·유출 위험 제거
 - IAM 역할 기반 접근 제어 → 팀원별 권한 관리 용이
-- 보안 그룹에서 SSH 포트 22 완전 차단 가능
+- 보안그룹 `sg-0fbc632fa599e1e64` — SSH 22번 인바운드 규칙 없음 (AWS CLI 확인)
+
+**SSM 운영 상태**: EC2-1·EC2-2 모두 SSM PingStatus=Online (AWS CLI 확인)
 
 **운영 중 발견한 한계**: Windows 환경에서 SSM CLI stdout 인코딩 이슈 발생. `PYTHONUTF8=1` + `--cli-input-json file://` + `LC_ALL=C` 조합으로 해결.
 
@@ -140,7 +142,7 @@ FANDROPS 백엔드는 단일 EC2 인스턴스에 앱 서버·Nginx·모니터링
 | k6 버전 | v2.0.0 |
 | 실행 위치 | EC2-2 t3.small (`3.34.42.43`) |
 | 측정 대상 | `https://api.fandrops.site` public HTTPS endpoint (EC2-2 → EC2-1, 동일 리전 내 호출) |
-| s07 예외 | Nginx Rate Limit 우회를 위해 active slot 직접 접근 [확인 필요] |
+| s07 예외 | `http://10.0.1.114:8081` active slot 직접 접근 — Nginx 우회 (시나리오 코드 주석 확인) |
 | Prometheus Remote Write | `http://10.0.1.114:9090/api/v1/write` |
 | 시각화 | Grafana (`http://43.203.3.196:3000`) |
 | 토큰 | fan_id 1~2100 JWT (`/opt/fandrops/k6/seed/tokens.csv`) |
