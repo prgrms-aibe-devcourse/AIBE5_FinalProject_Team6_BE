@@ -40,7 +40,7 @@ const HEADER = `-- ============================================================
 --   fan@fandrops.test / fan2@fandrops.test
 --   agency@fandrops.test
 --   admin@fandrops.com (V18 마이그레이션 계정 비밀번호 UPDATE)
---   artist (아티스트 멤버, NOVA)
+--   NovaHaneul / NovaSera / LunaEunbyeol ... (아티스트 멤버)
 -- ============================================================
 
 SET NAMES utf8mb4;
@@ -72,7 +72,7 @@ DELETE FROM agency_application;
 DELETE FROM banner;
 DELETE FROM user_follow WHERE fan_id = 1 AND artist_id = 1;
 DELETE FROM artist_feed WHERE artist_id IN (1,2,3);
-DELETE FROM artist_member WHERE id = 1;
+DELETE FROM artist_member WHERE artist_id IN (1, 2, 3);
 DELETE FROM artist_profile WHERE id IN (1,2,3);
 DELETE FROM fan WHERE id IN (1,2);
 DELETE FROM agency_account WHERE id = 1;
