@@ -542,20 +542,77 @@ WHERE product_id = ? AND available_qty > 0
 
 ---
 
-## 13. 스크린샷 배치안
+## 13. 시나리오별 스크린샷 배치표
 
-| 슬라이드 주제 | 권장 스크린샷 | 캡션 |
-|---|---|---|
-| AWS 아키텍처 | AWS Console EC2 인스턴스 목록 (2대) | EC2-1 t3.medium (앱), EC2-2 t3.small (k6) |
-| Blue/Green 배포 | `/etc/fandrops/active-slot` 파일 내용 + Nginx upstream conf | 현재 Active slot: blue, upstream :8081 |
-| k6 실행 환경 | EC2-2 SSM 터미널 k6 실행 화면 | k6 v2.0.0, VPC 내부 측정 |
-| Grafana Overview | SLO 달성 시점 Grafana Overview row 전체 | RealFinal 측정 당시 P95 / RPS |
-| s01 정합성 | Grafana `fandrops_orders_status` 그래프 (reserved=100) | orders_reserved=100, 5xx=0 |
-| s02 FeedLikeCache | Grafana P95 Before/After 비교 (276ms → 66ms) | FeedLikeCache 적용 효과 |
-| s05 SSE 용량 | Grafana SSE 동시 연결수 그래프 (2,000 도달) | 정상 구간 2,000 연결 유지 |
-| s05 overflow_probe | k6 terminal output — 429 비율 99.33% | overflow_probe 단계 결과 |
-| s07 RPS 달성 | k6 terminal output — `http_reqs` 299.47 RPS | 300 RPS constant-arrival-rate 달성 |
-| SLO 최종 판정 | Section 9 표 직접 슬라이드 작성 | 전 시나리오 ✅ |
+### 배치 원칙
+
+- 각 시나리오는 **실제 존재하는 캡처 파일 기준**으로 배치한다.
+- 단계별 캡처가 없는 경우 빈칸을 채우지 않고 **없음**으로 표시한다.
+- **Final 결과가 RealFinal로 이월된 경우** Final 캡처를 최종 판단 근거로 사용한다.
+- **Scenario 06**은 RealFinal 단일 캡처만 사용한다.
+
+> 모든 경로는 `docs/operations/k6/` 기준 상대 경로다.
+
+---
+
+### 배치표
+
+| 시나리오 | 목적/제목 | Baseline 스크린샷 | Tuned 스크린샷 | Final 스크린샷 | RealFinal 스크린샷 | 최종 사용 캡처 | 배치 의도 |
+|---|---|---|---|---|---|---|---|
+| **01** | 주문 동시성 + 재고 정합성 | `screenshots/baseline/s01_order_concurrency_baseline.png` | `screenshots/tuned/s01_order_concurrency_tuned.png` | `screenshots/final/s01_order_concurrency_final.png` | RealFinal 1차: `screenshots/realfinal/s01_order_concurrency_realfinal.png` (PR #450 실패)<br>RealFinal 2차: `screenshots/realfinal/s01_order_concurrency_realfinal2.png` (PR #459 성공) | `screenshots/realfinal/s01_order_concurrency_realfinal2.png` | Baseline→Final 낙관적 락 실패 경로 시각화 + RealFinal 2차 atomic update 복귀로 정합성 달성 스토리 |
+| **02** | 피드 목록 Read P95 | `screenshots/baseline/s02_feed_read_baseline.png` | `screenshots/tuned/s02_feed_read_tuned.png` | `screenshots/final/s02_feed_read_final.png` | `screenshots/realfinal/s02_feed_read_realfinal_warm.png` | `screenshots/realfinal/s02_feed_read_realfinal_warm.png` | FeedLikeCache 적용 전후 P95 개선 흐름 (Baseline→RealFinal warm cache 기준) |
+| **03** | 결제 확인 P95 | `screenshots/baseline/s03_payment_confirm_baseline.png` | `screenshots/tuned/s03_payment_confirm_tuned.png` | `screenshots/final/s03_payment_confirm_final.png` | `screenshots/realfinal/s03_payment_confirm_realfinal.png` | `screenshots/realfinal/s03_payment_confirm_realfinal.png` | Baseline→RealFinal 4단계 전체 흐름 + SLO 완화(300ms → 2,000ms) 근거 병기 |
+| **04** | 드롭스 오픈런 스파이크 | `screenshots/baseline/s04_drop_spike_baseline.png` | `screenshots/tuned/s04_drop_spike_tuned.png` | `screenshots/final/s04_drop_spike_final.png` | [Final 결과 이월 — RealFinal 별도 캡처 없음] | `screenshots/final/s04_drop_spike_final.png` | Rate Limit 적용 후 Final에서 SLO 달성 → 3차 Final에서 SLO 달성 후 RealFinal 최종 결과로 이월 |
+| **05** | SSE 대기열 동시 연결 | `screenshots/baseline/s05_sse_queue_baseline.png` | `screenshots/tuned/s05_sse_queue_tuned.png` | `screenshots/final/s05_sse_queue_final.png` | [Final 결과 이월 — RealFinal 별도 캡처 없음] | `screenshots/final/s05_sse_queue_final.png` | 2단계(capacity_fill + overflow_probe) 재설계로 Final SLO 달성 → 3차 Final에서 SLO 달성 후 RealFinal 최종 결과로 이월 |
+| **07** | 상품 상세 조회 처리량 | [스크린샷 없음] | `screenshots/tuned/s07_product_read_tuned.png` | `screenshots/final/s07_product_read_final.png` | [Final 결과 이월 — RealFinal 별도 캡처 없음] | `screenshots/final/s07_product_read_final.png` | Redis 캐시 적용 효과(Tuned 133ms → Final 16ms) 중심, Baseline 캡처 없음 명시 · 3차 Final에서 SLO 달성 후 RealFinal 최종 결과로 이월 |
+| **06** | 통합 워크로드 모델 | 해당 없음 | 해당 없음 | 해당 없음 | `screenshots/realfinal/s06_workload_model_realfinal.png` | `screenshots/realfinal/s06_workload_model_realfinal.png` | 개별 시나리오 검증 이후 통합 워크로드 최종 안정성 확인 — RealFinal 단일 캡처만 사용 |
+
+---
+
+### 시나리오별 슬라이드 배치 설명
+
+**Scenario 01 — 주문 동시성 + 재고 정합성**
+
+- 상단: "Scenario 01. 주문 동시성 + 재고 정합성 검증" + 목적(동시 200 VU, 재고 100개)
+- 중앙: Baseline → Tuned → Final(낙관적 락 실패) → RealFinal 1차(PR #450 실패) → RealFinal 2차(PR #459 성공) 순서 배치
+- RealFinal 1차는 "실패 경과 기록"으로 라벨링, RealFinal 2차에 "최종 성공" 라벨 표시
+- 하단: SLO 기준(orders_reserved=100, 5xx 0건, 오버셀 0건), P95는 참고 지표 명시
+
+**Scenario 02 — 피드 목록 Read P95**
+
+- 상단: "Scenario 02. 피드 목록 Read P95" + 목적(FeedLikeCache 효과 검증)
+- 중앙: Baseline → Tuned → Final → RealFinal(warm cache) 순서 배치
+- 하단: SLO 기준(P95 < 120ms), RealFinal 기준 달성 수치 기재
+
+**Scenario 03 — 결제 확인 P95**
+
+- 상단: "Scenario 03. 결제 확인 P95" + 목적 + SLO 완화(300ms → 2,000ms) 표시
+- 중앙: Baseline → Tuned → Final → RealFinal 순서 배치
+- 하단: SLO 완화 근거(Toss 외부 API 의존 + WireMock 대체 한계) 한 줄 병기
+
+**Scenario 04 — 드롭스 오픈런 스파이크**
+
+- 상단: "Scenario 04. 드롭스 오픈런 스파이크" + 목적(Rate Limit 효과 검증)
+- 중앙: Baseline → Tuned → Final 순서 배치 / RealFinal 칸에 "Final 결과 이월" 라벨 표시
+- 하단: SLO 기준(P95 < 300ms), Final 캡처에 "최종 결과 이월" 라벨
+
+**Scenario 05 — SSE 대기열 동시 연결**
+
+- 상단: "Scenario 05. SSE 대기열 동시 연결" + 목적(2,000 동시 연결 SLO)
+- 중앙: Baseline → Tuned → Final(capacity_fill + overflow_probe 2단계) 순서 배치 / RealFinal 칸에 "Final 결과 이월" 라벨
+- 하단: SLO 기준(정상 구간 연결 거부 없음), overflow_probe 429 비율 병기
+
+**Scenario 07 — 상품 상세 조회 처리량**
+
+- 상단: "Scenario 07. 상품 상세 조회 처리량" + 목적(300 RPS constant-arrival-rate)
+- 중앙: Baseline 칸 "[캡처 없음]" → Tuned → Final 순서 배치 / RealFinal 칸에 "Final 결과 이월" 라벨
+- 하단: SLO 기준(P95 < 120ms, 300 RPS 달성), Redis 캐시 적용 효과 수치(133ms → 16ms)
+
+**Scenario 06 — 통합 워크로드 모델**
+
+- 상단: "Scenario 06. 통합 워크로드 — warm cache 기준 최종 안정성 확인"
+- 중앙: RealFinal 단일 캡처 1장만 배치 (Baseline/Tuned/Final 칸 없음 또는 "해당 없음" 라벨)
+- 하단: s01·s02·s03 성공 이후 통합 측정임을 명시, 주요 SLO 달성 수치 기재
 
 ---
 
