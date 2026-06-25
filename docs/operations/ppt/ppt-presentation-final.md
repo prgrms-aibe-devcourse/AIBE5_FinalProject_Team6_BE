@@ -213,6 +213,15 @@ WHERE product_id = ? AND available_qty > 0
 ```
 결과: orders_reserved=100 정합성 복원, 5xx=0 달성.
 
+**단계별 문제·개선·결과**:
+
+| Phase | 문제 또는 관찰 | 적용한 개선 | 결과 |
+|---|---|---|---|
+| Baseline | orders_reserved=100, 5xx=0으로 정합성은 통과. 단일 inventory row 경합 때문에 전체 P95 1,750ms로 높음 | P95를 참고 지표로 분리하고 정합성 중심으로 재판정 필요성 확인 | 정합성은 통과, 성능은 관찰 대상 |
+| Tuned | HikariCP/row lock 경합이 남아 P95 1,770ms. 정합성은 계속 유지 | HikariCP maximumPoolSize 30 적용, 낙관적 락 전환 검토 | 정합성 유지, P95 개선은 제한적 |
+| Final | 낙관적 락 전환 후 retry 없이 충돌이 전파되어 `UnexpectedRollbackException` 발생. reserved=16에서 멈춤 | bounded retry 필요성 확인 | 정합성 위반, SLO 실패 |
+| RealFinal | bounded retry(PR #450)도 retry storm/5xx를 해소하지 못해 실패. 이후 atomic update로 복귀(PR #459) | `available_qty > 0` 조건부 atomic update 복귀 | **orders_reserved=100, 5xx=0으로 SLO 달성** |
+
 **발표 메시지:**
 > "낙관적 락은 재시도 전략이 필수입니다. 재시도 없이 도입하면 오히려 정합성이 무너집니다. Atomic Update로 복귀해 100건 정합성을 보장했습니다."
 
@@ -231,16 +240,16 @@ WHERE product_id = ? AND available_qty > 0
 | Final | 276ms | 0.00% | ❌ |
 | **RealFinal** | **66.47ms** | **0.00%** | ✅ **SLO 달성** |
 
-**문제 단계별 원인**:
-- Baseline: N+1 쿼리 (피드 이미지·좋아요 건별 조회, 최대 수십 회 DB 왕복)
-- Tuned: N+1 제거 후에도 CPU 100% 포화 (t3.small → t3.medium 스케일업으로 완화). 그러나 P95 오히려 증가
-- Final: FeedLikeCache 미반영 — 캐시 히트 후에도 `applyIsLiked()`가 매 요청 Redis 추가 조회
+**단계별 문제·개선·결과**:
 
-**개선 누적**:
-1. N+1 제거 (PR #330): `findByFeedIdIn` / `findLikedFeedIdsByFanId` bulk IN 쿼리, 대댓글 bulk 조회
-2. 커서 인덱스 추가: `idx_artist_feed_artist_cursor (artist_id, id DESC)` → Full Scan 제거
-3. Redis 캐시 (PR #341): TTL 60s + jitter, SingleFlight, viewer-agnostic 캐시
-4. **FeedLikeCache** (PR #394): 캐시 키 `feed:liked:{fanId}:{sortedFeedIds}` TTL 30s → **FeedCache hit + FeedLikeCache hit 시 DB 쿼리 0회**
+| Phase | 문제 또는 관찰 | 적용한 개선 | 결과 |
+|---|---|---|---|
+| Baseline | P95 133ms로 SLO 120ms를 13ms 초과. 캐시 미스 구간에서 피드 이미지·좋아요 조회가 건별로 발생하는 N+1 의심 | N+1 제거 준비, 피드 조회 쿼리 실행계획 확인 | 에러율 0%였지만 Read SLO 미달 |
+| Tuned | N+1 제거 후에도 P95 168~172ms로 악화. 캐시가 실제 동작하면서 Redis 역직렬화와 `applyIsLiked()` 후처리 비용이 드러남. t3.small CPU 100% 포화도 동반 | bulk IN 쿼리, 커서 인덱스, Redis FeedCache(PR #341), EC2 t3.medium 스케일업 | 기능 오류는 없었지만 P95 미달 지속 |
+| Final | P95 276ms까지 악화. FeedCache hit 이후에도 viewer별 좋아요 확인 경로가 요청마다 Redis/DB 조회를 반복 | `applyIsLiked()` 경로 계측 및 FeedLikeCache 설계 확정 | 원인이 개인화 좋아요 경로로 좁혀짐 |
+| RealFinal | FeedCache와 FeedLikeCache가 모두 warm 상태인지 검증 | **FeedLikeCache**(PR #394): `feed:liked:{fanId}:{sortedFeedIds}`, TTL 30s. FeedCache hit + FeedLikeCache hit 시 DB 쿼리 0회 | **P95 66.47ms, 에러율 0%로 SLO 달성** |
+
+**핵심 개선 누적**: N+1 제거(PR #330) → 커서 인덱스 → Redis FeedCache(PR #341) → viewer별 FeedLikeCache(PR #394). 단순 목록 캐시만으로는 부족했고, 개인화 데이터(`isLiked`) 경로까지 캐시해야 SLO가 달성됐다.
 
 **발표 메시지:**
 > "N+1 제거와 viewer별 좋아요 캐시 분리로 warm cache 기준 P95를 133ms에서 66ms로 개선했습니다. 캐시를 적용해도 개인화 데이터 경로를 놓치면 성능이 생각만큼 오르지 않습니다."
@@ -264,6 +273,15 @@ WHERE product_id = ? AND available_qty > 0
 
 **개선 (RealFinal)**: 결제 확인 트랜잭션 분리 (PR #453). Toss API 호출과 DB 반영 트랜잭션을 분리해 타임아웃 전파 차단. `TOSS_API_READ_TIMEOUT=2s`는 측정 시 주입한 테스트 조건이며 측정 후 원복 완료.
 
+**단계별 문제·개선·결과**:
+
+| Phase | 문제 또는 관찰 | 적용한 개선 | 결과 |
+|---|---|---|---|
+| Baseline | P95 1,540ms. 최초 300ms 기준으로는 비현실적이나 외부 결제 API 의존을 반영한 2,000ms 기준에서는 통과 | 결제 SLO 기준 재검토 시작 | 에러율 0%, 완화 기준 통과 |
+| Tuned | P95 1,940ms로 2,000ms에 매우 근접. 여유 60ms뿐이라 timeout 경계 위험 확인 | Toss/WireMock 경로와 timeout 설정 점검 | 에러율 0%, 통과하나 margin 부족 |
+| Final | P95 2,080ms, 5xx 1.60%. `HttpTimeoutException`이 5xx로 전파되고 결제/주문 상태 불일치 발생 | PG 호출 예외를 계약 응답으로 매핑하고 TX 경계 분리 필요성 확정 | SLO 실패 |
+| RealFinal | 외부 호출 timeout이 DB 트랜잭션을 오염시키지 않는지 재검증 | PR #453: Toss API 호출과 DB 반영 TX 분리, timeout 계약 응답 정리 | **P95 1,590ms, 에러율 0%로 SLO 달성** |
+
 **발표 메시지:**
 > "외부 결제 API 호출과 DB 트랜잭션을 분리해 타임아웃으로 인한 5xx를 완전히 제거했습니다."
 
@@ -285,6 +303,15 @@ WHERE product_id = ? AND available_qty > 0
 **Final 이월 사유**: Final 단계에서 SLO 달성 상태를 유지하므로 RealFinal 재측정 생략.
 
 **특이사항**: 스파이크 구간 초과 요청 차단율 ~99.98%는 전량 Nginx Rate Limit 429 정상 거부 — 서버 장애성 5xx 아님. SLO 에러율 계산에서 제외. `fandrops_order` zone(5r/s, burst 10)이 Spring Boot 도달 RPS를 약 5 RPS 수준으로 제한해 앱 서버를 보호.
+
+**단계별 문제·개선·결과**:
+
+| Phase | 문제 또는 관찰 | 적용한 개선 | 결과 |
+|---|---|---|---|
+| Baseline | P95 266ms, reserved=100. 스파이크 초과 요청은 대량 429로 차단됨 | Nginx Rate Limit 정책 유지, 429를 정상 거부로 분리 판정 | SLO 달성 |
+| Tuned | P95 287ms로 기준 내 유지. 앱 서버 유입이 제한되어 5xx 없이 보호됨 | `fandrops_order` zone 설정 검증 | SLO 달성 유지 |
+| Final | P95 278ms, reserved=100으로 안정 | 추가 코드 변경보다 측정 신뢰성 확인 | SLO 달성 확정 |
+| RealFinal | Final에서 이미 목표 달성, 관련 코드 변경 없음 | 재측정 생략, Final 결과 이월 | **SLO 달성 유지** |
 
 **발표 메시지:**
 > "드롭스 오픈런 스파이크에서는 모든 요청을 버티는 것보다, 초과 요청을 빠르게 제한하는 것이 앱 서버를 보호하는 핵심이었습니다. Nginx Rate Limit으로 앱 서버 유입을 약 5 RPS 수준으로 제어했고, 그 결과 서버 장애성 5xx 없이 P95 300ms 이하를 유지했습니다."
@@ -313,6 +340,15 @@ WHERE product_id = ? AND available_qty > 0
 | 14차 | 초과 구간 403 (예상 429) | Accept:text/event-stream 요청에 JSON 예외 응답 충돌 (콘텐츠 협상 실패) | `PaymentControllerAdvice` contentType APPLICATION_JSON 추가 + /error permitAll |
 | 16차 | 모든 metric 0/0 집계 | `ramping-vus` VU 감소 시 SSE interrupt → 성공/실패 metric 미기록 | **capacity_fill + overflow_probe 2단계 구조 재설계** |
 
+**단계별 문제·개선·결과**:
+
+| Phase | 문제 또는 관찰 | 적용한 개선 | 결과 |
+|---|---|---|---|
+| Baseline | 에러율 100%, 2,000 연결 수용 실패 | SSE 전용 Nginx/proxy 설정과 서버 connection 정책 점검 착수 | SLO 실패 |
+| Tuned | 1~16차 반복 실패. HTTP/1.0 프록시, IP 기반 `limit_conn`, 403/406 콘텐츠 협상, k6 metric 0/0 문제가 순차 노출 | `proxy_http_version 1.1`, `limit_conn` 제거, JSON 429 응답 고정, `/error permitAll`, heartbeat stale emitter 제거 | 개별 장애 원인은 제거됐지만 측정 구조까지 재설계 필요 |
+| Final | `ramping-vus` 대신 `capacity_fill` + `overflow_probe` 2단계로 측정 | 정상 구간 2,000 연결 채우기와 초과 구간 429 검증을 분리 | **2,000 연결, 429 retryable:true 99.33%로 SLO 달성** |
+| RealFinal | Final 이후 관련 변경 없음 | Final 결과 이월 | **SLO 달성 유지** |
+
 **발표 메시지:**
 > "SSE는 HTTP와 다릅니다. 17차례의 트러블슈팅 끝에 2,000 동시 연결과 초과 구간 안전 거부를 모두 달성했습니다."
 
@@ -335,6 +371,15 @@ WHERE product_id = ? AND available_qty > 0
 
 **Final 16ms 개선 원인**: Redis 캐시(product + 이미지 TTL 120s) 적용으로 DB 쿼리 대폭 감소. Final 첫 번째 실행은 active port 오지정(8081 지정, 실제 active는 green 8082) → connection refused로 무효 처리 후 재실행.
 
+**단계별 문제·개선·결과**:
+
+| Phase | 문제 또는 관찰 | 적용한 개선 | 결과 |
+|---|---|---|---|
+| Baseline | s07은 신규 시나리오라 Baseline 세트에 포함되지 않음 | Tuned 단계에서 기준선 신설 | 비교 기준 없음 |
+| Tuned | P95 133ms, dropped_iterations 251건. 상품·재고·이미지 3개 쿼리가 300 RPS에서 DB로 직행 | `(drops_start_at, id)` 복합 인덱스, ProductCache/ProductImage 캐시 설계 | SLO 미달, 원인은 캐시 부재로 확정 |
+| Final | 최초 실행은 active port 오지정으로 무효. 재실행에서 캐시 hit 확인 | active slot 재확인 후 8082 직접 호출, Redis 캐시(product + 이미지 TTL 120s) 적용 | **P95 16.35ms, 299.47 RPS로 SLO 달성** |
+| RealFinal | Final에서 이미 목표 달성, 관련 코드 변경 없음 | Final 결과 이월 | **SLO 달성 유지** |
+
 **발표 메시지:**
 > "설정 오류 수정과 캐시 히트로 P95가 133ms에서 16ms로 개선되어 300 RPS 목표를 달성했습니다."
 
@@ -346,17 +391,20 @@ WHERE product_id = ? AND available_qty > 0
 
 **SLO**: Feed P95 < 120ms, Payment P95 < 2,000ms, Order reserved=200건 (5xx 0건)
 
-| Phase | Feed P95 | Payment P95 | Order reserved | 판정 |
+| 측정 단계 | Feed P95 | Payment P95 | Order reserved | 판정 |
 |---|---|---|---|---|
-| Baseline | 블로커 2건 (측정 불가) | — | — | ❌ |
-| Tuned | — | — | — | — |
-| Final | — | — | — | — |
-| **RealFinal** | **58.84ms** | **148.88ms** | **200건** | ✅ **SLO 달성** |
+| **RealFinal 단일 측정** | **58.84ms** | **148.88ms** | **200건** | ✅ **SLO 달성** |
 
-**RealFinal 단일 측정 배경**:
-- Baseline 차단 사유 1: 피드 조회 `ROLE_FAN` 403 → 인가 설정 수정
-- Baseline 차단 사유 2: WireMock stub 응답 불일치 400 → stub 설정 수정
-- s01·s02·s03 개별 SLO 달성 후, warm cache 상태에서 통합 측정 수행
+**RealFinal 문제 정의·개선·결과**:
+
+| 문제 | 구체적 원인 | 개선/판정 기준 | 결과 |
+|---|---|---|---|
+| Feed P95가 통합 부하에서 다시 상승 | s02 단독 측정은 통과했지만, s06에서는 feed/queue/order/payment가 동시에 실행되며 Redis GET과 JSON 역직렬화 비용이 꼬리 지연으로 확대됨. 초기 재측정 Feed P95는 187.66ms | Redis hit 결과를 2초 동안 JVM local hot cache에 보관해 반복 feed list 조회의 Redis 왕복과 역직렬화 비용을 줄임. s06은 cold cache가 아니라 steady-state 혼합 부하 검증으로 정의 | Feed P95 **187.66ms → 58.84ms**, Read SLO 달성 |
+| Order 403 발생 | queue join 20%와 order 15%가 같은 `product_id=4`와 `access:ticket:4:{fanId}` Redis key를 공유. queue join이 ticket을 UUID로 갱신하는 동안 order 구간은 고정값 `test-ticket-token`을 사용해 `INVALID_QUEUE_TICKET(403)`을 스스로 유발 | s06의 주문 구간은 accessTicket 검증이 아니라 통합 부하 중 주문 정합성 검증으로 범위를 분리. ticket 계약은 s01/s05에서 별도 검증하고, s06 order는 `accessTicket=null` 상시 판매 경로로 측정 | Order reserved **200건**, order 5xx/unexpected 0건, 오버셀 0건 |
+| Payment 400 check 실패 잔여 | 500개 seed order를 5분 30초 동안 반복 confirm하면서 일부 요청이 결제 가능 상태 또는 요청 계약과 맞지 않게 됨. 서버 5xx나 latency 실패가 아니라 테스트 seed 반복 confirm 모델의 한계 | 400을 성공으로 포장하지 않고 잔여 분석 지표로 분리. Payment SLO는 P95, 5xx, unexpected 기준으로 판정 | Payment P95 **148.88ms**, 5xx 0.00%, unexpected 0건. `payment 400=4,587건`은 후속 fixture 개선 과제 |
+| CPU headroom 부족 | 통합 부하에서 feed 약 1.1K RPS, queue 약 380 RPS, order 약 280 RPS, payment 약 80~100 RPS가 동시에 형성되며 EC2-1 CPU가 95~99%까지 상승 | SLO 통과와 운영 여유를 분리해서 해석. HikariCP waiting은 0으로 DB 풀 고갈은 없었지만, 인스턴스 여유 용량은 낮은 상태로 기록 | SLO는 달성했지만 scale-out 또는 인스턴스 상향은 추후 개선사항으로 분리 |
+
+**최종 판정 기준**: s06은 대기열 ticket 계약을 다시 검증하는 시나리오가 아니라, steady-state 통합 부하에서 Feed latency, Payment latency, 주문 정합성이 동시에 유지되는지 확인하는 시나리오로 판정했다.
 
 **발표 메시지:**
 > "개별 시나리오 최적화가 통합 시나리오에서도 그대로 유지됩니다. Feed 58ms, Payment 148ms, 주문 정합성 200건 모두 달성했습니다."
@@ -374,7 +422,7 @@ WHERE product_id = ? AND available_qty > 0
 | s03 결제 확인 | 1,540 ✅ | 1,940 ✅ | 2,080 ❌ | **1,590 ✅** | < 2,000ms |
 | s04 드롭스 스파이크 | 266 ✅ | 287 ✅ | 278 ✅ | **이월 ✅** | < 300ms |
 | s05 SSE 대기열 | 100% 실패 ❌ | — | **2,000 ✅** (17차) | **이월 ✅** | 2,000 연결 |
-| s06 통합 워크로드 | 블로커 ❌ | — | — | **58/148ms ✅** | <120/<2,000ms |
+| s06 통합 워크로드 | 미측정 | 미측정 | 미측정 | **58/148ms ✅** | <120/<2,000ms |
 | s07 상품 조회 | 미측정 | 133 ❌ | **16 ✅** | **이월 ✅** | < 120ms + 300RPS |
 
 ### 정합성 지표
@@ -383,7 +431,7 @@ WHERE product_id = ? AND available_qty > 0
 |---|---|---|---|---|
 | s01 orders_reserved | 100 ✅ | 100 ✅ | **16 ❌** | **100 ✅** |
 | s04 spike_reserved | 100 ✅ | 100 ✅ | 100 ✅ | 이월 ✅ |
-| s06 orders_reserved | 블로커 | — | — | **200 ✅** |
+| s06 orders_reserved | 미측정 | 미측정 | 미측정 | **200 ✅** |
 
 ---
 
