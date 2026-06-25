@@ -20,7 +20,7 @@ public class NotificationOutboxEventJpaEntity {
     @Column(name = "resource_id")
     private Long resourceId;
 
-    @Column(name = "payload", nullable = false, columnDefinition = "json")
+    @Column(name = "payload", nullable = false, columnDefinition = "text")
     private String payload;
 
     @Enumerated(EnumType.STRING)
