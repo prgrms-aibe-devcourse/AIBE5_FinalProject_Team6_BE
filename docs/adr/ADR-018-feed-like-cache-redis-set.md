@@ -7,7 +7,7 @@
 | **선행 ADR** | [ADR-012 큐 저장소 Redis ZSet](./ADR-012-queue-storage-redis-zset.md) · [ADR-013 FeedCache viewer-agnostic 전략](./ADR-013-feed-cache-viewer-agnostic.md) |
 | **관련** | [k6-tuned-results.md § s02](../operations/k6-tuned-results.md) |
 | **담당** | 정환철 (`community`) |
-| **관련 PR** | [#394](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/pull/394) |
+| **관련 PR** | [#394](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/pull/394) · [#463](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/pull/463) |
 
 ---
 
@@ -79,7 +79,7 @@ FeedCache가 viewer-agnostic으로 공유되는 동안 like 상태 캐시는 팬
 
 ---
 
-## 핵심 구현 결정 3가지
+## 핵심 구현 결정 4가지
 
 ### ① FeedLikeCachePort — application 레이어 포트 격리
 
@@ -122,13 +122,38 @@ feedLikeCachePort.evictByFanId(fanId);
 
 evict 구현에서는 SCAN(count=100)으로 `feed:liked:{fanId}:*` 패턴을 스캔 후 일괄 DEL한다. 팬 1명당 활성 키는 1~2개로 SCAN 비용이 무해하나, keyspace 규모 증가 시 재검토가 필요하다.
 
+### ④ JVM local hot cache — 2초 인메모리 레이어 (PR #463)
+
+s06 통합 부하에서 feed·queue·order·payment 트래픽이 단일 Redis 인스턴스에 동시 집중되면서 `FeedLikeCacheAdapter`의 Redis GET + JSON 역직렬화 꼬리 지연이 확대됐다. `FeedCacheAdapter`와 동일한 패턴으로 `FeedLikeCacheAdapter`에 `LocalEntry<T>` record 기반 2초 JVM 캐시 레이어를 추가해 반복 요청의 Redis 호출을 생략한다.
+
+- 캐시 계층: **JVM 2s → Redis 30s → DB** 3단 레이어
+- evict: `evictByFanId()` 내에서 `localCache.keySet().removeIf()` 선행 후 Redis SCAN+DEL 후속
+
+```java
+private final ConcurrentHashMap<String, LocalEntry<Set<Long>>> localCache = new ConcurrentHashMap<>();
+
+private record LocalEntry<T>(T value, long expiresAtNanos) {
+    boolean isExpired() { return System.nanoTime() >= expiresAtNanos; }
+}
+
+@Override
+public void evictByFanId(Long fanId) {
+    localCache.keySet().removeIf(key -> key.startsWith(KEY_PREFIX + fanId + ":"));
+    // Redis SCAN+DEL 후속 ...
+}
+```
+
+TTL 만료(`isExpired()`)를 확인해 stale 엔트리를 제거한 뒤 Redis를 조회하며, Redis miss 시에만 loader(DB)를 실행한다. 2초 TTL 동안 stale 허용 범위는 FeedCache(2s)와 동일하다.
+
 ---
 
 ## 인프라 제약
 
 | 항목 | 값 |
 | --- | --- |
-| TTL | 30s (FeedCache 60~90s의 절반 이하 — FeedCache 만료 전 자동 만료) |
+| JVM local TTL | 2s (`LocalEntry<Set<Long>>`, `ConcurrentHashMap` — PR #463 추가) |
+| local evict | `evictByFanId()` 시 `localCache.keySet().removeIf()` 선행 |
+| Redis TTL | 30s (FeedCache 60~90s의 절반 이하 — FeedCache 만료 전 자동 만료) |
 | evict 트리거 | `FeedLikeService.likeFeed()` · `unlikeFeed()` 직접 호출 |
 | 키 패턴 | `feed:liked:{fanId}:{sortedFeedIds}` |
 | 직렬화 | Jackson `ObjectMapper`, `Set<Long>` JSON |
@@ -140,7 +165,10 @@ evict 구현에서는 SCAN(count=100)으로 `feed:liked:{fanId}:*` 패턴을 스
 
 ### 긍정
 
-- FeedCache 히트 시 `feedLikeRepository.findLikedFeedIdsByFanId()` DB 쿼리 0회 → 피드 조회 P95 개선 목표
+- FeedCache 히트 시 `feedLikeRepository.findLikedFeedIdsByFanId()` DB 쿼리 0회
+  - s02 real-final P95 **66.47ms ✅** (SLO 120ms 달성) — 적용 전 276.44ms 대비 75.9% 개선
+  - 처리량 311 RPS → **1,617 RPS** (5.2배)
+- JVM local hot cache(2s) 추가(PR #463) 후 s06 통합 부하 feed P95 **58.84ms ✅** — 적용 전 187.66ms 대비 68.6% 개선
 - viewer-agnostic FeedCache 구조 유지 — 아티스트 피드 캐시를 팬별로 복제하지 않음
 - Redis 장애 시 fail-open — DB로 자동 폴백, 서비스 중단 없음
 
@@ -167,5 +195,8 @@ evict 구현에서는 SCAN(count=100)으로 `feed:liked:{fanId}:*` 패턴을 스
 | --- | --- |
 | FeedCache viewer-agnostic 전략 | [ADR-013](./ADR-013-feed-cache-viewer-agnostic.md) |
 | Redis ZSet 큐 패턴 | [ADR-012](./ADR-012-queue-storage-redis-zset.md) |
-| k6 s02 부하 테스트 결과 | [k6-tuned-results.md](../operations/k6-tuned-results.md) |
-| 구현 PR | [#394](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/pull/394) |
+| k6 s02 초기 측정 결과 | [k6-tuned-results.md](../operations/k6-tuned-results.md) |
+| k6 s02 final 측정 결과 | [k6-final-results.md](../operations/k6-final-results.md) |
+| k6 s02·s06 real-final 측정 결과 | [k6-realfinal-result.md](../operations/k6-realfinal-result.md) |
+| FeedLikeCache 구현 PR | [#394](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/pull/394) |
+| JVM local hot cache 추가 PR | [#463](https://github.com/prgrms-aibe-devcourse/AIBE5_FinalProject_Team6_BE/pull/463) |
