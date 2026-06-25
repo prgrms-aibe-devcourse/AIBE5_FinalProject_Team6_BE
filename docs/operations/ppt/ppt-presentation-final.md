@@ -139,7 +139,8 @@ FANDROPS 백엔드는 단일 EC2 인스턴스에 앱 서버·Nginx·모니터링
 |---|---|
 | k6 버전 | v2.0.0 |
 | 실행 위치 | EC2-2 t3.small (`3.34.42.43`) |
-| 측정 대상 | EC2-1 Spring Boot (`https://api.fandrops.site`, VPC 내부 경로) |
+| 측정 대상 | `https://api.fandrops.site` public HTTPS endpoint (EC2-2 → EC2-1, 동일 리전 내 호출) |
+| s07 예외 | Nginx Rate Limit 우회를 위해 active slot 직접 접근 [확인 필요] |
 | Prometheus Remote Write | `http://10.0.1.114:9090/api/v1/write` |
 | 시각화 | Grafana (`http://43.203.3.196:3000`) |
 | 토큰 | fan_id 1~2100 JWT (`/opt/fandrops/k6/seed/tokens.csv`) |
@@ -280,7 +281,7 @@ WHERE product_id = ? AND available_qty > 0
 
 **Final 이월 사유**: Final 단계에서 SLO 달성 상태를 유지하므로 RealFinal 재측정 생략.
 
-**특이사항**: 스파이크 구간 에러율 ~99.98%는 Nginx Rate Limit 429 (정상 거부) — SLO 에러율 계산에서 제외. `fandrops_order` zone(5r/s, burst 10)이 Spring Boot 도달 RPS를 ~5 RPS로 제한해 앱 서버를 보호.
+**특이사항**: 스파이크 구간 초과 요청 차단율 ~99.98%는 전량 Nginx Rate Limit 429 정상 거부 — 서버 장애성 5xx 아님. SLO 에러율 계산에서 제외. `fandrops_order` zone(5r/s, burst 10)이 Spring Boot 도달 RPS를 ~5 RPS로 제한해 앱 서버를 보호.
 
 **발표 메시지:**
 > "스파이크 구간에서도 P95 300ms 이하를 유지했습니다. 99.98%의 429는 오류가 아니라 Rate Limit이 정상적으로 작동한 결과입니다."
@@ -436,10 +437,10 @@ WHERE product_id = ? AND available_qty > 0
 | 대기열 상태 | Redis 단일 인스턴스 기반 | Redis Cluster/Sentinel 이중화 필요 |
 | Nginx Blue/Green | 단일 EC2 내 포트 스위칭 | ALB + Auto Scaling Group으로 확장 시 재설계 필요 |
 
-**EC2-2 분산 실험 결과** (D 방식, 단기 검증):
-- EC2-2에 Spring Boot 단기 기동 후 멀티노드 정합성 검증 수행
-- **SseEmitterRegistry 메시지 유실 확인**: 노드 A에 연결된 사용자에게 노드 B에서 보낸 이벤트 미전달
-- **결론**: in-memory 방식은 수평 확장 불가 → **Redis Pub/Sub + SseEmitterRegistry 재설계 필요**
+**분산 설계 예상 한계 (Phase 2 검증 계획)**:
+- 현재 단일 노드(EC2-1)에서 s01/s04 오버셀 0건·중복 결제 0건을 확인했으나, 이는 단일 JVM에서 Redis를 공유하는 구조의 검증 결과다. 멀티 노드 환경에서 동일한 정합성이 유지되는지는 아직 실측하지 못했다.
+- **SseEmitterRegistry 메시지 유실 예상**: in-memory 구조이므로, 노드 A에 연결된 사용자에게 노드 B에서 발행한 이벤트가 미전달될 가능성이 있다. 이는 실측 결과가 아니라 멀티 노드 확장 시 예상되는 구조적 한계다.
+- **Phase 2 검증 계획**: EC2-2에 앱 노드를 추가한 뒤 s01/s04를 재실행해 멀티 노드에서도 오버셀 0건·중복 결제 0건이 유지되는지 실측할 예정이다. SSE는 Redis Pub/Sub 또는 Kafka 기반 이벤트 브로드캐스트로 개선을 검토한다.
 
 ---
 
