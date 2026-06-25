@@ -23,13 +23,16 @@ public class PaymentEventListener {
     private final OrderService orderService;
     private final InventoryRestorePort inventoryRestorePort;
     private final InventoryConfirmPort inventoryConfirmPort;
+    private final ProductService productService;
 
     public PaymentEventListener(OrderService orderService,
                                 InventoryRestorePort inventoryRestorePort,
-                                InventoryConfirmPort inventoryConfirmPort) {
+                                InventoryConfirmPort inventoryConfirmPort,
+                                ProductService productService) {
         this.orderService = orderService;
         this.inventoryRestorePort = inventoryRestorePort;
         this.inventoryConfirmPort = inventoryConfirmPort;
+        this.productService = productService;
     }
 
     @Async("sagaExecutor")
@@ -48,6 +51,7 @@ public class PaymentEventListener {
                 item -> inventoryRestorePort.restore(item.getProductId(), item.getQuantity(), orderId),
                 () -> orderService.markAsCancelled(orderId),
                 "재고 복구 실패 — 주문 {} FAILED 상태 유지, 관리자 확인 필요");
+        order.getItems().forEach(item -> productService.refreshProductStatus(item.getProductId()));
     }
 
     @Async("sagaExecutor")
@@ -66,6 +70,7 @@ public class PaymentEventListener {
                 item -> inventoryConfirmPort.confirm(item.getProductId(), item.getQuantity(), orderId),
                 () -> orderService.markAsCompleted(orderId),
                 "재고 확정 실패 — 주문 {} PAID 상태 유지, 관리자 확인 필요");
+        order.getItems().forEach(item -> productService.refreshProductStatus(item.getProductId()));
     }
 
     // 재고 작업 공통 패턴: 상태 전이 후 items 재조회 → 재고 액션 → 최종 상태 전이

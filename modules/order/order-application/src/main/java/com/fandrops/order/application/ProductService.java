@@ -131,6 +131,26 @@ public class ProductService {
         return product.getStatus();
     }
 
+    /**
+     * 결제 확정/복구 후 재고에 따라 상품 판매 상태를 동기화하고 목록 캐시를 무효화한다.
+     * - availableQty == 0 && ON_SALE → SOLD_OUT
+     * - availableQty  > 0 && SOLD_OUT → ON_SALE (결제 실패로 재고 복구된 경우)
+     */
+    @Transactional
+    public void refreshProductStatus(Long productId) {
+        InventoryInfo info = inventoryReadPort.getByProductId(productId);
+        productRepository.findById(productId).ifPresent(product -> {
+            if (info.getAvailableQty() == 0 && product.getStatus() == ProductStatus.ON_SALE) {
+                product.markSoldOut();
+                productRepository.save(product);
+            } else if (info.getAvailableQty() > 0 && product.getStatus() == ProductStatus.SOLD_OUT) {
+                product.markOnSale();
+                productRepository.save(product);
+            }
+        });
+        evictAfterCommit();
+    }
+
     /** 트랜잭션 커밋 이후 캐시를 무효화한다. 커밋 전 evict 시 구데이터가 캐시에 재적재되는 문제 방지. */
     private void evictAfterCommit() {
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
