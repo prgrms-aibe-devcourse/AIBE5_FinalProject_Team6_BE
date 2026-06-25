@@ -623,6 +623,8 @@ PR #453에서 `ResourceAccessException`을 `PaymentConfirmTimeoutException`으�
 
 realfinal success 시나리오에서는 timeout이 발생하지 않았고, 500건 모두 정상 처리됐다. k6 기준 P95는 1.59s, max는 1.98s로 2초 경계 안에 들어왔으며, `http_req_failed`와 `http_5xx_rate` 모두 0.00%로 수렴했다. 따라서 s03의 SLO 판정은 성공으로 확정한다.
 
+realfinal 측정 완료 후 DB 상태 확인 결과: `payment COMPLETED && order != COMPLETED` 불일치 0건 — PR #453(PaymentConfirmTxHelper TX 분리) 반영 후 정합성 회복 확인 (2026-06-25 SSM 실측).
+
 `SCENARIO=timeout` 및 `SCENARIO=mixed`는 408 계약 확인용 분석 시나리오로 분리한다. 408은 5xx에는 포함되지 않지만 k6 기본 `http_req_failed`에는 포함되므로, success 시나리오 SLO Pass/Fail과 같은 기준으로 판정하지 않는다.
 
 ### 관찰 및 오너 피드백
@@ -675,7 +677,7 @@ realfinal success 시나리오에서는 timeout이 발생하지 않았고, 500�
 - PG 호출은 DB 트랜잭션 밖에 유지하되, 호출 전 precheck와 호출 후 apply 단계 사이에서 timeout이 발생했을 때의 상태 전이 규칙을 명확히 한다.
 - SLO margin 확보를 위해 결제 확인 경로의 쿼리 플랜(`orders.order_payment_key`, `payment.order_id`, `payment.payment_key`)과 HikariCP waiting connection, DB lock wait를 함께 계측한다.
 - s03 실행 전후 설정(`TOSS_API_BASE_URL`, `TOSS_API_READ_TIMEOUT`)과 seed 초기화/원복 절차를 스크립트화해 운영 설정 오지정을 방지한다.
-- realfinal 측정 후 `TOSS_API_READ_TIMEOUT=2s`는 운영 기본값으로 원복해야 한다.
+- realfinal 측정 후 `TOSS_API_READ_TIMEOUT=2s` 원복 완료 — EC2-1 conf·service 파일 미존재 확인 (2026-06-25 SSM 실측).
 
 ---
 

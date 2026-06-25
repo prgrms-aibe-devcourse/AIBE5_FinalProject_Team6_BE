@@ -262,7 +262,7 @@ WHERE product_id = ? AND available_qty > 0
 
 **문제 (Final)**: Toss 결제 확인 API 호출 중 `HttpTimeoutException` 발생 → 5xx 에러율 1.60%. WireMock stub 응답 지연이 트랜잭션 타임아웃 경계와 겹침.
 
-**개선 (RealFinal)**: 결제 확인 트랜잭션 분리 (PR #453). Toss API 호출과 DB 반영 트랜잭션을 분리해 타임아웃 전파 차단. `TOSS_API_READ_TIMEOUT=2s` 환경변수 주입.
+**개선 (RealFinal)**: 결제 확인 트랜잭션 분리 (PR #453). Toss API 호출과 DB 반영 트랜잭션을 분리해 타임아웃 전파 차단. `TOSS_API_READ_TIMEOUT=2s`는 측정 시 주입한 테스트 조건이며 측정 후 원복 완료.
 
 **발표 메시지:**
 > "외부 결제 API 호출과 DB 트랜잭션을 분리해 타임아웃으로 인한 5xx를 완전히 제거했습니다."
