@@ -104,7 +104,7 @@ class NotificationEventListenerTest {
         ArgumentCaptor<PublishNotificationCommand> captor =
                 ArgumentCaptor.forClass(PublishNotificationCommand.class);
 
-        listener.handleRestockAlert(new RestockAlertEvent(10L, 99L));
+        listener.handleRestockAlert(new RestockAlertEvent(10L, 99L, "테스트 상품"));
 
         verify(publishNotificationUseCase).publish(captor.capture());
         assertEquals("RESTOCK", captor.getValue().getEventType());
@@ -117,7 +117,7 @@ class NotificationEventListenerTest {
         doThrow(new RuntimeException("DB error"))
                 .when(publishNotificationUseCase).publish(any());
 
-        assertDoesNotThrow(() -> listener.handleRestockAlert(new RestockAlertEvent(10L, 99L)));
+        assertDoesNotThrow(() -> listener.handleRestockAlert(new RestockAlertEvent(10L, 99L, "테스트 상품")));
     }
 
     // ── handleNewFeed ─────────────────────────────────────────────────────────
