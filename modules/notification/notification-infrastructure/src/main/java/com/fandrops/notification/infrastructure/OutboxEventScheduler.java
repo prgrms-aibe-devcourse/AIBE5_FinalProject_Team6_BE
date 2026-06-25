@@ -59,7 +59,7 @@ public class OutboxEventScheduler {
         }
 
         Instant now = Instant.now();
-        String message = resolveMessage(type);
+        String message = resolveMessage(type, event);
         List<Notification> notifications = fanIds.stream()
                 .map(fanId -> Notification.builder()
                         .fanId(fanId)
@@ -100,16 +100,28 @@ public class OutboxEventScheduler {
         };
     }
 
-    private String resolveMessage(NotificationType type) {
+    private String resolveMessage(NotificationType type, OutboxEvent event) {
         return switch (type) {
             case PAYMENT_SUCCESS -> "결제가 완료되었습니다.";
             case PAYMENT_FAILED -> "결제가 실패하였습니다. 다시 시도해 주세요.";
             case ARTIST_APPLICATION_APPROVED -> "아티스트 입점 신청이 승인되었습니다.";
-            case RESTOCK -> "관심 상품이 재입고되었습니다.";
+            case RESTOCK -> {
+                String name = extractString(event.getPayload(), "productName");
+                yield (name != null ? name : "관심 상품") + "이(가) 재입고되었어요!";
+            }
             case NEW_FEED -> "팔로우한 아티스트가 새 피드를 등록했습니다.";
             case NEW_COMMENT -> "내 글에 댓글이 달렸습니다.";
             case ARTIST_SCHEDULE -> "팔로우한 아티스트의 새로운 일정이 등록되었습니다.";
         };
+    }
+
+    private String extractString(String payload, String fieldName) {
+        String key = "\"" + fieldName + "\":\"";
+        int start = payload.indexOf(key);
+        if (start == -1) return null;
+        start += key.length();
+        int end = payload.indexOf("\"", start);
+        return end == -1 ? null : payload.substring(start, end);
     }
 
     private Long extractLong(String payload, String fieldName) {

@@ -109,7 +109,7 @@ class OutboxEventSchedulerTest {
     @Test
     @DisplayName("RESTOCK — payload JSON에서 fanId 파싱, notification 저장")
     void process_restock_extractsFanIdFromPayload() {
-        OutboxEvent event = buildEvent("RESTOCK", 500L, "{\"fanId\":88,\"productId\":500}");
+        OutboxEvent event = buildEvent("RESTOCK", 500L, "{\"fanId\":88,\"productId\":500,\"productName\":\"테스트 포스터\"}");
         when(outboxEventPort.findPending(50)).thenReturn(List.of(event));
 
         scheduler.process();
@@ -119,7 +119,7 @@ class OutboxEventSchedulerTest {
         assertEquals(1, saved.size());
         assertEquals(88L, saved.get(0).getFanId());
         assertEquals(NotificationType.RESTOCK, saved.get(0).getType());
-        assertEquals("관심 상품이 재입고되었습니다.", saved.get(0).getMessage());
+        assertEquals("테스트 포스터이(가) 재입고되었어요!", saved.get(0).getMessage());
         verify(fanIdResolverPort, never()).findFanIdByOrderId(any());
     }
 
