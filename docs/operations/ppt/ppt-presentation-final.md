@@ -284,10 +284,10 @@ WHERE product_id = ? AND available_qty > 0
 
 **Final 이월 사유**: Final 단계에서 SLO 달성 상태를 유지하므로 RealFinal 재측정 생략.
 
-**특이사항**: 스파이크 구간 초과 요청 차단율 ~99.98%는 전량 Nginx Rate Limit 429 정상 거부 — 서버 장애성 5xx 아님. SLO 에러율 계산에서 제외. `fandrops_order` zone(5r/s, burst 10)이 Spring Boot 도달 RPS를 ~5 RPS로 제한해 앱 서버를 보호.
+**특이사항**: 스파이크 구간 초과 요청 차단율 ~99.98%는 전량 Nginx Rate Limit 429 정상 거부 — 서버 장애성 5xx 아님. SLO 에러율 계산에서 제외. `fandrops_order` zone(5r/s, burst 10)이 Spring Boot 도달 RPS를 약 5 RPS 수준으로 제한해 앱 서버를 보호.
 
 **발표 메시지:**
-> "스파이크 구간에서도 P95 300ms 이하를 유지했습니다. 99.98%의 429는 오류가 아니라 Rate Limit이 정상적으로 작동한 결과입니다."
+> "드롭스 오픈런 스파이크에서는 모든 요청을 버티는 것보다, 초과 요청을 빠르게 제한하는 것이 앱 서버를 보호하는 핵심이었습니다. Nginx Rate Limit으로 앱 서버 유입을 약 5 RPS 수준으로 제어했고, 그 결과 서버 장애성 5xx 없이 P95 300ms 이하를 유지했습니다."
 
 ---
 
