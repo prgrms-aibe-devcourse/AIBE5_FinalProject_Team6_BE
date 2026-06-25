@@ -142,7 +142,7 @@ FANDROPS 백엔드는 단일 EC2 인스턴스에 앱 서버·Nginx·모니터링
 | k6 버전 | v2.0.0 |
 | 실행 위치 | EC2-2 t3.small (`3.34.42.43`) |
 | 측정 대상 | `https://api.fandrops.site` public HTTPS endpoint (EC2-2 → EC2-1, 동일 리전 내 호출) |
-| s07 예외 | `http://10.0.1.114:8081` active slot 직접 접근 — Nginx 우회 (시나리오 코드 주석 확인) |
+| s01·s03·s07 예외 | active slot 직접 접근 (`http://10.0.1.114:{active_port}`) — Nginx 우회 (k6-baseline-results.md·k6-tuned-results.md 실행 명령어 확인) |
 | Prometheus Remote Write | `http://10.0.1.114:9090/api/v1/write` |
 | 시각화 | Grafana (`http://43.203.3.196:3000`) |
 | 토큰 | fan_id 1~2100 JWT (`/opt/fandrops/k6/seed/tokens.csv`) |
