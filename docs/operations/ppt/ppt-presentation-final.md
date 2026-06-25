@@ -560,7 +560,7 @@ WHERE product_id = ? AND available_qty > 0
 | 시나리오 | 목적/제목 | Baseline 스크린샷 | Tuned 스크린샷 | Final 스크린샷 | RealFinal 스크린샷 | 최종 사용 캡처 | 배치 의도 |
 |---|---|---|---|---|---|---|---|
 | **01** | 주문 동시성 + 재고 정합성 | `screenshots/baseline/s01_order_concurrency_baseline.png` | `screenshots/tuned/s01_order_concurrency_tuned.png` | `screenshots/final/s01_order_concurrency_final.png` | RealFinal 1차: `screenshots/realfinal/s01_order_concurrency_realfinal.png` (PR #450 실패)<br>RealFinal 2차: `screenshots/realfinal/s01_order_concurrency_realfinal2.png` (PR #459 성공) | `screenshots/realfinal/s01_order_concurrency_realfinal2.png` | Baseline→Final 낙관적 락 실패 경로 시각화 + RealFinal 2차 atomic update 복귀로 정합성 달성 스토리 |
-| **02** | 피드 목록 Read P95 | `screenshots/baseline/s02_feed_read_baseline.png` | `screenshots/tuned/s02_feed_read_tuned.png` | `screenshots/final/s02_feed_read_final.png` | `screenshots/realfinal/s02_feed_read_realfinal_warm.png` | `screenshots/realfinal/s02_feed_read_realfinal_warm.png` | FeedLikeCache 적용 전후 P95 개선 흐름 (Baseline→RealFinal warm cache 기준) |
+| **02** | 피드 목록 Read P95 | `screenshots/baseline/s02_feed_read_baseline.png` | `screenshots/tuned/s02_feed_read_tuned.png` | `screenshots/final/s02_feed_read_final.png` | `screenshots/realfinal/s02_feed_read_realfinal_warm.png` | `screenshots/realfinal/s02_feed_read_realfinal_warm.png` | **RealFinal warm cache 캡처 1장을 최종 판단 근거로 사용** — 발표 슬라이드에서 이 1장으로 s02 최종 결과 표시 |
 | **03** | 결제 확인 P95 | `screenshots/baseline/s03_payment_confirm_baseline.png` | `screenshots/tuned/s03_payment_confirm_tuned.png` | `screenshots/final/s03_payment_confirm_final.png` | `screenshots/realfinal/s03_payment_confirm_realfinal.png` | `screenshots/realfinal/s03_payment_confirm_realfinal.png` | Baseline→RealFinal 4단계 전체 흐름 + SLO 완화(300ms → 2,000ms) 근거 병기 |
 | **04** | 드롭스 오픈런 스파이크 | `screenshots/baseline/s04_drop_spike_baseline.png` | `screenshots/tuned/s04_drop_spike_tuned.png` | `screenshots/final/s04_drop_spike_final.png` | [Final 결과 이월 — RealFinal 별도 캡처 없음] | `screenshots/final/s04_drop_spike_final.png` | Rate Limit 적용 후 Final에서 SLO 달성 → 3차 Final에서 SLO 달성 후 RealFinal 최종 결과로 이월 |
 | **05** | SSE 대기열 동시 연결 | `screenshots/baseline/s05_sse_queue_baseline.png` | `screenshots/tuned/s05_sse_queue_tuned.png` | `screenshots/final/s05_sse_queue_final.png` | [Final 결과 이월 — RealFinal 별도 캡처 없음] | `screenshots/final/s05_sse_queue_final.png` | 2단계(capacity_fill + overflow_probe) 재설계로 Final SLO 달성 → 3차 Final에서 SLO 달성 후 RealFinal 최종 결과로 이월 |
@@ -581,8 +581,8 @@ WHERE product_id = ? AND available_qty > 0
 **Scenario 02 — 피드 목록 Read P95**
 
 - 상단: "Scenario 02. 피드 목록 Read P95" + 목적(FeedLikeCache 효과 검증)
-- 중앙: Baseline → Tuned → Final → RealFinal(warm cache) 순서 배치
-- 하단: SLO 기준(P95 < 120ms), RealFinal 기준 달성 수치 기재
+- 중앙: `s02_feed_read_realfinal_warm.png` 단일 캡처만 배치 — 이 1장이 s02 최종 판단 근거
+- 하단: SLO 기준(P95 < 120ms), RealFinal warm cache 기준 달성 수치 기재
 
 **Scenario 03 — 결제 확인 P95**
 
