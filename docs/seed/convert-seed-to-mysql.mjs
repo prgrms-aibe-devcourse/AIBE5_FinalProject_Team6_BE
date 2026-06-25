@@ -95,8 +95,8 @@ const reps = [
     `VALUES (1, 'fan@fandrops.test', '테스트팬', 'LOCAL', 'local-fe-1',\n        '${BC}',\n        true, NOW())\nON DUPLICATE KEY UPDATE email=VALUES(email), nickname=VALUES(nickname), password_hash=VALUES(password_hash);`,
   ],
   [
-    `    (3, 1, 'ECHO', 0, '2024-01-01 00:00:00', 'FE 검증용 테스트 아티스트 ECHO');`,
-    `    (3, 1, 'ECHO', 0, '2024-01-01 00:00:00', 'FE 검증용 테스트 아티스트 ECHO')\nON DUPLICATE KEY UPDATE name=VALUES(name), bio=VALUES(bio), agency_id=VALUES(agency_id);`,
+    `    (3, 1, 'ECHO', 0, '2024-01-01 00:00:00', '');`,
+    `    (3, 1, 'ECHO', 0, '2024-01-01 00:00:00', '')\nON DUPLICATE KEY UPDATE name=VALUES(name), bio=VALUES(bio), agency_id=VALUES(agency_id);`,
   ],
   [
     `        '${BC}',\n        'NOVA 멤버', 'ARTIST');`,
