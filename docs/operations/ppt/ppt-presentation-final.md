@@ -41,7 +41,8 @@ FANDROPS 백엔드는 단일 EC2 인스턴스에 앱 서버·Nginx·모니터링
        [RDS MySQL]  [Redis]     [S3]
        (별도 인스턴스) (별도 인스턴스) (오브젝트)
 
-[EC2-2 k6] ──VPC 내부──▶ [Nginx :443] ──▶ [EC2-1 :8081]  (* s07은 Nginx 우회, :8081 직접)
+[EC2-2 k6] ──HTTPS──▶ [api.fandrops.site / Nginx :443] ──▶ [EC2-1 active slot]
+             └─ s01·s03·s07: active slot 직접 접근 (`http://10.0.1.114:{active_port}`, Nginx 우회)
                 ──Remote Write──▶ [Prometheus :9090]
                                          ▼
                                   [Grafana :3000]
