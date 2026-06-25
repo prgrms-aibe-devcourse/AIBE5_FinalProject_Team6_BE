@@ -139,7 +139,7 @@ FANDROPS 백엔드는 단일 EC2 인스턴스에 앱 서버·Nginx·모니터링
 
 | 항목 | 값 |
 |---|---|
-| k6 버전 | v2.0.0 |
+| k6 버전 | v2.0.0 (SSM RunCommand로 EC2-2 실측 확인) |
 | 실행 위치 | EC2-2 t3.small (`3.34.42.43`) |
 | 측정 대상 | `https://api.fandrops.site` public HTTPS endpoint (EC2-2 → EC2-1, 동일 리전 내 호출) |
 | s01·s03·s07 예외 | active slot 직접 접근 (`http://10.0.1.114:{active_port}`) — Nginx 우회 (k6-baseline-results.md·k6-tuned-results.md 실행 명령어 확인) |
